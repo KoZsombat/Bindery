@@ -550,15 +550,18 @@
     if (parts[0] === 'exam') return { name: 'exam', mode: parts[1] };
     if (parts[0] === 'test') return { name: 'test', section: parts[1], chapter: parts[2] };
     if (parts[0] === 'daily') return { name: 'daily' };
+    if (parts[0] === 'review' && (parts[1] === '5' || parts[1] === '10')) return { name: 'reviewSession', minutes: Number(parts[1]), section: parts[2] };
     if (parts[0] === 'review') return { name: 'review' };
+    if (parts[0] === 'sessions') return { name: 'sessions' };
+    if (parts[0] === 'learn') return { name: 'learn', minutes: Number(parts[1]) === 20 ? 20 : 10, section: parts[2] };
     if (parts[0] === 'mixed') return { name: 'mixed' };
     if (parts[0] === 'hunt') return { name: 'hunt', id: parts[1] };
     if (parts[0] === 'progress') return { name: 'progress' };
     if (parts[0] === 'coach') return { name: 'coach' };
-    if (parts[0] === 'launch') return { name: 'launch' };
     if (parts[0] === 'map') return { name: 'map' };
     if (parts[0] === 'diagnostic') return { name: 'diagnostic', section: parts[1] };
-    if (parts[0] === 'sprint') return { name: 'sprint', section: parts[1] };
+    if (parts[0] === 'launch') return { name: 'learn', minutes: 10, section: parts[1] };
+    if (parts[0] === 'sprint') return { name: 'reviewSession', minutes: 10, section: parts[1] };
     return { name: 'home' };
   }
 
@@ -616,18 +619,21 @@
     } else if (r.name === 'coach') {
       html = MB.coachView ? MB.coachView() : '';
       setCrumbs([{ label: MB.T('Fókusz', 'Focus') }]);
-    } else if (r.name === 'launch') {
-      html = MB.launchView ? MB.launchView() : '';
-      setCrumbs([{ label: MB.T('5 perces indítás', 'Five-minute launch') }]);
+    } else if (r.name === 'sessions') {
+      html = MB.sessionsView ? MB.sessionsView() : '';
+      setCrumbs([{ label: MB.T('Tanulás és ismétlés', 'Learn and review') }]);
+    } else if (r.name === 'learn') {
+      html = MB.sessionView ? MB.sessionView('learn', r.minutes, r.section) : '';
+      setCrumbs([{ label: MB.T('Tanulás', 'Learn') }]);
+    } else if (r.name === 'reviewSession') {
+      html = MB.sessionView ? MB.sessionView('review', r.minutes, r.section) : '';
+      setCrumbs([{ label: MB.T('Ismétlés', 'Review') }]);
     } else if (r.name === 'map') {
       html = MB.mapView ? MB.mapView() : '';
       setCrumbs([{ label: MB.T('Tudástérkép', 'Knowledge map') }]);
     } else if (r.name === 'diagnostic') {
       html = MB.diagView ? MB.diagView(r.section) : '';
       setCrumbs([{ label: MB.T('Felmérés', 'Diagnostic') }]);
-    } else if (r.name === 'sprint') {
-      html = MB.sprintView ? MB.sprintView(r.section) : '';
-      setCrumbs([{ label: MB.T('10 perces sprint', 'Ten-minute sprint') }]);
     }
     main.innerHTML = MB.protectMath(html);
     updateNav(r);

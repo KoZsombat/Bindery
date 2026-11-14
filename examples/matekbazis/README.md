@@ -32,7 +32,7 @@ Feltételezem, hogy **középszintű érettségi** szinten tanultál matematiká
 - **Fejezet teszt**: a fejezet végén 8 kérdés, 10 perc, pontszám és részletes kiértékelés.
 - **Feladatbank**: 15 kategória, kategóriánként 50 generált feladat (10 könnyű / 10 közepes / 30 nehéz, arány 1 : 1 : 3). Az „Új feladatsor” gombbal új változatokat kapsz; az egyes feladatok mellett is van újragenerálás.
 - **ZH / vizsga szimulátor**: ZH1, ZH2, vizsga és gyors gyakorlás, időlimittel és jegybecsléssel.
-- **Fókusz / Launchpad**: egy kattintásos **5 perces indítás** (ismert kérdés, majd egy gyenge pont), **tudástérkép**, **felmérés** résszinten, **10 perces sprint**, vizsga-visszaszámláló és heti vállalás. A „Nyugodt mód” elrejti a streak-elemeket, ha azok inkább nyomást jelentenek.
+- **Tanulás és ismétlés**: négy külön mód — **10 perces tanulás** (elmélet + példa + 2 feladat), **20 perces tanulás** (két fejezet + 4 feladat), **5 perces ismétlés** (3 ismert feladat) és **10 perces ismétlés** (6 ismert feladat). A tanulás csak a kiválasztott rész még nem ismert fejezeteiből kérdez; az ismétlés csak a már teljesített fejezetekből. Emellett **tudástérkép**, **felmérés** résszinten, vizsga-visszaszámláló és heti vállalás. A „Nyugodt mód” elrejti a streak-elemeket, ha azok inkább nyomást jelentenek.
 - **Napi küldetés**: 5 vegyes feladat naponta, kb. öt perc. A sorozat a megoldott napokat számolja, heti egy fagyasztóval.
 - **Hibafüzet**: minden hibás válasz visszatér 1, 3, 7, majd 21 nap múlva. Az esedékes ismétlések száma a bal oldalon látszik.
 - **Vegyes menet**: 10 feladat témacímkék nélkül — a módszer felismerése a feladat.

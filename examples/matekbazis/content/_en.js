@@ -229,6 +229,7 @@
       'Fókusz': 'Focus',
       'Fókusz / Launchpad': 'Focus / Launchpad',
       '5 perces indítás': 'Five-minute launch',
+      'Tanulás és ismétlés': 'Learn and review',
       'Tudástérkép': 'Knowledge map',
       '10 perces sprint': 'Ten-minute sprint',
       'Napi gyakorlás': 'Daily practice',

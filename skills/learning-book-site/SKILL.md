@@ -385,8 +385,7 @@ state.coach = {
   sessions: ['YYYY-MM-DD'],      // max one per day, cap ~120
   diag: { [sectionId]: { done, correct, total, passed, date } },
   diagDraft: { [sectionId]: { [idx]: boolean } },
-  launchSeed: 1,
-  sprintSeed: 1,
+  sessionSection: 'alapok' | '',  // last part chosen on #/sessions
   calm: false
 }
 ```
@@ -402,23 +401,52 @@ map uses a simpler navigation score:
   `—` and a neutral `.new` class. Never paint an untouched section red; a new learner must not open
   a wall of failure.
 
-**Routes and behaviour**
+**Four deliberate session modes**
 
-| Route | Behaviour |
-|---|---|
-| `#/coach` | Exam date, weekly session commitment, countdown, next three actions, calm toggle, launch/map/sprint entry points. |
-| `#/launch` | Two items: one from the strongest known section (or `alapok` when there is no data), one from the weakest. Optional 5-minute timer; the learner may stop. Answering records a session. |
-| `#/map` | Section cards with prerequisite text, mastery bar and state class; test-out and 10-minute sprint links. Show `—` for no data. |
-| `#/diagnostic/:section` | Five generated items (`1,1,2,2,3`). First attempt counts. `>= 4/5` passes and lets the learner skip revision; otherwise route to the first chapter. Allow retest. Never call it an exam or attach a grade. |
-| `#/sprint/:section` | Three items (`1,2,3`), one topic, 10-minute timer, hard stop. The third item is deliberately harder. Answering records a session. |
+Do not make “sprint” mean “here are some random tasks”. A session must either teach first or test
+prior knowledge, and it must respect what the learner has already completed.
 
-- `nextActions()` order: due reviews first, then the lowest-mastery core sections; return at most
-  three. Every card is one tap from a question, not from a table of contents.
-- Home adds a compact coach strip **before** the daily/readiness cards: launch, map, focus. Keep it
-  to three cards.
+| Route | Duration | Content |
+|---|---|---|
+| `#/sessions` | — | Part picker and four cards: learn 10, learn 20, review 5, review 10. Shows known/unknown chapter counts and whether the diagnostic passed. |
+| `#/learn/10/:section` | 10 min | One **unknown** chapter: a short theory block, one worked example, then 2 tasks from that chapter. |
+| `#/learn/20/:section` | 20 min | Up to two **unknown** chapters: theory, examples, then 4 tasks. |
+| `#/review/5/:section` | 5 min | 3 retrieval tasks from **known/completed** chapters only; no theory. |
+| `#/review/10/:section` | 10 min | 6 retrieval tasks from **known/completed** chapters only; no theory. |
+| `#/coach` | — | Exam date, weekly commitment, next three actions, calm toggle and a single entry point to `#/sessions`. |
+| `#/map` | — | Section cards with prerequisites, mastery and learn/review/diagnostic links. |
+| `#/diagnostic/:section` | — | Five generated items (`1,1,2,2,3`); first attempt counts; `>= 4/5` passes. |
+
+Define **known** explicitly:
+
+```js
+const stats = chapterCheckableStats(chapter); // total, done, ratio
+const known = diagnosticPassed(section) ||
+  (isRead(chapter) &&
+   (stats.total === 0 || stats.done >= Math.min(2, stats.total) || stats.ratio >= 0.5));
+```
+
+- `learn` selects `unknownChapters(section)`; `review` selects `knownChapters(section)`.
+- Learning tasks come from the selected chapters’ unchecked exercises. If a chapter does not have
+  enough checkable exercises, generate from that section’s practice categories; generated items
+  have no chapter key and cannot mark a chapter complete.
+- Review never generates new theory and never pulls from unread chapters. If the learner has no
+  completed chapter in that part, show an empty state that links to learn 10 — do not silently
+  fall back to new material.
+- The learner chooses the part on `#/sessions`; store it in `coach.sessionSection`. The same part
+  is carried into learn/review routes.
+- A session timer is optional to start and always stoppable. It is not a punishment: at 00:00 show
+  “stop, the next step can wait”.
+- On the first learn answer (right or wrong), mark the lesson chapter read. On a correct learn
+  answer, mark that exercise done. This is how the next session knows what is known without asking
+  the learner to maintain a second checklist.
+- 10-minute learn shows two tasks; 20-minute learn shows four; review 5 shows three; review 10
+  shows six. Do not mix learn and review content in one mode.
+- Home adds a compact coach strip before the daily/readiness cards: sessions, map, focus. Keep it to
+  three cards.
 - Exam countdown uses local dates, not UTC midnight; a deadline is a user-facing date.
-- Weekly commitment counts distinct session days in the current ISO week; it is a commitment, not a
-  streak. If a week slips, reset it without a punishment screen.
+- Weekly commitment counts distinct session days in the current ISO week; it is a commitment, not
+  a streak. If a week slips, reset it without a punishment screen.
 
 **Safe-fail feedback** — this is a UX rule, not a slogan:
 
@@ -438,26 +466,28 @@ map uses a simpler navigation score:
 **Wiring contract**
 
 ```html
-<div class="ex" data-kind="launch|diagnostic|sprint"
+<div class="ex" data-kind="learn|review-session|diagnostic"
      data-diag="sectionId" data-diag-idx="0"
+     data-learn-key="sectionId/chapterId/exerciseIndex"
      data-funid="..." data-idx="0" ...>
 ```
 
 - Reuse `MB.fun.itemHTML(it, { kind, funid, idx, done, showTopic, attrs })`; add an `attrs` string
-  for `data-diag` / `data-diag-idx`. Do not fork the exercise renderer.
-- After every checked answer, `MB.fun.answer` calls `MB.fun.onAnswer(ex, d, kind, first)`. The coach
-  hook records the first diagnostic attempt, marks a session, locks correct items and updates the
-  “answered” count. Do not add a second click handler that also grades.
+  for `data-diag` / `data-diag-idx` and `data-learn-key`. Do not fork the exercise renderer.
+- After every checked answer, `MB.fun.answer` calls `MB.fun.onAnswer(ex, d, kind, first)`. Wrap the
+  existing coach hook from the session module; do not replace it. The wrapper records the first
+  diagnostic attempt, marks a session, marks learn chapters read and correct exercises done, and
+  locks correct items.
 - `MB.coach.afterRender(route)` applies calm mode; `MB.app.render()` calls it after `fun`.
-- Load order: `util → generators → demos → features → fun → coach → app`.
+- Load order: `util → generators → demos → features → fun → coach → sessions → app`.
 - Guard every coach call (`MB.coach && ...`) so the book still works if the layer is removed.
 
 **Evidence and constraints**
 
 - Autonomy, competence and relatedness predict intrinsic motivation; use choice, visible mastery
   and optional social accountability, not pressure alone.
-- Implementation intentions (“if it is 18:30 at my desk, then I open the five-minute launch”) are
-  effective for starting; give the learner a place to write one.
+- Implementation intentions (“if it is 18:30 at my desk, then I open the 10-minute learn session”)
+  are effective for starting; give the learner a place to write one.
 - Procrastination is often emotion regulation, not laziness; the first screen must make confusion
   safe.
 - Retrieval, spacing and interleaving remain the learning engine; the coach only changes the
@@ -468,20 +498,27 @@ map uses a simpler navigation score:
 **Acceptance**
 
 - [ ] A new learner with no data sees `—` and neutral map nodes, not `0%` red nodes.
-- [ ] Five-minute launch uses the strongest known section first, or `alapok` when there is no data;
-      the second item is the weakest section.
+- [ ] Choose a part on `#/sessions`; all four cards point at that part.
+- [ ] Learn 10 shows exactly one unknown chapter, theory + one example, then 2 tasks.
+- [ ] Learn 20 shows up to two unknown chapters, theory + examples, then 4 tasks.
+- [ ] Review 5/10 show 3/6 tasks from known chapters only, with no theory.
+- [ ] Learn never uses a known chapter; review never uses an unread chapter.
+- [ ] Answering learn tasks marks the chapter read and the exercise done; the sessions page updates
+      its known/unknown counts after reload.
+- [ ] Empty states appear instead of fake tasks when there is nothing to learn or review.
 - [ ] Diagnostic `4/5` passes, persists, floors the map at 75%, and can be retested.
 - [ ] Wrong answers are amber, offer a hint, and create one notebook entry; no score is lost.
-- [ ] Sprint timer starts at 10:00 and stops at 00:00; the third item is level 3.
+- [ ] All four timers start at their advertised duration and stop at 00:00.
 - [ ] Exam date, weekly goal and weekly session count survive reload.
 - [ ] Calm mode hides streak chrome and survives reload.
 - [ ] All coach strings switch HU/EN; dates and week boundaries use local time.
-- [ ] No console errors on `#/coach`, `#/launch`, `#/map`, `#/diagnostic/:id`, `#/sprint/:id`.
+- [ ] No console errors on `#/coach`, `#/sessions`, `#/learn/*`, `#/review/5/*`, `#/review/10/*`,
+      `#/map`, or `#/diagnostic/:id`.
 
 ## 7. UX features worth building
 
 - **Progress**: mark chapter read; count solved exercises; overall bar in sidebar; readiness dashboard (see §6.9).
-- **Focus / launchpad** (§6.11): five-minute launch, knowledge map, section diagnostics, ten-minute sprint, exam countdown and weekly commitment. Put the launch entry first on the home page.
+- **Learn / review** (§6.11): four deliberate modes (learn 10, learn 20, review 5, review 10), a part picker, knowledge map, section diagnostics, exam countdown and weekly commitment. Put the entries first on the home page.
 - **Daily practice group**: sidebar links for the daily quest, error notebook, mixed run, error hunts and progress, with a due-count badge.
 - **Calm mode** (§6.11): hide streak chrome and loss-framed copy for learners who find it punitive.
 - **Streak chip**: one compact flame + count in the topbar, linking to the daily quest; render the zero state muted rather than hiding it.
@@ -517,7 +554,7 @@ Do these before declaring done:
    - Error notebook: a wrong answer is due tomorrow; a correct review moves through 1 → 3 → 7 → 21 days; box 4 marks it mastered and removes it; a later miss resets to box 0.
    - Mixed run hides topics until answered; "New run" yields a different set and clears the score.
    - Error hunts: every item has exactly one false statement; clicking a true one does not solve it; the explanation appears only after the false one.
-   - Coach: five-minute launch puts a known item first and a weak item second; a diagnostic `4/5` passes and floors the map at 75%; sprint timer stops at 10:00; exam date, weekly goal and calm mode survive reload.
+   - Sessions: choose a part; learn 10/20 use only unknown chapters and show theory/examples before tasks; review 5/10 use only known chapters and show no theory; timers stop at their advertised duration; diagnostics still work.
    - Safe-fail: a wrong answer is amber, offers a hint, creates one notebook entry and does not deduct a score.
    - Map: sections with no evidence show `—` and a neutral class, never a red `0%`.
    - Teach-back text and checkboxes survive reload; clearing the text deletes the entry.

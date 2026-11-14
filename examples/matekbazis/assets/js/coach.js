@@ -206,12 +206,12 @@
   function coachTop() {
     const c = coachState(), d = examDays(), ws = weekSessions();
     return '<div class="coach-hero">' +
-      '<div class="coach-hero-main"><div class="eyebrow">' + T('Fókusz · öt perc elég az induláshoz', 'Focus · five minutes is enough to start') + '</div>' +
-      '<h2>' + T('A következő öt perc.', 'The next five minutes.') + '</h2>' +
-      '<p>' + T('Nem az egész félév. Egy ismert kérdés, majd egy gyenge pont. Utána megállhatsz.', 'Not the whole semester. One question you know, then one weak spot. Then you may stop.') + '</p>' +
-      '<div class="coach-actions"><a class="btn gold" href="#/launch">' + MB.icon('play') + ' ' + T('5 perces indítás', 'Five-minute launch') + '</a>' +
-      '<a class="btn ghost" href="#/map">' + T('Tudástérkép', 'Knowledge map') + '</a>' +
-      '<a class="btn ghost" href="#/sprint">' + T('10 perces sprint', 'Ten-minute sprint') + '</a></div></div>' +
+      '<div class="coach-hero-main"><div class="eyebrow">' + T('Tanulás · 10 vagy 20 perc', 'Learn · 10 or 20 minutes') + '</div>' +
+      '<h2>' + T('A következő tanulóblokk.', 'The next learning block.') + '</h2>' +
+      '<p>' + T('Elmélet, példa, majd csak a hiányzó részekből kérdez. Utána jöhet az ismétlés.', 'Theory, an example, then questions only from what is missing. Review comes after that.') + '</p>' +
+      '<div class="coach-actions"><a class="btn gold" href="#/sessions">' + MB.icon('play') + ' ' + T('Tanulás indítása', 'Start learning') + '</a>' +
+      '<a class="btn ghost" href="#/review/5">' + T('5 perces ismétlés', 'Five-minute review') + '</a>' +
+      '<a class="btn ghost" href="#/map">' + T('Tudástérkép', 'Knowledge map') + '</a></div></div>' +
       '<div class="coach-stats">' +
       '<div class="stat"><b>' + (d == null || d < 0 ? '—' : d) + '</b><span>' + (d == null ? T('állítsd be a vizsgát', 'set the exam date') : d < 0 ? T('vizsga lejárt', 'exam date passed') : T('nap a vizsgáig', 'days to exam')) + '</span></div>' +
       '<div class="stat"><b>' + ws + ' / ' + c.weeklyGoal + '</b><span>' + T('ülés ezen a héten', 'sessions this week') + '</span></div>' +
@@ -224,11 +224,11 @@
   MB.coach.homeHTML = function () {
     const c = coachState(), d = examDays(), actions = nextActions();
     return '<div class="coach-strip">' +
-      '<a class="coach-card coach-primary" href="#/launch">' +
-      '<span class="coach-kicker">' + T('5 perces indítás', 'Five-minute launch') + '</span>' +
-      '<b>' + T('Egy ismert + egy gyenge pont', 'One known + one weak spot') + '</b>' +
-      '<span>' + T('Indulj a legkönnyebbel; utána egy gyenge témával. Utána megállhatsz.', 'Start with the easiest; then one weak topic. Then you may stop.') + '</span>' +
-      '<span class="coach-go">' + T('Indul', 'Start') + ' →</span></a>' +
+      '<a class="coach-card coach-primary" href="#/sessions">' +
+      '<span class="coach-kicker">' + T('Tanulás', 'Learn') + '</span>' +
+      '<b>' + T('10 / 20 perc tanulás · 5 / 10 perc ismétlés', '10 / 20 min learn · 5 / 10 min review') + '</b>' +
+      '<span>' + T('Elmélet és példa a tanuláshoz; ismétlés csak abból, amit már teljesítettél.', 'Theory and examples for learning; review only from what you have completed.') + '</span>' +
+      '<span class="coach-go">' + T('Válassz', 'Choose') + ' →</span></a>' +
       '<a class="coach-card" href="#/map">' +
       '<span class="coach-kicker">' + T('Tudástérkép', 'Knowledge map') + '</span>' +
       '<b>' + overallText() + ' ' + T('becsült tudás', 'estimated mastery') + '</b>' +
@@ -285,8 +285,9 @@
         '<a class="map-link" href="#/section/' + s.id + '"><h3>' + esc(MB.sTitle(s)) + '</h3><p>' + esc(MB.sSub(s)) + '</p></a>' +
         bar(p * 100) +
         '<div class="map-prereq"><b>' + T('Előfeltétel:', 'Prerequisite:') + '</b> ' + prereq + '</div>' +
-        '<div class="map-actions"><a href="#/diagnostic/' + s.id + '">' + (d && d.passed ? T('Újramérés', 'Retest') : T('Felmérés', 'Test out')) + '</a>' +
-        '<a href="#/sprint/' + s.id + '">' + T('10 perc', '10 min') + '</a></div></article>';
+        '<div class="map-actions"><a href="#/learn/10/' + s.id + '">' + T('Tanulás', 'Learn') + '</a>' +
+        '<a href="#/review/5/' + s.id + '">' + T('Ismétlés', 'Review') + '</a>' +
+        '<a href="#/diagnostic/' + s.id + '">' + (d && d.passed ? T('Újramérés', 'Retest') : T('Felmérés', 'Test out')) + '</a></div></article>';
     });
     h += '</div>';
     return h;
@@ -296,7 +297,8 @@
     const has = sectionHasData(s), p = sectionMastery(s), d = coachState().diag[s.id];
     return '<div class="coach-inline"><div><b>' + T('Becsült tudás:', 'Estimated mastery:') + ' ' + (has ? pct(p) : '—') + '</b>' +
       '<span>' + (has ? masteryLabel(p) : T('nincs adat', 'no data yet')) + ' · ' + (d && d.passed ? T('felmérés kész', 'tested out') : T('még nincs felmérés', 'not tested yet')) + '</span></div>' +
-      '<div class="coach-inline-actions"><a class="btn sm navy" href="#/sprint/' + s.id + '">' + T('10 perces sprint', 'Ten-minute sprint') + '</a>' +
+      '<div class="coach-inline-actions"><a class="btn sm navy" href="#/learn/10/' + s.id + '">' + T('10 perces tanulás', '10-minute learn') + '</a>' +
+      '<a class="btn sm" href="#/review/5/' + s.id + '">' + T('5 perces ismétlés', '5-minute review') + '</a>' +
       '<a class="btn sm" href="#/diagnostic/' + s.id + '">' + (d && d.passed ? T('Újramérés', 'Retest') : T('Felmérés', 'Test out')) + '</a></div></div>';
   };
 
