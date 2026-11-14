@@ -944,7 +944,7 @@ body.calm-mode .streak-chip,body.calm-mode #streakBadge,body.calm-mode .streak-b
 .session-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
 .session-card{display:flex;flex-direction:column;gap:8px;background:var(--surface);border:1px solid var(--line);border-top:3px solid var(--bme-gold);padding:18px 19px;min-height:165px;color:var(--ink);text-decoration:none;box-shadow:var(--shadow-sm);transition:.15s}
 .session-card:hover{transform:translateY(-2px);box-shadow:var(--shadow);text-decoration:none;border-top-color:var(--bme-gold-2)}
-.session-card.is-empty{opacity:.55;border-top-color:var(--line)}
+.session-card.is-empty{background:var(--surface-2);border-top-color:var(--line)}
 .session-top{display:flex;justify-content:space-between;align-items:center}
 .session-time{font:700 9.5px var(--font-ui);letter-spacing:.08em;text-transform:uppercase;color:var(--bme-gold)}
 .session-kind{font:700 9px var(--font-ui);letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
@@ -974,3 +974,36 @@ body.calm-mode .streak-chip,body.calm-mode #streakBadge,body.calm-mode .streak-b
 .session-empty p{font:12.5px/1.6 var(--font-ui);color:var(--muted);max-width:560px;margin:0 auto 14px}
 .session-empty-actions{display:flex;gap:8px;justify-content:center;flex-wrap:wrap}
 @media(max-width:760px){.session-grid{grid-template-columns:1fr}.session-known{grid-template-columns:1fr}.session-known>div{border-right:0;border-bottom:1px solid var(--line)}.session-known>div:last-child{border-bottom:0}.session-lesson{padding:17px}.session-lesson-head{gap:10px}.session-lesson-num{font-size:2.2rem}.session-controls select{max-width:none;width:100%}.session-bar{align-items:flex-start}.session-bar>div{width:100%}}
+
+/* dark-theme readability for coach and session surfaces */
+html[data-theme="dark"] .coach-card b,
+html[data-theme="dark"] .coach-panel h3,
+html[data-theme="dark"] .map-link h3,
+html[data-theme="dark"] .session-card h3,
+html[data-theme="dark"] .session-lesson-head h2,
+html[data-theme="dark"] .session-task-head h2,
+html[data-theme="dark"] .session-empty h2,
+html[data-theme="dark"] .session-context b { color: var(--ink); }
+html[data-theme="dark"] .coach-card>span:not(.coach-kicker):not(.coach-go),
+html[data-theme="dark"] .coach-action,
+html[data-theme="dark"] .coach-note,
+html[data-theme="dark"] .session-card p,
+html[data-theme="dark"] .session-empty p,
+html[data-theme="dark"] .session-next { color: var(--muted); }
+html[data-theme="dark"] .coach-action:hover,
+html[data-theme="dark"] .map-link:hover,
+html[data-theme="dark"] .map-link:hover h3 { color: var(--bme-gold-2); }
+html[data-theme="dark"] .map-pct,
+html[data-theme="dark"] .session-bar b,
+html[data-theme="dark"] .session-known b,
+html[data-theme="dark"] .launch-bar b,
+html[data-theme="dark"] .sprint-bar b,
+html[data-theme="dark"] .diag-score b,
+html[data-theme="dark"] .coach-inline b { color: var(--bme-gold-2); }
+html[data-theme="dark"] .session-go,
+html[data-theme="dark"] .map-actions a { color: var(--bme-gold-2); }
+html[data-theme="dark"] .session-card.is-empty h3 { color: var(--muted); }
+html[data-theme="dark"] .session-card.is-empty .session-time,
+html[data-theme="dark"] .session-card.is-empty .session-go { color: var(--muted); }
+html[data-theme="dark"] .session-controls select { color: var(--ink); background: var(--paper-2); }
+html[data-theme="dark"] .session-empty { background: var(--surface); }
