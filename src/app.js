@@ -67,7 +67,7 @@ app.use(adminRouter);
 app.use(generatedRouter);
 
 app.use('/shared', requireUser, express.static(SHARED_DIR, { maxAge: '30d', immutable: true, setHeaders: function (res) { res.setHeader('Cache-Control', 'private, max-age=2592000, immutable'); } }));
-app.use('/example/matekbazis', requireUser, express.static(EXAMPLE_DIR, { index: 'index.html', maxAge: '1d', setHeaders: function (res) { res.setHeader('Cache-Control', 'private, max-age=86400'); } }));
+app.use('/example/matekbazis', requireUser, express.static(EXAMPLE_DIR, { index: 'index.html', setHeaders: function (res) { res.setHeader('Cache-Control', 'private, no-cache'); } }));
 
 app.use((req, res) => renderPage(req, res, 'error', { message: 'Page not found.' }, 404));
 app.use((err, req, res, next) => {
