@@ -86,7 +86,7 @@ Pick the institution's real palette and typography. For BME VIK:
 ```
 
 Book-style rules:
-- Light theme by default; dark mode optional.
+- Ship **both** light and dark themes for every surface: builder, example and generated site. Put a visible toggle in the header, persist it in `localStorage`, and set `data-theme` inline before the stylesheet so there is no flash. Dark mode must cover cards, forms, tables, callouts, disabled states, timers and generated chapter shells — not just the page background.
 - Body text in a serif (Charter/Georgia); headings in a clean sans (system UI).
 - Left sidebar is a real table of contents, always visible on desktop.
 - Content column max ~780 px; generous line-height (1.65–1.75).
@@ -530,7 +530,7 @@ const known = diagnosticPassed(section) ||
   - Secant → tangent animation (`h → 0`).
   - Riemann sum with `n` slider.
 - **Resources page**: bundled PDFs with labels, plus a note on provenance.
-- **Theme toggle** and **print stylesheet**.
+- **Light/dark theme toggle** (persisted, no flash) and **print stylesheet**; dark mode must cover every component, not only the page background.
 - **Mobile**: sidebar becomes a drawer; search collapses to an icon.
 
 ## 8. Verification checklist

@@ -5,11 +5,13 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title><%= t('Sign in') %> · <%= t('Learning Book Builder') %></title>
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="/app.css">
+<script>try{document.documentElement.dataset.theme=localStorage.getItem("lbb.theme")==="dark"?"dark":"light"}catch(e){}</script>
+<link rel="stylesheet" href="/app.css?v=2">
+<script src="/theme.js?v=2" defer></script>
 </head>
 <body class="login-body">
 <main class="login-shell">
-  <a class="lang login-lang" href="/lang/<%= lang === 'hu' ? 'en' : 'hu' %>"><%= lang === 'hu' ? 'EN' : 'HU' %></a>
+  <div class="login-tools"><button class="theme-btn" data-theme-toggle type="button" aria-label="Switch to dark mode" title="Switch to dark mode">☾</button><a class="lang login-lang" href="/lang/<%= lang === 'hu' ? 'en' : 'hu' %>"><%= lang === 'hu' ? 'EN' : 'HU' %></a></div>
   <section class="login-copy">
     <div class="kicker"><%= t('Learning Book Builder') %></div>
     <h1><%= t('Turn notes into routed learning books.') %></h1>

@@ -20,6 +20,7 @@ app.locals.siteUrl = slug => '/s/' + encodeURIComponent(slug) + '/';
 
 app.use('/app.css', express.static(path.join(PUBLIC_DIR, 'app.css'), DEV ? {} : { maxAge: '1d', immutable: true }));
 app.get('/favicon.svg', (req, res) => res.sendFile(path.join(PUBLIC_DIR, 'favicon.svg'), { headers: { 'Cache-Control': 'public, max-age=604800' } }));
+app.get('/theme.js', (req, res) => res.sendFile(path.join(PUBLIC_DIR, 'theme.js'), { headers: { 'Cache-Control': 'public, max-age=604800' } }));
 app.all('/api/auth/sign-up/*splat', (req, res) => res.status(403).json({ error: 'Sign-up is disabled.' }));
 app.all('/api/auth/*splat', toNodeHandler(auth));
 app.use(express.urlencoded({ extended: false }));

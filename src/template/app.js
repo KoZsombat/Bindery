@@ -5,12 +5,23 @@
   const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   let site = null;
   let lang = localStorage.getItem('lbs.lang') || 'hu';
+  let theme = localStorage.getItem('lbs.theme') === 'dark' ? 'dark' : 'light';
   let current = null;
   const progressKey = 'lbs.progress:' + location.host + location.pathname;
   let progress = {};
   try { progress = JSON.parse(localStorage.getItem(progressKey) || '{}'); } catch { progress = {}; }
 
   const T = (hu, en) => lang === 'en' ? en : hu;
+  function applyTheme() {
+    document.documentElement.dataset.theme = theme;
+    document.documentElement.style.colorScheme = theme;
+    const btn = $('#themeBtn');
+    if (btn) {
+      btn.textContent = theme === 'dark' ? '☀' : '☾';
+      btn.setAttribute('aria-label', theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode');
+      btn.setAttribute('title', theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode');
+    }
+  }
   function biv(v, fallback) {
     if (v && typeof v === 'object' && !Array.isArray(v)) return v[lang] || v.hu || v.en || fallback || '';
     return v == null ? (fallback || '') : String(v);
@@ -233,7 +244,10 @@
         return;
       }
     }
+    applyTheme();
     setChrome(); renderTOC();
+    const themeBtn = $('#themeBtn');
+    if (themeBtn) themeBtn.addEventListener('click', () => { theme = theme === 'dark' ? 'light' : 'dark'; localStorage.setItem('lbs.theme', theme); applyTheme(); });
     $('#langBtn').addEventListener('click', () => { lang = lang === 'en' ? 'hu' : 'en'; localStorage.setItem('lbs.lang', lang); setChrome(); renderTOC(); route(); });
     $('#brandLink').addEventListener('click', e => { e.preventDefault(); location.hash = '#/'; });
     $('#searchInput').addEventListener('keydown', e => {

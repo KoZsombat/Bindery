@@ -19,7 +19,7 @@ async function serveGenerated(req, res, slug, sub) {
     const index = path.join(path.dirname(siteJsonPath(slug)), 'index.html');
     if (fs.existsSync(index)) {
       const html = await fsp.readFile(index, 'utf8');
-      if (html.includes('class="brand-mark"') && html.includes('styles.css?v=2') && html.includes('favicon.svg')) {
+      if (html.includes('class="brand-mark"') && html.includes('styles.css?v=2') && html.includes('favicon.svg') && html.includes('themeBtn')) {
         res.setHeader('Cache-Control', 'private, no-cache');
         return res.sendFile(index);
       }

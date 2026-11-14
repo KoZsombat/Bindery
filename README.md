@@ -18,6 +18,8 @@ JSON book, and publishes it at its own URL. The original MatekBázis book is inc
   process + SQLite + static files. The generated sites are JSON + a small static renderer.
 - **Launchpad UI.** A bilingual (HU/EN) dashboard with a navy/gold MatekBázis-style shell,
   quota and catalog shortcuts, plus archive, regenerate and cancel actions.
+- **Light and dark themes.** The builder, login, example and generated shells all ship both
+  themes; the choice is persisted and applied before CSS loads.
 - **Durable queue.** Leased jobs survive restarts, retry once with backoff, and validate the
   model output against a strict bilingual schema (with one repair attempt).
 - **Operations.** `/healthz` and `/readyz`, a SQLite + sites backup script, and a CI workflow
