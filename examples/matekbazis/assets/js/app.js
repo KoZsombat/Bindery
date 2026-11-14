@@ -335,6 +335,7 @@
       '<div class="stat"><b>' + MB.videos.length + '</b><span>' + MB.T('Ajánlott videó', 'Recommended videos') + '</span></div>' +
       '<div class="stat"><b>' + Object.keys(state.tests).length + '</b><span>' + MB.T('Kitöltött teszt', 'Tests completed') + '</span></div>' +
       '</div>';
+    h += (MB.coach && MB.coach.homeHTML) ? MB.coach.homeHTML() : '';
     h += (MB.fun && MB.fun.homeHTML) ? MB.fun.homeHTML() : '';
     h += '<div class="note-box" style="margin:0 0 12px"><h4>' + MB.T('Miből indulunk ki?', 'What we assume') + '</h4><p style="margin:0 0 8px">' + MB.T('Feltételezem, hogy <b>középszintű érettségi</b> szinten tanultál matematikát, de sok mindent elfelejtettél. Az <b>1. rész</b> ezért ismétlés, nem nulláról kezdés: a „Miért?” blokkok a régi szabályokat elevenítik fel, a feladatok pedig visszamérnek. Ha valami ismerős, ugorj a feladatokra; ha nem, olvasd el a magyarázatot.', 'I assume you studied mathematics at the level of the Hungarian secondary-school leaving exam (standard level) but have forgotten much of it. Part 1 is therefore revision, not a from-zero course: the “Why?” boxes rebuild the old rules, and the exercises check them. If something is familiar, skip to the exercises; if not, read the explanation.') + '</p><p style="margin:0">' + MB.T('Ez <b>felkészítő</b>, nem a teljes félév anyaga. A 08–13. részek opcionális előretekintések: csak akkor vedd őket elő, ha a magabiztos alap megvan.', 'This is a <b>preparation</b> book, not the complete semester. Parts 08–13 are optional previews: open them only after the core is solid.') + '</p></div>';
     h += '<div class="note-box" style="margin:0 0 32px"><h4>' + MB.T('Nem kell telepíteni semmit', 'Nothing to install') + '</h4><p style="margin:0">' + MB.T('Nyisd meg az <b>index.html</b>-t dupla kattintással, vagy indítsd a <b>start.bat</b>-ot (Windows) / <b>start.command</b>-ot (macOS). Minden helyben fut: a videók kivételével internet sem kell hozzá.', 'Open <b>index.html</b> by double-clicking it, or start <b>start.bat</b> (Windows) / <b>start.command</b> (macOS). Everything runs locally; only the videos need the internet.') + '</p></div>';
@@ -388,6 +389,7 @@
     let h = '<div class="page-head"><div class="kicker">' + MB.T(s.num + '. rész', 'Part ' + s.num) + '</div><h1>' + MB.esc(MB.sTitle(s)) + '</h1><p class="lead">' + MB.sIntro(s) + '</p>' +
       '<div class="chapter-meta"><span class="meta-pill"><b>' + s.chapters.length + '</b> ' + MB.T('fejezet', 'chapters') + '</span><span class="meta-pill"><b>' + read + '</b> ' + MB.T('elolvasva', 'read') + '</span><span class="meta-pill">' + MB.icon('clock') + '<b>' + s.chapters.reduce(function (n, c) { return n + (c.minutes || 20); }, 0) + '</b> ' + MB.T('perc', 'min') + '</span><span class="meta-pill">' + MB.T('ZH: ', 'Exam: ') + '<b>' + MB.esc(MB.tag(s.examTag || 'alapozás')) + '</b></span>' +
       (s.role === 'extra' ? '<span class="meta-pill">' + MB.T('opcionális előretekintés', 'optional preview') + '</span>' : '') + '</div></div>';
+    if (MB.coach && MB.coach.sectionCTA) h += MB.coach.sectionCTA(s);
     if (s.id === 'alapok') {
       h += '<div class="note-box" style="margin-bottom:14px"><h4>' + MB.T('Miből indulunk ki?', 'What we assume') + '</h4><p style="margin:0">' +
         MB.T('Feltételezem, hogy <b>középszintű érettségi</b> szinten tanultál matematikát, de sok mindent elfelejtettél. Ez a rész ezért <b>ismétlés</b>, nem nulláról kezdés: a „Miért?” blokkok a régi szabályokat elevenítik fel, a feladatok visszamérnek. Ha valami ismerős, ugorj a feladatokra.',
@@ -552,6 +554,11 @@
     if (parts[0] === 'mixed') return { name: 'mixed' };
     if (parts[0] === 'hunt') return { name: 'hunt', id: parts[1] };
     if (parts[0] === 'progress') return { name: 'progress' };
+    if (parts[0] === 'coach') return { name: 'coach' };
+    if (parts[0] === 'launch') return { name: 'launch' };
+    if (parts[0] === 'map') return { name: 'map' };
+    if (parts[0] === 'diagnostic') return { name: 'diagnostic', section: parts[1] };
+    if (parts[0] === 'sprint') return { name: 'sprint', section: parts[1] };
     return { name: 'home' };
   }
 
@@ -606,6 +613,21 @@
     } else if (r.name === 'progress') {
       html = MB.progressView ? MB.progressView() : '';
       setCrumbs([{ label: MB.T('Haladás', 'Progress') }]);
+    } else if (r.name === 'coach') {
+      html = MB.coachView ? MB.coachView() : '';
+      setCrumbs([{ label: MB.T('Fókusz', 'Focus') }]);
+    } else if (r.name === 'launch') {
+      html = MB.launchView ? MB.launchView() : '';
+      setCrumbs([{ label: MB.T('5 perces indítás', 'Five-minute launch') }]);
+    } else if (r.name === 'map') {
+      html = MB.mapView ? MB.mapView() : '';
+      setCrumbs([{ label: MB.T('Tudástérkép', 'Knowledge map') }]);
+    } else if (r.name === 'diagnostic') {
+      html = MB.diagView ? MB.diagView(r.section) : '';
+      setCrumbs([{ label: MB.T('Felmérés', 'Diagnostic') }]);
+    } else if (r.name === 'sprint') {
+      html = MB.sprintView ? MB.sprintView(r.section) : '';
+      setCrumbs([{ label: MB.T('10 perces sprint', 'Ten-minute sprint') }]);
     }
     main.innerHTML = MB.protectMath(html);
     updateNav(r);
@@ -616,6 +638,7 @@
     closeSidebar();
     if (r.name === 'formulas') initFormulaSearch();
     if (MB.fun && MB.fun.afterRender) MB.fun.afterRender(r);
+    if (MB.coach && MB.coach.afterRender) MB.coach.afterRender(r);
   }
 
   /* ---------- interactions ---------- */
@@ -650,10 +673,10 @@
       const type = ex.dataset.type;
       const alt = ex.dataset.alt ? JSON.parse(ex.dataset.alt) : [];
       const ok = MB.check(input.value, ans, type, alt);
-      fb.className = 'feedback show ' + (ok ? 'ok' : 'bad');
+      fb.className = 'feedback show ' + (ok ? 'ok' : 'learning');
       fb.textContent = ok
-        ? MB.T('Helyes eredmény. Az eredményt itt nem áruljuk el — használd a „Megoldás mutatása” gombot, ha össze akarod vetni.', 'Correct. The answer is not shown here — use “Show answer” if you want to compare.')
-        : MB.T('Nem stimmel. Ellenőrizd az átalakítást, vagy kérj segítséget.', 'Not correct. Check your transformation, or ask for a hint.');
+        ? MB.T('Helyes. Ez már megy — a következő lépés egy kicsit nehezebb legyen.', 'Correct. You have this one — make the next step slightly harder.')
+        : MB.T('Még nem. Ez nem hiba, hanem információ: kérj egy kisebb lépést vagy nyisd ki a segítséget. A hibafüzet innen tudja, mit ismételj.', 'Not yet. This is not a failure, it is information: ask for a smaller step or open the hint. The error notebook uses it to decide what to review.');
       if (MB.fun && MB.fun.answer) MB.fun.answer(ex, ok, input.value);
       if (ok && c) { markDone(c, i, true); ex.classList.add('done'); updateNav(parseRoute()); }
       input.focus();
@@ -679,8 +702,8 @@
       const ans = ex.dataset.ans;
       const fb = ex.querySelector('.feedback');
       const ok = String(choice.dataset.choice) === String(ans);
-      fb.className = 'feedback show ' + (ok ? 'ok' : 'bad');
-      fb.textContent = ok ? MB.T('Helyes válasz.', 'Correct answer.') : MB.T('Nem ez a helyes válasz. Gondold végig újra.', 'That is not the correct answer. Think it through again.');
+      fb.className = 'feedback show ' + (ok ? 'ok' : 'learning');
+      fb.textContent = ok ? MB.T('Helyes válasz.', 'Correct answer.') : MB.T('Még nem. Gondold végig újra, vagy kérj segítséget — nem kell elsőre tudni.', 'Not yet. Think it through again, or ask for a hint — you do not have to know it first time.');
       if (MB.fun && MB.fun.answer) MB.fun.answer(ex, ok, choice.dataset.choice);
       if (ok && c) { markDone(c, i, true); ex.classList.add('done'); updateNav(parseRoute()); }
       return;

@@ -249,7 +249,7 @@
         (it.hint ? '<button class="btn sm hint-btn" data-hint>' + T('Segítség', 'Hint') + '</button>' : '') + '</div>';
     }
     return '<div class="ex fun-item' + (done ? ' done' : '') + '"' +
-      ' data-kind="' + esc(o.kind || 'extra') + '"' +
+      ' data-kind="' + esc(o.kind || 'extra') + '"' + (o.attrs || '') +
       ' data-funid="' + esc(o.funid || '') + '"' +
       ' data-idx="' + (o.idx == null ? '' : o.idx) + '"' +
       ' data-topic="' + esc(topic) + '"' +
@@ -321,7 +321,7 @@
     h += '<div class="review-stats">' +
       '<div class="rs"><b id="reviewCount">' + st.due + '</b><span>' + T('ma esedékes', 'due today') + '</span></div>' +
       '<div class="rs"><b>' + st.total + '</b><span>' + T('összes bejegyzés', 'total entries') + '</span></div>' +
-      '<div class="rs"><b>' + st.mastered + '</b><span>' + T('megtanulva', 'mastered') + '</span></div>' +
+      '<div class="rs"><b>' + st.mastered + '</b><span>' + T('megoldott zavar', 'confusions fixed') + '</span></div>' +
       '<div class="rs boxes"><b>' + st.boxes.join(' / ') + '</b><span>' + T('dobozok (1 / 3 / 7 / 21 nap)', 'boxes (1 / 3 / 7 / 21 days)') + '</span></div>' +
       '</div>';
     if (!due.length) {
@@ -813,7 +813,8 @@
     if (kind === 'daily') dailySolved(ex, d, first);
     if (kind === 'mixed') mixedSolved(ex, d, first);
     if (kind === 'review') reviewSolved(ex, d, first);
-    if (active && active.changed) {
+    if (MB.fun.onAnswer) MB.fun.onAnswer(ex, d, kind, first);
+    if (active && active.changed && !(MB.app.state.coach && MB.app.state.coach.calm)) {
       if (active.freeze) MB.toast(T('Fagyasztót használtunk — a sorozat megmaradt.', 'Freeze used — your streak survived.'));
       else MB.toast(active.count + ' ' + T('napos sorozat.', 'day streak.'));
     }
@@ -885,7 +886,7 @@
       ex.classList.add('done');
       lockItem(ex);
     } else {
-      if (fb) { fb.className = 'feedback show bad'; fb.textContent = T('Holnap újra előjön. Nem kell azonnal ismételni.', 'It returns tomorrow. No need to retry now.'); }
+      if (fb) { fb.className = 'feedback show learning'; fb.textContent = T('Holnap újra előjön. Nem kell azonnal ismételni.', 'It returns tomorrow. No need to retry now.'); }
       lockItem(ex);
     }
     const due = dueItems().length;
@@ -1000,6 +1001,8 @@
   });
 
   /* Exported helpers used by app.js / features.js */
+  MB.fun.itemHTML = itemHTML;
+  MB.fun.onAnswer = null;
   MB.fun.secOfCat = secOfCat;
   MB.fun.secTitle = secTitle;
   MB.fun.today = today;

@@ -28,16 +28,17 @@ Feltételezem, hogy **középszintű érettségi** szinten tanultál matematiká
 
 - **Bal oldali tartalomjegyzék**: 7 alaprész + 6 opcionális előretekintés, 34 fejezet. Kattints a fejezetre.
 - **Egy fejezet felépítése**: Elmélet → Videó → Kidolgozott példák → Tipikus hibák → Gyakorló feladatok → Teszt.
-- **Feladatok**: írd be az eredményt, majd „Ellenőrzés”. A „Segítség” és „Megoldás” gombok segítenek, ha elakadsz.
+- **Feladatok**: írd be az eredményt, majd „Ellenőrzés”. Hibánál sárga „még nem” visszajelzést kapsz, nem piros X-et; a „Segítség” és „Megoldás” gombok segítenek, ha elakadsz.
 - **Fejezet teszt**: a fejezet végén 8 kérdés, 10 perc, pontszám és részletes kiértékelés.
 - **Feladatbank**: 15 kategória, kategóriánként 50 generált feladat (10 könnyű / 10 közepes / 30 nehéz, arány 1 : 1 : 3). Az „Új feladatsor” gombbal új változatokat kapsz; az egyes feladatok mellett is van újragenerálás.
 - **ZH / vizsga szimulátor**: ZH1, ZH2, vizsga és gyors gyakorlás, időlimittel és jegybecsléssel.
+- **Fókusz / Launchpad**: egy kattintásos **5 perces indítás** (ismert kérdés, majd egy gyenge pont), **tudástérkép**, **felmérés** résszinten, **10 perces sprint**, vizsga-visszaszámláló és heti vállalás. A „Nyugodt mód” elrejti a streak-elemeket, ha azok inkább nyomást jelentenek.
 - **Napi küldetés**: 5 vegyes feladat naponta, kb. öt perc. A sorozat a megoldott napokat számolja, heti egy fagyasztóval.
 - **Hibafüzet**: minden hibás válasz visszatér 1, 3, 7, majd 21 nap múlva. Az esedékes ismétlések száma a bal oldalon látszik.
 - **Vegyes menet**: 10 feladat témacímkék nélkül — a módszer felismerése a feladat.
 - **Hibavadászat**: 22 feladat, mindegyikben három állítás és pontosan egy hamis.
 - **Magyarázd el**: minden fejezet végén két-három mondatban elmondhatod a fő ötletet; a szöveg mentődik.
-- **Haladás**: ZH-felkészültség részenként és heti riport (válaszok, pontosság, ismétlések, gyenge témák).
+- **Haladás**: ZH-felkészültség részenként és heti riport (válaszok, pontosság, ismétlések, gyenge témák); a térkép a becsült tudást mutatja, nem a videónézés idejét. Ha még nincs adat, `—` látszik, nem 0%.
 - **Képletgyűjtemény**: 94 képlet, kereshető.
 - **Nyelv**: a jobb felső `EN` / `HU` gombbal válthatsz. Minden látható szöveg teljesen kétnyelvű: a felület, a fejezetcímek és -leírások, az elmélet, a kidolgozott példák, a hibák, a feladatok és megoldásaik, a generált feladatbank, a napi küldetés, a hibafüzet, a hibavadászat, a magyarázd el blokk, a képletgyűjtemény és a videótár is.
 - **Keresés**: `Ctrl + K` (vagy `/`), majd gépelj.

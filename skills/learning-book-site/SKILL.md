@@ -366,12 +366,124 @@ Keep the tracker decoupled from the renderer: put the data on the exercise node,
 - `MB.fun.afterRender(route)` after each route render to refresh the streak chip, sidebar badges and due count.
 - Guard every call (`MB.fun && MB.fun.answer(...)`) so the site still works if the module is removed.
 - Store all state under one object (`MB.app.state.fun`): `review`, `log`, `hunts`, `teach`, `dailyDone`, `streak`, `daily`, `mixed`. Cap the log at ~800 entries.
-- Load order: `util → generators → demos → features → fun → app`.
+- Load order: `util → generators → demos → features → fun → coach → app`.
+- The coach layer (§6.11) uses the same answer hook; do not add a second grading path.
+
+### 6.11 Motivation-aware launchpad (friction, competence, stakes)
+
+A site can have perfect content and still be avoided when the learner feels confused, exposed or
+bored. Add a small **coach layer** that lowers the start cost, makes competence visible, imports a
+real deadline, and protects against shame. It is local-first and optional; keep it out of the
+content schema.
+
+**State** — store under `MB.app.state.coach` and save with the same `MB.app.save()`:
+
+```js
+state.coach = {
+  examDate: 'YYYY-MM-DD' | '',
+  weeklyGoal: 3,                 // 1–7 sessions, user-set
+  sessions: ['YYYY-MM-DD'],      // max one per day, cap ~120
+  diag: { [sectionId]: { done, correct, total, passed, date } },
+  diagDraft: { [sectionId]: { [idx]: boolean } },
+  launchSeed: 1,
+  sprintSeed: 1,
+  calm: false
+}
+```
+
+**Mastery is not readiness.** Readiness (§6.9) is the evidence-weighted exam estimate. The coach
+map uses a simpler navigation score:
+
+`0.50 * exercise coverage + 0.10 * chapters read + 0.25 * test average + 0.15 * recall accuracy`.
+
+- A passed diagnostic floors that section at `0.75` so the map reflects test-out knowledge.
+- Aggregate only core sections. Ramps are `weak < .35`, `building < .55`, `solid < .75`, `ready`.
+- **No data is not zero.** If a section has no read/solved/test/recall/diagnostic evidence, render
+  `—` and a neutral `.new` class. Never paint an untouched section red; a new learner must not open
+  a wall of failure.
+
+**Routes and behaviour**
+
+| Route | Behaviour |
+|---|---|
+| `#/coach` | Exam date, weekly session commitment, countdown, next three actions, calm toggle, launch/map/sprint entry points. |
+| `#/launch` | Two items: one from the strongest known section (or `alapok` when there is no data), one from the weakest. Optional 5-minute timer; the learner may stop. Answering records a session. |
+| `#/map` | Section cards with prerequisite text, mastery bar and state class; test-out and 10-minute sprint links. Show `—` for no data. |
+| `#/diagnostic/:section` | Five generated items (`1,1,2,2,3`). First attempt counts. `>= 4/5` passes and lets the learner skip revision; otherwise route to the first chapter. Allow retest. Never call it an exam or attach a grade. |
+| `#/sprint/:section` | Three items (`1,2,3`), one topic, 10-minute timer, hard stop. The third item is deliberately harder. Answering records a session. |
+
+- `nextActions()` order: due reviews first, then the lowest-mastery core sections; return at most
+  three. Every card is one tap from a question, not from a table of contents.
+- Home adds a compact coach strip **before** the daily/readiness cards: launch, map, focus. Keep it
+  to three cards.
+- Exam countdown uses local dates, not UTC midnight; a deadline is a user-facing date.
+- Weekly commitment counts distinct session days in the current ISO week; it is a commitment, not a
+  streak. If a week slips, reset it without a punishment screen.
+
+**Safe-fail feedback** — this is a UX rule, not a slogan:
+
+- Wrong answers use an amber `.learning` state, never red. Copy: “not yet — this is information”.
+- Offer a smaller step/hint before the solution. Do not remove points or lock the learner out.
+- The error notebook remains the review queue, but rename the visible metric to **confusions
+  fixed** where possible. A miss is data, not a verdict.
+- After a correct answer, name the next step (“slightly harder”, “mixed set”, “exam paper”).
+- Proof/open items stay self-assessed; never fake a grade for them.
+
+**Calm mode**
+
+- `body.calm-mode` hides streak chips, badges, flame cards and loss-framed copy.
+- No leaderboards, no “you lost your streak”, no red countdown. Persist the preference.
+- Keep the weekly commitment and exam date visible; those are useful pressure, unlike guilt.
+
+**Wiring contract**
+
+```html
+<div class="ex" data-kind="launch|diagnostic|sprint"
+     data-diag="sectionId" data-diag-idx="0"
+     data-funid="..." data-idx="0" ...>
+```
+
+- Reuse `MB.fun.itemHTML(it, { kind, funid, idx, done, showTopic, attrs })`; add an `attrs` string
+  for `data-diag` / `data-diag-idx`. Do not fork the exercise renderer.
+- After every checked answer, `MB.fun.answer` calls `MB.fun.onAnswer(ex, d, kind, first)`. The coach
+  hook records the first diagnostic attempt, marks a session, locks correct items and updates the
+  “answered” count. Do not add a second click handler that also grades.
+- `MB.coach.afterRender(route)` applies calm mode; `MB.app.render()` calls it after `fun`.
+- Load order: `util → generators → demos → features → fun → coach → app`.
+- Guard every coach call (`MB.coach && ...`) so the book still works if the layer is removed.
+
+**Evidence and constraints**
+
+- Autonomy, competence and relatedness predict intrinsic motivation; use choice, visible mastery
+  and optional social accountability, not pressure alone.
+- Implementation intentions (“if it is 18:30 at my desk, then I open the five-minute launch”) are
+  effective for starting; give the learner a place to write one.
+- Procrastination is often emotion regulation, not laziness; the first screen must make confusion
+  safe.
+- Retrieval, spacing and interleaving remain the learning engine; the coach only changes the
+  entrance.
+- Do **not** match instruction to “learning styles”; evidence for meshing is weak. Ask about
+  conditions (structure, novelty, pressure, social energy), not a label.
+
+**Acceptance**
+
+- [ ] A new learner with no data sees `—` and neutral map nodes, not `0%` red nodes.
+- [ ] Five-minute launch uses the strongest known section first, or `alapok` when there is no data;
+      the second item is the weakest section.
+- [ ] Diagnostic `4/5` passes, persists, floors the map at 75%, and can be retested.
+- [ ] Wrong answers are amber, offer a hint, and create one notebook entry; no score is lost.
+- [ ] Sprint timer starts at 10:00 and stops at 00:00; the third item is level 3.
+- [ ] Exam date, weekly goal and weekly session count survive reload.
+- [ ] Calm mode hides streak chrome and survives reload.
+- [ ] All coach strings switch HU/EN; dates and week boundaries use local time.
+- [ ] No console errors on `#/coach`, `#/launch`, `#/map`, `#/diagnostic/:id`, `#/sprint/:id`.
 
 ## 7. UX features worth building
 
 - **Progress**: mark chapter read; count solved exercises; overall bar in sidebar; readiness dashboard (see §6.9).
+- **Focus / launchpad** (§6.11): five-minute launch, knowledge map, section diagnostics, ten-minute sprint, exam countdown and weekly commitment. Put the launch entry first on the home page.
 - **Daily practice group**: sidebar links for the daily quest, error notebook, mixed run, error hunts and progress, with a due-count badge.
+- **Calm mode** (§6.11): hide streak chrome and loss-framed copy for learners who find it punitive.
 - **Streak chip**: one compact flame + count in the topbar, linking to the daily quest; render the zero state muted rather than hiding it.
 - **Search**: `Ctrl/Cmd+K`; index sections, chapters, theory text, formula names, videos; keyboard navigation.
 - **Formula sheet**: searchable, grouped by category, each formula links back to its chapter.
@@ -405,6 +517,9 @@ Do these before declaring done:
    - Error notebook: a wrong answer is due tomorrow; a correct review moves through 1 → 3 → 7 → 21 days; box 4 marks it mastered and removes it; a later miss resets to box 0.
    - Mixed run hides topics until answered; "New run" yields a different set and clears the score.
    - Error hunts: every item has exactly one false statement; clicking a true one does not solve it; the explanation appears only after the false one.
+   - Coach: five-minute launch puts a known item first and a weak item second; a diagnostic `4/5` passes and floors the map at 75%; sprint timer stops at 10:00; exam date, weekly goal and calm mode survive reload.
+   - Safe-fail: a wrong answer is amber, offers a hint, creates one notebook entry and does not deduct a score.
+   - Map: sections with no evidence show `—` and a neutral class, never a red `0%`.
    - Teach-back text and checkboxes survive reload; clearing the text deletes the entry.
    - Readiness: missing components show `—`; with coverage alone the value equals coverage; test scores only appear when a test recorded its section.
    - Week recap counts only the last seven days.
@@ -444,7 +559,11 @@ Keep the content schema and generator contract; delete unused pages from the nav
 - **No mobile handling.** The sidebar and math overflow are the usual breakages.
 - **Progress that lives only in memory.** Persist to localStorage.
 - **A streak with no recovery.** One missed day must not erase months; ship a weekly freeze and show when it is consumed.
+- **A streak as the only progress metric.** Count mastery, confusions fixed and exam readiness too; make the streak optional/hideable in calm mode.
 - **Readiness that counts missing data as zero.** Renormalise over present components and show `—`; a new learner should not start at 0%.
+- **A map of red 0% nodes with no evidence.** Use a neutral `new` state and `—`; never make an untouched section look failed.
+- **A diagnostic that behaves like a graded exam.** It is a five-question routing decision; no grade, no shame, allow a retest.
+- **Red X feedback on a missed exercise.** Use amber “not yet”, a hint ladder and the notebook; preserve the learner’s willingness to try.
 - **A daily quest the learner can topic-pick.** Interleaving is the feature; hide the category until the answer is checked.
 - **Tracking logic spread across the renderer.** Put the data on the node and use one answer hook (§6.10), or every new view silently loses progress.
 - **Error hunts with a trivial or negative false statement.** The distractor must be a real misconception the learner is likely to hold.
