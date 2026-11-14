@@ -13,9 +13,9 @@ Thumbs.db
 node_modules/
 
 # builder state
-platform/data/
-platform/test-data/
-platform/.env
+data/
+test-data/
+.env
 
 # local screenshots / scratch
 screenshots/

@@ -4,7 +4,10 @@ FROM node:24-alpine
 RUN apk add --no-cache poppler-utils
 
 WORKDIR /app
-COPY platform ./platform
+COPY server.js ./
+COPY public ./public
+COPY template ./template
+COPY shared ./shared
 COPY skills ./skills
 COPY examples/matekbazis ./examples/matekbazis
 
@@ -17,4 +20,4 @@ ENV NODE_ENV=production \
 RUN mkdir -p /data
 VOLUME ["/data"]
 EXPOSE 8080
-CMD ["node", "platform/server.js"]
+CMD ["node", "server.js"]

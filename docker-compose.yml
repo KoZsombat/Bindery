@@ -3,8 +3,8 @@ name: learning-book-builder
 services:
   builder:
     build:
-      context: ..
-      dockerfile: platform/Dockerfile
+      context: .
+      dockerfile: Dockerfile
     image: learning-book-builder:latest
     restart: unless-stopped
     env_file:

@@ -14,14 +14,33 @@ const { execFileSync } = require('child_process');
 const { DatabaseSync } = require('node:sqlite');
 
 const ROOT = __dirname;
+
+/* Minimal .env loader so `node server.js` works without a shell wrapper. */
+function loadDotEnv(file) {
+  try {
+    fs.readFileSync(file, 'utf8').split(/\r?\n/).forEach(line => {
+      line = line.trim();
+      if (!line || line.startsWith('#')) return;
+      if (line.startsWith('export ')) line = line.slice(7);
+      const i = line.indexOf('=');
+      if (i < 1) return;
+      const key = line.slice(0, i).trim();
+      let value = line.slice(i + 1).trim();
+      if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) value = value.slice(1, -1);
+      if (process.env[key] === undefined) process.env[key] = value;
+    });
+  } catch {}
+}
+loadDotEnv(path.join(ROOT, '.env'));
+
 const DATA_DIR = process.env.DATA_DIR || path.join(ROOT, 'data');
 const DB_PATH = path.join(DATA_DIR, 'builder.db');
 const SITES_DIR = path.join(DATA_DIR, 'sites');
 const UPLOADS_DIR = path.join(DATA_DIR, 'uploads');
 const TEMPLATE_DIR = path.join(ROOT, 'template');
 const PUBLIC_DIR = path.join(ROOT, 'public');
-const EXAMPLE_DIR = process.env.EXAMPLE_DIR || path.join(ROOT, '..', 'examples', 'matekbazis');
-const SKILL_PATH = process.env.SKILL_PATH || path.join(ROOT, '..', 'skills', 'learning-book-site', 'SKILL.md');
+const EXAMPLE_DIR = process.env.EXAMPLE_DIR || path.join(ROOT, 'examples', 'matekbazis');
+const SKILL_PATH = process.env.SKILL_PATH || path.join(ROOT, 'skills', 'learning-book-site', 'SKILL.md');
 const PORT = Number(process.env.PORT || 8080);
 const BASE_DOMAIN = process.env.BASE_DOMAIN || 'example.com';
 const SITE_DOMAIN = process.env.SITE_DOMAIN || ('sites.' + BASE_DOMAIN);

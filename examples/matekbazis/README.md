@@ -73,4 +73,4 @@ Ez tanulást segítő összefoglaló, nem hivatalos tanszéki jegyzet. A számon
 
 ---
 
-**Ez egy már elkészült projekt.** A Learning Book Builder katalógusában példaként szerepel; a szerkesztő és az új site-ok generálása a repository gyökér `platform/` mappájában található.
+**Ez egy már elkészült projekt.** A Learning Book Builder katalógusában példaként szerepel; a szerkesztő és az új site-ok generálása a repository gyökér `server.js` fájljában és a `public/`, `template/` mappákban található.

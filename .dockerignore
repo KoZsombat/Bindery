@@ -1,8 +1,9 @@
 .git
 .gitignore
+.env
 dist
-platform/data
-platform/test-data
+data
+test-data
 node_modules
 **/node_modules
 *.log
