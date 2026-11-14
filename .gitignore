@@ -1,0 +1,16 @@
+# build artifacts
+dist/
+*.zip
+_testzip/
+
+# OS / editor junk
+.DS_Store
+Thumbs.db
+*.log
+*.tmp
+
+# dependencies (the site has none, but keep the rule)
+node_modules/
+
+# local screenshots / scratch
+screenshots/

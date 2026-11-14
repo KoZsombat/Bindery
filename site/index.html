@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="hu" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MatekBázis — az első félév alapjai</title>
+<meta name="description" content="Felkészítő az első félév matematikájához mérnökinformatikusoknak: az érettségi alapok felelevenítése, elmélet, példák, videók és ellenőrizhető feladatok.">
+<link rel="stylesheet" href="vendor/katex/katex.min.css">
+<link rel="stylesheet" href="assets/css/app.css">
+</head>
+<body>
+<a class="skip" href="#main">Ugrás a tartalomra</a>
+
+<div id="app">
+  <aside class="sidebar" id="sidebar" aria-label="Fő navigáció">
+    <a class="brand" href="#/" aria-label="MatekBázis kezdőlap">
+      <span class="brand-mark" aria-hidden="true">
+        <svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M5 26V9l8 10 8-10v17"/><path d="M25 9v17"/><path d="M21 9h8"/>
+        </svg>
+      </span>
+      <span class="brand-text">
+        <span class="brand-kicker">BME VIK · Mérnökinformatikus</span>
+        <b>MatekBázis</b>
+        <small data-i18n="Az első félév alapjai">Az első félév alapjai</small>
+      </span>
+    </a>
+
+    <div class="side-progress" title="Összesített haladás">
+      <div class="side-progress-top"><span data-i18n="Olvasási haladás">Olvasási haladás</span><b id="sidePct">0%</b></div>
+      <div class="bar"><i id="sideBar" style="width:0%"></i></div>
+    </div>
+
+    <div class="nav-group-label" data-i18n="Tartalomjegyzék">Tartalomjegyzék</div>
+    <nav class="nav" id="nav"></nav>
+
+    <div class="side-foot">
+      <a href="#/formulas" class="side-link" data-nav="formulas"><span class="ico" data-icon="sigma"></span>Képletgyűjtemény</a>
+      <a href="#/videos" class="side-link" data-nav="videos"><span class="ico" data-icon="play"></span>Videók</a>
+      <a href="#/practice" class="side-link" data-nav="practice"><span class="ico" data-icon="dumbbell"></span>Feladatbank</a>
+      <a href="#/exam" class="side-link" data-nav="exam"><span class="ico" data-icon="clock"></span>ZH / vizsga szimulátor</a>
+      <a href="#/resources" class="side-link" data-nav="resources"><span class="ico" data-icon="file"></span>Forrásanyagok</a>
+    </div>
+  </aside>
+
+  <div class="shell">
+    <header class="topbar">
+      <div class="crumbs" id="crumbs"></div>
+      <div class="top-actions">
+        <button class="search-trigger" id="searchTrigger" aria-label="Keresés">
+          <span class="ico" data-icon="search"></span>
+          <span data-i18n="Keresés a tananyagban…">Keresés a tananyagban…</span>
+          <kbd>Ctrl K</kbd>
+        </button>
+        <button class="lang-btn" id="langBtn" aria-label="Nyelv / Language">EN</button>
+        <button class="icon-btn" id="themeBtn" aria-label="Világos / sötét téma">
+          <span class="ico" data-icon="sun"></span>
+        </button>
+      </div>
+    </header>
+
+    <main id="main" tabindex="-1"></main>
+
+    <footer class="footer">
+      <p>Felkészítő a BME VIK mérnökinformatikus első félévének alapjaihoz, az első év tananyagainak felhasználásával: Fritz–Kónya–Pataki–Tasnádi <i>Matematika 1</i>, az Analízis 1–2 jegyzetek, a 2025–2026-os zárthelyik és vizsgák, valamint a saját felkészítő jegyzeteid.</p>
+      <p class="muted">A tartalom tanulást segítő összefoglaló, nem hivatalos jegyzet. A számonkérés szintjét mindig az aktuális tárgyi követelmény és a tanszéki anyagok adják.</p>
+    </footer>
+  </div>
+</div>
+
+<button class="nav-fab" id="navFab" aria-label="Tartalomjegyzék megnyitása" aria-expanded="false">
+  <span class="ico" data-icon="menu"></span><span data-i18n="Tartalom">Tartalom</span>
+</button>
+
+<div class="scrim" id="scrim"></div>
+
+<div class="search-modal" id="searchModal" role="dialog" aria-modal="true" aria-label="Keresés">
+  <div class="search-box">
+    <span class="ico" data-icon="search"></span>
+    <input id="searchInput" type="search" data-i18n-placeholder="Keresés a tananyagban…" placeholder="Téma, fogalom, képlet, feladat…" autocomplete="off" spellcheck="false">
+    <button class="icon-btn" id="searchClose" aria-label="Bezárás"><span class="ico" data-icon="x"></span></button>
+  </div>
+  <div class="search-results" id="searchResults"></div>
+  <div class="search-help"><kbd>↑</kbd><kbd>↓</kbd> választás <kbd>Enter</kbd> megnyitás <kbd>Esc</kbd> zárás</div>
+</div>
+
+<noscript><p style="padding:2rem">A tananyag megjelenítéséhez JavaScript szükséges.</p></noscript>
+
+<script src="vendor/katex/katex.min.js"></script>
+<script src="vendor/katex/auto-render.min.js"></script>
+<script src="assets/js/util.js"></script>
+<script src="content/_helpers.js"></script>
+<script src="content/01-alapok.js"></script>
+<script src="content/02-logika.js"></script>
+<script src="content/03-komplex.js"></script>
+<script src="content/04-sorozatok.js"></script>
+<script src="content/05-hatarertek.js"></script>
+<script src="content/06-derivalas.js"></script>
+<script src="content/07-integralas.js"></script>
+<script src="content/08-sorok.js"></script>
+<script src="content/09-taylor.js"></script>
+<script src="content/10-tobbszoros.js"></script>
+<script src="content/11-diff-fourier.js"></script>
+<script src="content/12-linearis.js"></script>
+<script src="content/13-diszkret.js"></script>
+<script src="content/_en.js"></script>
+<script src="content/_formulas.js"></script>
+<script src="content/_videos.js"></script>
+<script src="assets/js/generators.js"></script>
+<script src="assets/js/demos.js"></script>
+<script src="assets/js/features.js"></script>
+<script src="assets/js/app.js"></script>
+</body>
+</html>
