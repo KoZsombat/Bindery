@@ -56,7 +56,12 @@ router.post('/login', rateLimit({ windowMs: 15 * 60 * 1000, max: 15 }), async (r
 router.post('/logout', async (req, res) => {
   try {
     copyAuthCookies(res, await auth.api.signOut({ headers: fromNodeHeaders(req.headers), asResponse: true }));
-  } catch {}
+  } catch (e) {
+    console.error('Sign-out error:', e.message);
+  }
+  const cookie = { path: '/', httpOnly: true, sameSite: 'lax', secure: req.secure };
+  res.clearCookie('better-auth.session_token', cookie);
+  res.clearCookie('__Secure-better-auth.session_token', cookie);
   res.redirect('/login');
 });
 router.get('/', (req, res) => res.redirect(req.user ? '/app' : '/login'));

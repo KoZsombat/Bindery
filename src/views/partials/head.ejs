@@ -17,7 +17,7 @@
     <% if (admin) { %><a class="<%= currentPath.startsWith('/admin') ? 'active' : '' %>" href="/admin"><%= t('Admin') %></a><% } %>
     <a class="lang" href="/lang/<%= lang === 'hu' ? 'en' : 'hu' %>?next=<%= encodeURIComponent(currentPath) %>"><%= lang === 'hu' ? 'EN' : 'HU' %></a>
     <span class="who"><%= user ? user.email : '' %></span>
-    <% if (user) { %><form method="post" action="/logout" class="inline"><button class="linklike" type="submit"><%= t('Sign out') %></button></form><% } %>
+    <% if (user) { %><form method="post" action="/logout" class="inline"><button class="btn sm ghost" type="submit"><%= t('Sign out') %></button></form><% } %>
   </nav>
 </header>
 <main class="wrap">
