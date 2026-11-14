@@ -1,0 +1,41 @@
+<%- include('partials/head', { title: site.title + ' · Learning Book Builder' }) %>
+<section class="page-head">
+  <div>
+    <div class="kicker">Site · <%= site.slug %></div>
+    <h1><%= site.title %></h1>
+    <p class="lead"><%= site.description || '' %></p>
+  </div>
+  <div class="row">
+    <span class="status <%= site.status %>"><%= site.status %></span>
+    <% if (site.status === 'ready') { %><a class="btn primary" href="<%= site.url %>">Open site</a><% } %>
+  </div>
+</section>
+
+<div class="grid two">
+  <div class="card">
+    <h2>Routing</h2>
+    <p class="muted">The site is served at this path. There is no ZIP or download.</p>
+    <p><code><%= site.url %></code></p>
+    <p class="muted small">Status: <%= site.status %> · Updated: <%= fmt(site.updatedAt) %></p>
+    <% if (site.error) { %><div class="inline-err"><%= site.error %></div><% } %>
+    <% if (site.status === 'queued' || site.status === 'running') { %><p class="muted small">Generating… this page refreshes automatically.</p><% } %>
+  </div>
+  <div class="card">
+    <h2>Actions</h2>
+    <div class="row">
+      <% if (site.status === 'ready') { %><a class="btn primary" href="<%= site.url %>">Open</a><% } %>
+      <% if (site.reusable) { %><form method="post" action="/site/<%= site.id %>/clone" class="inline"><button class="btn" type="submit">Reuse in my workspace</button></form><% } %>
+      <a class="btn" href="/app">Back to sites</a>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Job log</h2>
+  <pre class="log"><%= job ? (job.status + '\n\n' + (job.log || '')) : 'No job recorded.' %></pre>
+</div>
+
+<% if (site.status === 'queued' || site.status === 'running') { %>
+<script>setTimeout(function () { location.reload(); }, 2500);</script>
+<% } %>
+<%- include('partials/foot') %>

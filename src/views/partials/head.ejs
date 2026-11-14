@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title><%= typeof title !== 'undefined' ? title : 'Learning Book Builder' %></title>
+<link rel="stylesheet" href="/app.css">
+</head>
+<body>
+<header class="top">
+  <a class="brand" href="/app">Learning Book Builder <small>routed learning sites</small></a>
+  <nav>
+    <a href="/app">Sites</a>
+    <a href="/new">New site</a>
+    <a href="/catalog">Catalog</a>
+    <a href="/settings">Settings</a>
+    <% if (admin) { %><a href="/admin">Admin</a><% } %>
+    <span class="who"><%= user ? user.email : '' %></span>
+    <% if (user) { %><form method="post" action="/logout" class="inline"><button class="linklike" type="submit">Sign out</button></form><% } %>
+  </nav>
+</header>
+<main class="wrap">

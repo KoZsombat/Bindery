@@ -1,0 +1,42 @@
+<%- include('partials/head', { title: 'Sites · Learning Book Builder' }) %>
+<section class="page-head">
+  <div>
+    <div class="kicker">Your workspace</div>
+    <h1>Learning sites</h1>
+    <p class="lead">Create a routed book from files and long text. Every site is served at its own URL — nothing to download.</p>
+  </div>
+  <a class="btn primary" href="/new">New site</a>
+</section>
+
+<div class="quota">
+  <div><b><%= remaining %></b><span>of <%= profile.daily_limit %> sites left today</span></div>
+  <div class="bar"><i style="width:<%= profile.daily_limit ? Math.round(usedToday / profile.daily_limit * 100) : 0 %>%"></i></div>
+</div>
+
+<div class="grid">
+  <% if (!sites.length) { %>
+    <div class="empty">No sites yet. <a href="/new">Create the first one</a>.</div>
+  <% } %>
+  <% sites.forEach(function (s) { %>
+    <article class="site-card">
+      <div class="site-top"><h3><%= s.title %></h3><span class="status <%= s.status %>"><%= s.status %></span></div>
+      <p class="muted"><%= s.description || '' %></p>
+      <div class="site-meta">
+        <span><%= s.slug %></span><span><%= fmt(s.createdAt) %></span>
+        <% if (s.example) { %><span class="pill">example</span><% } %>
+        <% if (!s.published) { %><span class="pill">private</span><% } %>
+      </div>
+      <div class="site-actions">
+        <% if (s.status === 'ready') { %><a class="btn primary sm" href="<%= s.url %>">Open</a><% } %>
+        <% if (s.reusable) { %>
+          <form method="post" action="/site/<%= s.id %>/clone" class="inline"><button class="btn sm" type="submit">Reuse</button></form>
+        <% } %>
+        <a class="btn sm" href="/site/<%= s.id %>">Details</a>
+        <% if (s.status === 'queued' || s.status === 'running') { %><span class="muted small">generating…</span><% } %>
+      </div>
+      <% if (s.error) { %><div class="inline-err"><%= s.error %></div><% } %>
+    </article>
+  <% }) %>
+</div>
+<div class="notice">The MatekBázis example is a complete project that was already created. Open it to see the target quality.</div>
+<%- include('partials/foot') %>

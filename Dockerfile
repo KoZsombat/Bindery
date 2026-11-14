@@ -1,15 +1,19 @@
-FROM node:24-alpine
-
-# pdftotext is used only when a user uploads a PDF.
-RUN apk add --no-cache poppler-utils
-
+FROM node:24-alpine AS deps
 WORKDIR /app
-COPY server.js ./
+RUN apk add --no-cache python3 make g++
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev
+
+FROM node:24-alpine
+RUN apk add --no-cache poppler-utils
+WORKDIR /app
+COPY --from=deps /app/node_modules ./node_modules
+COPY src ./src
 COPY public ./public
-COPY template ./template
 COPY shared ./shared
 COPY skills ./skills
 COPY examples/matekbazis ./examples/matekbazis
+COPY package.json ./
 
 ENV NODE_ENV=production \
     PORT=8080 \
@@ -20,4 +24,4 @@ ENV NODE_ENV=production \
 RUN mkdir -p /data
 VOLUME ["/data"]
 EXPOSE 8080
-CMD ["node", "server.js"]
+CMD ["node", "src/index.js"]

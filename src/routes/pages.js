@@ -1,0 +1,131 @@
+import express from 'express';
+import { fromNodeHeaders } from 'better-auth/node';
+import multer from 'multer';
+import fs from 'node:fs';
+import path from 'node:path';
+import { auth } from '../auth.js';
+import { MAX_SOURCE, MAX_UPLOAD, MAX_FILES, DEFAULT_DAILY_LIMIT } from '../config.js';
+import { sqlite, quotaUsed, uniqueSlug, siteRow, siteJsonPath, publicSite, now } from '../db/index.js';
+import { kick, llmConfig, useMock } from '../services/generation.js';
+import { extractUpload } from '../services/uploads.js';
+import { encrypt } from '../crypto.js';
+import { safeNext, copyAuthCookies, renderPage } from '../lib/http.js';
+import { requireUser } from '../middleware/session.js';
+
+const router = express.Router();
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: MAX_UPLOAD, files: MAX_FILES } });
+
+router.get('/login', (req, res) => {
+  if (req.user) return res.redirect('/app');
+  res.render('login', { error: '', email: '', next: safeNext(req.query.next), dev: !process.env.ADMIN_PASSWORD && process.env.NODE_ENV !== 'production' });
+});
+router.post('/login', async (req, res) => {
+  const email = String(req.body.email || '').trim().toLowerCase();
+  const password = String(req.body.password || '');
+  const next = safeNext(req.body.next);
+  const dev = !process.env.ADMIN_PASSWORD && process.env.NODE_ENV !== 'production';
+  try {
+    const response = await auth.api.signInEmail({ body: { email, password }, asResponse: true });
+    if (!response.ok) return res.status(401).render('login', { error: 'Wrong email or password.', email, next, dev });
+    copyAuthCookies(res, response);
+    return res.redirect(next);
+  } catch {
+    return res.status(401).render('login', { error: 'Wrong email or password.', email, next, dev });
+  }
+});
+router.post('/logout', async (req, res) => {
+  try {
+    copyAuthCookies(res, await auth.api.signOut({ headers: fromNodeHeaders(req.headers), asResponse: true }));
+  } catch {}
+  res.redirect('/login');
+});
+router.get('/', (req, res) => res.redirect(req.user ? '/app' : '/login'));
+
+router.get('/app', requireUser, (req, res) => {
+  const usedToday = quotaUsed(req.user.id);
+  const sites = sqlite.prepare('SELECT * FROM sites WHERE owner_id=? OR example=1 ORDER BY created_at DESC').all(req.user.id).map(publicSite);
+  renderPage(req, res, 'dashboard', { sites, usedToday, remaining: Math.max(0, req.profile.daily_limit - usedToday) });
+});
+router.get('/new', requireUser, (req, res) => {
+  const usedToday = quotaUsed(req.user.id);
+  renderPage(req, res, 'new', { form: {}, suggestions: [], error: '', remaining: Math.max(0, req.profile.daily_limit - usedToday) });
+});
+router.post('/new', requireUser, upload.array('files', MAX_FILES), async (req, res) => {
+  const form = {
+    title: String(req.body.title || '').trim().slice(0, 160),
+    topic: String(req.body.topic || '').trim().slice(0, 300),
+    description: String(req.body.description || '').trim().slice(0, 600),
+    audience: String(req.body.audience || '').trim().slice(0, 160),
+    language: ['hu', 'en', 'both'].includes(req.body.language) ? req.body.language : 'both',
+    longText: String(req.body.longText || '').trim().slice(0, MAX_SOURCE),
+    published: req.body.published === 'on'
+  };
+  const used = quotaUsed(req.user.id);
+  const remaining = Math.max(0, req.profile.daily_limit - used);
+  if (used >= req.profile.daily_limit) return renderPage(req, res, 'new', { form, suggestions: [], error: 'Daily limit reached (' + req.profile.daily_limit + ' sites/day).', remaining }, 429);
+  try {
+    let source = form.longText;
+    for (const file of req.files || []) {
+      const up = await extractUpload(file, req.user.id);
+      source += '\n\n--- ' + up.name + ' ---\n' + up.extracted;
+    }
+    if (!form.topic && !source.trim()) return renderPage(req, res, 'new', { form, suggestions: [], error: 'Add a topic, long text, or at least one file.', remaining }, 400);
+    const cfg = llmConfig(req.profile);
+    if (!useMock(cfg) && !cfg.key) return renderPage(req, res, 'new', { form, suggestions: [], error: 'No API key. Add one in Settings, or ask the admin to configure LLM_API_KEY.', remaining }, 400);
+    if (req.body.force !== '1') {
+      const needle = '%' + (form.topic || form.title || '').slice(0, 60).replace(/[%_]/g, '') + '%';
+      const suggestions = sqlite.prepare("SELECT * FROM sites WHERE status='ready' AND published=1 AND (title LIKE ? OR topic LIKE ? OR description LIKE ?) ORDER BY created_at DESC LIMIT 5").all(needle, needle, needle).map(publicSite);
+      if (suggestions.length) return renderPage(req, res, 'new', { form, suggestions, error: '', remaining });
+    }
+    const title = form.title || form.topic || 'Untitled learning book';
+    const slug = uniqueSlug(title);
+    const t = now();
+    const result = sqlite.prepare(`INSERT INTO sites (owner_id,slug,title,description,topic,audience,language,status,published,source_text,created_at,updated_at)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`).run(req.user.id, slug, title, form.description, form.topic, form.audience, form.language, 'queued', form.published ? 1 : 0, source.slice(0, MAX_SOURCE), t, t);
+    const id = Number(result.lastInsertRowid);
+    sqlite.prepare('INSERT INTO jobs (site_id,status,log,created_at,updated_at) VALUES (?,?,?,?,?)').run(id, 'queued', 'Queued.', t, t);
+    kick(0);
+    res.redirect('/site/' + id);
+  } catch (e) {
+    renderPage(req, res, 'new', { form, suggestions: [], error: e.message, remaining }, 400);
+  }
+});
+router.get('/site/:id', requireUser, (req, res) => {
+  const site = siteRow(Number(req.params.id));
+  if (!site || (site.owner_id !== req.user.id && req.user.role !== 'admin' && !site.published)) return renderPage(req, res, 'error', { message: 'Site not found.' }, 404);
+  const job = sqlite.prepare('SELECT * FROM jobs WHERE site_id=? ORDER BY id DESC LIMIT 1').get(site.id);
+  renderPage(req, res, 'site', { site: publicSite(site), job });
+});
+router.post('/site/:id/clone', requireUser, (req, res) => {
+  const source = siteRow(Number(req.params.id));
+  if (!source || source.status !== 'ready') return res.status(404).send('Site not found.');
+  if (!fs.existsSync(siteJsonPath(source.slug))) return res.status(409).send('This site has no generated content.');
+  if (quotaUsed(req.user.id) >= req.profile.daily_limit) return res.status(429).send('Daily limit reached.');
+  const slug = uniqueSlug(source.title + ' copy');
+  const t = now();
+  const result = sqlite.prepare(`INSERT INTO sites (owner_id,slug,title,description,topic,audience,language,status,published,source_text,created_at,updated_at)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`).run(req.user.id, slug, 'Copy of ' + source.title, source.description, source.topic, source.audience, source.language, 'ready', source.published, source.source_text, t, t);
+  fs.mkdirSync(path.dirname(siteJsonPath(slug)), { recursive: true });
+  fs.copyFileSync(siteJsonPath(source.slug), siteJsonPath(slug));
+  res.redirect('/site/' + result.lastInsertRowid);
+});
+router.get('/catalog', requireUser, (req, res) => {
+  const q = String(req.query.q || '').trim();
+  const like = '%' + q.replace(/[%_]/g, '') + '%';
+  const sites = (q
+    ? sqlite.prepare("SELECT * FROM sites WHERE status='ready' AND (published=1 OR owner_id=?) AND (title LIKE ? OR description LIKE ? OR topic LIKE ? OR source_text LIKE ?) ORDER BY created_at DESC LIMIT 30").all(req.user.id, like, like, like, like)
+    : sqlite.prepare("SELECT * FROM sites WHERE status='ready' AND (published=1 OR owner_id=?) ORDER BY created_at DESC LIMIT 30").all(req.user.id)).map(publicSite);
+  renderPage(req, res, 'catalog', { sites, q });
+});
+router.get('/settings', requireUser, (req, res) => renderPage(req, res, 'settings', { saved: req.query.saved === '1' }));
+router.post('/settings', requireUser, (req, res) => {
+  const apiBase = String(req.body.apiBase || '').trim().slice(0, 300);
+  const apiModel = String(req.body.apiModel || '').trim().slice(0, 120);
+  let apiKey = req.profile.api_key;
+  if (req.body.clearKey === 'on') apiKey = '';
+  else if (typeof req.body.apiKey === 'string' && req.body.apiKey.trim()) apiKey = encrypt(req.body.apiKey.trim());
+  sqlite.prepare('UPDATE profiles SET api_base=?,api_model=?,api_key=? WHERE user_id=?').run(apiBase, apiModel, apiKey, req.user.id);
+  res.redirect('/settings?saved=1');
+});
+
+export default router;

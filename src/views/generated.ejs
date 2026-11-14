@@ -3,13 +3,13 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Learning book</title>
+<title><%= site.title %> — Learning book</title>
 <link rel="stylesheet" href="/shared/katex/katex.min.css">
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
 <header class="top">
-  <a class="brand" href="#" id="brandLink"><span id="siteTitle">Learning book</span><small id="siteSubtitle"></small></a>
+  <a class="brand" href="#" id="brandLink"><span id="siteTitle"><%= site.title %></span><small id="siteSubtitle"></small></a>
   <div class="tools">
     <label class="search"><span class="sr">Search</span><input id="searchInput" type="search" placeholder="Search…" autocomplete="off"></label>
     <button class="chip" id="langBtn" type="button">EN</button>
@@ -24,6 +24,7 @@
   <main id="main" class="main"><p class="muted">Loading…</p></main>
 </div>
 <footer class="foot"><span id="footTitle"></span> · generated with Learning Book Builder</footer>
+<script>window.__SITE__ = <%- json %>;</script>
 <script src="/shared/katex/katex.min.js"></script>
 <script src="/shared/katex/auto-render.min.js"></script>
 <script src="app.js"></script>

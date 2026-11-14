@@ -211,13 +211,17 @@
   }
 
   async function boot() {
-    try {
-      const r = await fetch('site.json', { cache: 'no-store' });
-      if (!r.ok) throw new Error('site.json ' + r.status);
-      site = await r.json();
-    } catch (e) {
-      $('#main').innerHTML = '<div class="callout warn"><b>Could not load this site.</b><p>' + esc(e.message) + '</p></div>';
-      return;
+    if (window.__SITE__) {
+      site = window.__SITE__;
+    } else {
+      try {
+        const r = await fetch('site.json', { cache: 'no-store' });
+        if (!r.ok) throw new Error('site.json ' + r.status);
+        site = await r.json();
+      } catch (e) {
+        $('#main').innerHTML = '<div class="callout warn"><b>Could not load this site.</b><p>' + esc(e.message) + '</p></div>';
+        return;
+      }
     }
     setChrome(); renderTOC();
     $('#langBtn').addEventListener('click', () => { lang = lang === 'en' ? 'hu' : 'en'; localStorage.setItem('lbs.lang', lang); setChrome(); renderTOC(); route(); });

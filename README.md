@@ -14,15 +14,16 @@ JSON book, and publishes it at its own URL. The original MatekBázis book is inc
 - **Reuse first.** The create form searches the catalog; the API also returns up to five
   matching published sites before queueing. The user can open/reuse one, or choose
   **Generate a new site anyway** (`force: true`) without spending a generation on a duplicate.
-- **Least compute.** Zero npm dependencies, no build step, no per-site containers. One Node 24
+- **Least compute.** Small dependency set, no build step, no per-site containers. One Node 24
   process + SQLite + static files. The generated sites are JSON + a small static renderer.
 
 ## Stack
 
 | Piece | Choice | Why |
 |---|---|---|
-| Runtime | Node 24, built-in `http`/`fetch`/`crypto`/`node:sqlite` | No install, no build, small image |
-| Storage | `/data/builder.db` + `/data/sites/<slug>/site.json` | One file each; SQLite handles auth/quota/catalog |
+| Runtime | Node 24 + Express 5 + EJS | Conventional SSR app, no frontend build |
+| Auth | Better Auth (email/password, admin plugin) | Session cookies, password hashing, user management |
+| Storage | `better-sqlite3` at `/data/builder.db` + `/data/sites/<slug>/site.json` | One file each; auth/quota/catalog |
 | Generated site | static HTML/CSS/JS + `site.json` | No per-site process; routed by the same server |
 | PDF text | `pdftotext` from Alpine `poppler-utils` | Only needed when a PDF is uploaded |
 | Reverse proxy | Traefik + Cloudflare Tunnel via Launchpad | Wildcard DNS already exists |
@@ -30,9 +31,14 @@ JSON book, and publishes it at its own URL. The original MatekBázis book is inc
 ## Repository layout
 
 ```
-server.js              creator API, auth, quota, uploads, catalog, generation worker
-public/                builder UI (login is server-rendered)
-template/              static renderer used by every generated site
+src/index.js           entrypoint: migrations, admin seed, worker, HTTP listen
+src/app.js             Express wiring and middleware order
+src/routes/            pages, admin, generated-site routes
+src/services/          generation worker and upload extraction
+src/db/                SQLite schema, profiles, quota, site helpers
+src/views/             EJS server-rendered pages
+src/template/          static renderer used by every generated site
+public/                app.css only
 shared/katex/          shared math assets
 Dockerfile             Node 24 + poppler-utils image
 docker-compose.yml     Launchpad-ready service with Traefik labels
@@ -75,13 +81,14 @@ subdomain. The server reads the `Host` header and serves the matching site at `/
 
 `NODE_ENV` unset means development. With no `.env` and no environment variables:
 
-- first start creates `admin@example.com` with password `admin`
+- first start creates `admin@example.com` with password `admin1234`
 - no model key is required; generation uses the deterministic mock
-- the server listens on `http://127.0.0.1:8080`
+- the server listens on `http://localhost:8080`
 - SQLite and uploads live in `./data`
 
 ```bash
-node server.js
+npm install
+npm start
 ```
 
 To use a real model in dev, set `LLM_API_KEY`/`LLM_BASE_URL` (or add a user key), or set
@@ -93,13 +100,14 @@ once; `LLM_MOCK_DELAY=500` is useful for exercising the queue.
 ```bash
 cp .env.example .env
 # edit ADMIN_EMAIL / ADMIN_PASSWORD / ENCRYPTION_KEY / model settings
-node server.js
+npm install
+npm start
 ```
 
-`.env` is loaded by `server.js` directly and is ignored by Git and Docker. The Docker image sets
+`.env` is loaded by `src/index.js` directly and is ignored by Git and Docker. The Docker image sets
 `NODE_ENV=production`; compose forces it too, so production never uses the dev defaults.
 
-Open <http://127.0.0.1:8080>. `LLM_MOCK=1` returns a deterministic sample instead of calling a
+Open <http://localhost:8080>. `LLM_MOCK=1` returns a deterministic sample instead of calling a
 model. For a real run set `LLM_API_KEY` or add a user key.
 
 ## API
@@ -122,7 +130,7 @@ All routes require the session cookie; JSON writes also require same-origin `Ori
 
 ## Generated-site contract
 
-The model returns one JSON object; `server.js` normalizes and validates it:
+The model returns one JSON object; `src/services/generation.js` normalizes and validates it:
 
 ```json
 {
