@@ -44,6 +44,8 @@ export const ADMIN_DAILY_LIMIT = Number(process.env.ADMIN_DAILY_LIMIT || 100);
 export const MAX_CONCURRENT_JOBS = Math.max(1, Math.min(20, Number(process.env.MAX_CONCURRENT_JOBS || 3)));
 export const MAX_UPLOAD = 8 * 1024 * 1024;
 export const MAX_FILES = 6;
+export const MAX_CONCURRENT_UPLOADS = Math.max(1, Math.min(20, Number(process.env.MAX_CONCURRENT_UPLOADS || 4)));
+export const SESSION_CACHE_MS = Math.max(0, Number(process.env.SESSION_CACHE_MS || 15000));
 export const MAX_SOURCE = 80000;
 export const LLM_MOCK = process.env.LLM_MOCK === '1';
 export const DEV_MOCK = DEV && process.env.LLM_MOCK !== '0';

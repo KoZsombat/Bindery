@@ -1,4 +1,5 @@
 import express from 'express';
+import fs from 'node:fs';
 import fsp from 'node:fs/promises';
 import path from 'node:path';
 import { TEMPLATE_DIR, BETTER_AUTH_URL } from '../config.js';
@@ -14,11 +15,21 @@ async function serveGenerated(req, res, slug, sub) {
   if (!site.published && site.owner_id !== req.user.id && req.user.role !== 'admin') return res.status(404).send('This site is private.');
   const clean = String(sub || '').replace(/^\/+/, '');
   if (!clean) {
+    const index = path.join(path.dirname(siteJsonPath(slug)), 'index.html');
+    if (fs.existsSync(index)) {
+      res.setHeader('Cache-Control', 'private, no-cache');
+      return res.sendFile(index);
+    }
     const data = JSON.parse(await fsp.readFile(siteJsonPath(slug), 'utf8'));
     return res.render('generated', { site: data, slug, json: JSON.stringify(data).replace(/</g, '\\u003c') });
   }
-  if (clean === 'site.json') return res.sendFile(siteJsonPath(slug));
-  if (clean === 'app.js' || clean === 'styles.css') return res.sendFile(path.join(TEMPLATE_DIR, clean));
+  if (clean === 'site.json') {
+    res.setHeader('Cache-Control', 'no-store');
+    return res.sendFile(siteJsonPath(slug));
+  }
+  if (clean === 'app.js' || clean === 'styles.css') {
+    return res.sendFile(path.join(TEMPLATE_DIR, clean), { headers: { 'Cache-Control': 'private, max-age=86400, immutable' } });
+  }
   res.status(404).send('Not found.');
 }
 

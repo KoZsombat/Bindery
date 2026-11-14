@@ -1,9 +1,10 @@
 import fs from 'node:fs';
 import fsp from 'node:fs/promises';
 import path from 'node:path';
+import ejs from 'ejs';
 import {
   LLM_BASE_URL, LLM_API_KEY, LLM_MODEL, LLM_MOCK, DEV_MOCK,
-  MAX_CONCURRENT_JOBS, SKILL_PATH
+  MAX_CONCURRENT_JOBS, SKILL_PATH, VIEWS_DIR
 } from '../config.js';
 import { decrypt } from '../crypto.js';
 import { sqlite, ensureProfile, now, slugify, siteRow, siteJsonPath, siteUrl } from '../db/index.js';
@@ -199,8 +200,12 @@ Rules: every prose field is a {hu,en} object; math stays inside $...$; 1-8 secti
     ];
     messages.request = req;
     const parsed = normalizeSite(extractJSON(await callLLM(cfg, messages)), req);
-    await fsp.mkdir(path.dirname(siteJsonPath(site.slug)), { recursive: true });
+    const dir = path.dirname(siteJsonPath(site.slug));
+    await fsp.mkdir(dir, { recursive: true });
     await fsp.writeFile(siteJsonPath(site.slug), JSON.stringify(parsed, null, 2));
+    const json = JSON.stringify(parsed).replace(/</g, '\\u003c');
+    const html = await ejs.renderFile(path.join(VIEWS_DIR, 'generated.ejs'), { site: parsed, slug: site.slug, json });
+    await fsp.writeFile(path.join(dir, 'index.html'), html);
     sqlite.prepare("UPDATE sites SET status='ready',error='',updated_at=? WHERE id=?").run(now(), site.id);
     sqlite.prepare("UPDATE jobs SET status='done',log=?,updated_at=? WHERE id=?").run('Generated and routed at ' + siteUrl(site.slug), now(), job.id);
   } catch (e) {

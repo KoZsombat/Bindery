@@ -16,7 +16,7 @@ app.set('trust proxy', 1);
 app.locals.fmt = iso => { try { return new Date(iso).toLocaleString(); } catch { return iso; } };
 app.locals.siteUrl = slug => '/s/' + encodeURIComponent(slug) + '/';
 
-app.use('/app.css', express.static(path.join(PUBLIC_DIR, 'app.css')));
+app.use('/app.css', express.static(path.join(PUBLIC_DIR, 'app.css'), { maxAge: '1d', immutable: true }));
 app.all('/api/auth/sign-up/*splat', (req, res) => res.status(403).json({ error: 'Sign-up is disabled.' }));
 app.all('/api/auth/*splat', toNodeHandler(auth));
 app.use(express.urlencoded({ extended: false }));
@@ -35,8 +35,8 @@ app.use(pagesRouter);
 app.use(adminRouter);
 app.use(generatedRouter);
 
-app.use('/shared', requireUser, express.static(SHARED_DIR, { maxAge: '1d' }));
-app.use('/example/matekbazis', requireUser, express.static(EXAMPLE_DIR, { index: 'index.html', maxAge: '1m' }));
+app.use('/shared', requireUser, express.static(SHARED_DIR, { maxAge: '30d', immutable: true, setHeaders: function (res) { res.setHeader('Cache-Control', 'private, max-age=2592000, immutable'); } }));
+app.use('/example/matekbazis', requireUser, express.static(EXAMPLE_DIR, { index: 'index.html', maxAge: '1d', setHeaders: function (res) { res.setHeader('Cache-Control', 'private, max-age=86400'); } }));
 
 app.use((req, res) => renderPage(req, res, 'error', { message: 'Page not found.' }, 404));
 app.use((err, req, res, next) => {

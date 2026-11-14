@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import path from 'node:path';
 import Database from 'better-sqlite3';
 import { DATA_DIR, DB_PATH, SITES_DIR, UPLOADS_DIR, DEFAULT_DAILY_LIMIT } from '../config.js';
 
@@ -50,6 +51,11 @@ CREATE TABLE IF NOT EXISTS jobs (
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );
+CREATE INDEX IF NOT EXISTS idx_sites_owner ON sites(owner_id);
+CREATE INDEX IF NOT EXISTS idx_sites_status_published ON sites(status, published);
+CREATE INDEX IF NOT EXISTS idx_sites_created ON sites(created_at);
+CREATE INDEX IF NOT EXISTS idx_uploads_user ON uploads(user_id);
+CREATE INDEX IF NOT EXISTS idx_jobs_status ON jobs(status);
 `);
 
 export const now = () => new Date().toISOString();
@@ -73,7 +79,7 @@ export function uniqueSlug(base) {
   return s;
 }
 export function siteRow(id) { return sqlite.prepare('SELECT * FROM sites WHERE id=?').get(id); }
-export function siteJsonPath(slug) { return `${SITES_DIR}/${slug}/site.json`; }
+export function siteJsonPath(slug) { return path.resolve(SITES_DIR, slug, 'site.json'); }
 export function siteUrl(slug) { return '/s/' + encodeURIComponent(slug) + '/'; }
 export function publicSite(s) {
   return {

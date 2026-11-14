@@ -2,10 +2,11 @@ import express from 'express';
 import { fromNodeHeaders } from 'better-auth/node';
 import multer from 'multer';
 import fs from 'node:fs';
+import crypto from 'node:crypto';
 import path from 'node:path';
 import { auth } from '../auth.js';
-import { MAX_SOURCE, MAX_UPLOAD, MAX_FILES, DEFAULT_DAILY_LIMIT } from '../config.js';
-import { sqlite, quotaUsed, uniqueSlug, siteRow, siteJsonPath, publicSite, now } from '../db/index.js';
+import { MAX_SOURCE, MAX_UPLOAD, MAX_FILES, MAX_CONCURRENT_UPLOADS, UPLOADS_DIR } from '../config.js';
+import { sqlite, quotaUsed, uniqueSlug, siteRow, siteJsonPath, publicSite, now, slugify } from '../db/index.js';
 import { kick, llmConfig, useMock } from '../services/generation.js';
 import { extractUpload } from '../services/uploads.js';
 import { encrypt } from '../crypto.js';
@@ -13,7 +14,24 @@ import { safeNext, copyAuthCookies, renderPage } from '../lib/http.js';
 import { requireUser } from '../middleware/session.js';
 
 const router = express.Router();
-const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: MAX_UPLOAD, files: MAX_FILES } });
+const storage = multer.diskStorage({
+  destination: function (req, file, cb) { cb(null, UPLOADS_DIR); },
+  filename: function (req, file, cb) {
+    const ext = path.extname(file.originalname).toLowerCase();
+    cb(null, crypto.randomBytes(8).toString('hex') + '-' + slugify(path.basename(file.originalname, ext)) + ext);
+  }
+});
+const upload = multer({ storage, limits: { fileSize: MAX_UPLOAD, files: MAX_FILES } });
+let activeUploads = 0;
+function uploadGate(req, res, next) {
+  if (activeUploads >= MAX_CONCURRENT_UPLOADS) return res.status(429).send('Too many uploads in progress. Try again shortly.');
+  activeUploads++;
+  let released = false;
+  const release = function () { if (!released) { released = true; activeUploads--; } };
+  res.on('finish', release);
+  res.on('close', release);
+  next();
+}
 
 router.get('/login', (req, res) => {
   if (req.user) return res.redirect('/app');
@@ -50,7 +68,7 @@ router.get('/new', requireUser, (req, res) => {
   const usedToday = quotaUsed(req.user.id);
   renderPage(req, res, 'new', { form: {}, suggestions: [], error: '', remaining: Math.max(0, req.profile.daily_limit - usedToday) });
 });
-router.post('/new', requireUser, upload.array('files', MAX_FILES), async (req, res) => {
+router.post('/new', requireUser, uploadGate, upload.array('files', MAX_FILES), async (req, res) => {
   const form = {
     title: String(req.body.title || '').trim().slice(0, 160),
     topic: String(req.body.topic || '').trim().slice(0, 300),
@@ -105,8 +123,11 @@ router.post('/site/:id/clone', requireUser, (req, res) => {
   const t = now();
   const result = sqlite.prepare(`INSERT INTO sites (owner_id,slug,title,description,topic,audience,language,status,published,source_text,created_at,updated_at)
     VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`).run(req.user.id, slug, 'Copy of ' + source.title, source.description, source.topic, source.audience, source.language, 'ready', source.published, source.source_text, t, t);
-  fs.mkdirSync(path.dirname(siteJsonPath(slug)), { recursive: true });
+  const dir = path.dirname(siteJsonPath(slug));
+  fs.mkdirSync(dir, { recursive: true });
   fs.copyFileSync(siteJsonPath(source.slug), siteJsonPath(slug));
+  const sourceIndex = path.join(path.dirname(siteJsonPath(source.slug)), 'index.html');
+  if (fs.existsSync(sourceIndex)) fs.copyFileSync(sourceIndex, path.join(dir, 'index.html'));
   res.redirect('/site/' + result.lastInsertRowid);
 });
 router.get('/catalog', requireUser, (req, res) => {
