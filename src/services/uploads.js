@@ -6,6 +6,16 @@ import { sqlite, now } from '../db/index.js';
 
 const execFileAsync = promisify(execFile);
 
+async function assertPdf(file) {
+  const fh = await fsp.open(file.path, 'r');
+  try {
+    const head = Buffer.alloc(5);
+    await fh.read(head, 0, 5, 0);
+    if (head.toString('latin1') !== '%PDF-') throw new Error('Not a valid PDF: ' + file.originalname);
+  } finally {
+    await fh.close();
+  }
+}
 async function pdfText(filePath, name) {
   try {
     const { stdout } = await execFileAsync('pdftotext', ['-layout', filePath, '-'], { encoding: 'utf8', maxBuffer: 4 * 1024 * 1024 });
@@ -18,9 +28,12 @@ async function pdfText(filePath, name) {
 export async function extractUpload(file, userId) {
   const ext = path.extname(file.originalname).toLowerCase();
   let text = '';
-  if (ext === '.pdf') text = await pdfText(file.path, file.originalname);
-  else if (['.txt', '.md', '.markdown', '.csv', '.json', '.tex', '.js', '.html', '.css'].includes(ext)) text = await fsp.readFile(file.path, 'utf8');
-  else {
+  if (ext === '.pdf') { await assertPdf(file); text = await pdfText(file.path, file.originalname); }
+  else if (['.txt', '.md', '.markdown', '.csv', '.json', '.tex', '.js', '.html', '.css'].includes(ext)) {
+    const buf = await fsp.readFile(file.path);
+    if (buf.includes(0)) { await fsp.unlink(file.path).catch(() => {}); throw new Error('Binary file rejected: ' + file.originalname); }
+    text = buf.toString('utf8');
+  } else {
     await fsp.unlink(file.path).catch(() => {});
     throw new Error('Unsupported file type: ' + ext + '. Use PDF, TXT, MD, CSV, JSON, TEX, JS, HTML or CSS.');
   }

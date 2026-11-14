@@ -1,22 +1,23 @@
 <!doctype html>
-<html lang="en">
+<html lang="<%= lang %>">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title><%= typeof title !== 'undefined' ? title : 'Learning Book Builder' %></title>
+<title><%= typeof title !== 'undefined' ? title : t('Learning Book Builder') %></title>
 <link rel="stylesheet" href="/app.css">
 </head>
 <body>
 <header class="top">
-  <a class="brand" href="/app">Learning Book Builder <small>routed learning sites</small></a>
+  <a class="brand" href="/app"><span class="brand-mark">LB</span><span class="brand-text"><b><%= t('Learning Book Builder') %></b><small><%= t('routed learning sites') %></small></span></a>
   <nav>
-    <a href="/app">Sites</a>
-    <a href="/new">New site</a>
-    <a href="/catalog">Catalog</a>
-    <a href="/settings">Settings</a>
-    <% if (admin) { %><a href="/admin">Admin</a><% } %>
+    <a class="<%= currentPath === '/app' ? 'active' : '' %>" href="/app"><%= t('Sites') %></a>
+    <a class="<%= currentPath.startsWith('/new') ? 'active' : '' %>" href="/new"><%= t('New site') %></a>
+    <a class="<%= currentPath.startsWith('/catalog') ? 'active' : '' %>" href="/catalog"><%= t('Catalog') %></a>
+    <a class="<%= currentPath.startsWith('/settings') ? 'active' : '' %>" href="/settings"><%= t('Settings') %></a>
+    <% if (admin) { %><a class="<%= currentPath.startsWith('/admin') ? 'active' : '' %>" href="/admin"><%= t('Admin') %></a><% } %>
+    <a class="lang" href="/lang/<%= lang === 'hu' ? 'en' : 'hu' %>?next=<%= encodeURIComponent(currentPath) %>"><%= lang === 'hu' ? 'EN' : 'HU' %></a>
     <span class="who"><%= user ? user.email : '' %></span>
-    <% if (user) { %><form method="post" action="/logout" class="inline"><button class="linklike" type="submit">Sign out</button></form><% } %>
+    <% if (user) { %><form method="post" action="/logout" class="inline"><button class="linklike" type="submit"><%= t('Sign out') %></button></form><% } %>
   </nav>
 </header>
 <main class="wrap">

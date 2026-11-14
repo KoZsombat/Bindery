@@ -16,6 +16,12 @@ JSON book, and publishes it at its own URL. The original MatekBázis book is inc
   **Generate a new site anyway** (`force: true`) without spending a generation on a duplicate.
 - **Least compute.** Small dependency set, no build step, no per-site containers. One Node 24
   process + SQLite + static files. The generated sites are JSON + a small static renderer.
+- **Launchpad UI.** A bilingual (HU/EN) dashboard with a navy/gold MatekBázis-style shell,
+  quota and catalog shortcuts, plus archive, regenerate and cancel actions.
+- **Durable queue.** Leased jobs survive restarts, retry once with backoff, and validate the
+  model output against a strict bilingual schema (with one repair attempt).
+- **Operations.** `/healthz` and `/readyz`, a SQLite + sites backup script, and a CI workflow
+  that runs tests and builds the image.
 
 ## Stack
 
@@ -53,7 +59,7 @@ skills/learning-book-site/SKILL.md   required generation context (tracked, not i
 2. In Launchpad, create a **Compose project** pointing at the repository, branch `main`, compose
    path `docker-compose.yml`.
 3. Scan the compose file. Publish the `builder` service on subdomain `builder` (or your preferred
-   name), internal port `8080`, health path `/healthz`.
+   name), internal port `8080`, readiness path `/readyz`.
 4. Add the environment variables from [`.env.example`](.env.example). At minimum set
    `ADMIN_EMAIL`, `ADMIN_PASSWORD`, `ENCRYPTION_KEY`, `BASE_DOMAIN`, `SITE_DOMAIN`.
    `ENCRYPTION_KEY` must stay stable, otherwise saved user API keys cannot be decrypted.
@@ -88,8 +94,12 @@ subdomain. The server reads the `Host` header and serves the matching site at `/
 
 ```bash
 npm install
+npm test
 npm start
 ```
+
+Back up the database, generated sites and example with `npm run backup` (writes to `backups/<timestamp>/`).
+The builder UI follows the browser's `lang=hu|en` cookie; use the HU/EN switch in the header.
 
 To use a real model in dev, set `LLM_API_KEY`/`LLM_BASE_URL` (or add a user key), or set
 `LLM_MOCK=0` to require a key. `MAX_CONCURRENT_JOBS=3` controls how many generations run at

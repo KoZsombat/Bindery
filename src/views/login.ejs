@@ -1,36 +1,37 @@
 <!doctype html>
-<html lang="en">
+<html lang="<%= lang %>">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Sign in · Learning Book Builder</title>
+<title><%= t('Sign in') %> · <%= t('Learning Book Builder') %></title>
 <link rel="stylesheet" href="/app.css">
 </head>
 <body class="login-body">
 <main class="login-shell">
+  <a class="lang login-lang" href="/lang/<%= lang === 'hu' ? 'en' : 'hu' %>"><%= lang === 'hu' ? 'EN' : 'HU' %></a>
   <section class="login-copy">
-    <div class="kicker">Learning Book Builder</div>
-    <h1>Turn notes into routed learning books.</h1>
-    <p>Upload PDFs and paste long text. The builder uses the learning-book-site skill, generates one bilingual book, and publishes it at a URL — no downloads.</p>
+    <div class="kicker"><%= t('Learning Book Builder') %></div>
+    <h1><%= t('Turn notes into routed learning books.') %></h1>
+    <p><%= t('Upload PDFs and paste long text. The builder uses the learning-book-site skill, generates one bilingual book, and publishes it at a URL — no downloads.') %></p>
     <ul class="checks">
-      <li>Admin-managed users, no public sign-up</li>
-      <li>Daily creation quota per user</li>
-      <li>Server key or bring your own model key</li>
-      <li>Catalog-first reuse before generation</li>
+      <li><%= t('Admin-managed users, no public sign-up') %></li>
+      <li><%= t('Daily creation quota per user') %></li>
+      <li><%= t('Server key or bring your own model key') %></li>
+      <li><%= t('Catalog-first reuse before generation') %></li>
     </ul>
   </section>
   <form class="login-card" method="post" action="/login">
-    <h2>Sign in</h2>
-    <p class="muted">Use the account the administrator created for you.</p>
+    <h2><%= t('Sign in') %></h2>
+    <p class="muted"><%= t('Use the account the administrator created for you.') %></p>
     <% if (error) { %><div class="inline-err"><%= error %></div><% } %>
     <input type="hidden" name="next" value="<%= next %>">
-    <label>Email</label>
+    <label><%= t('Email') %></label>
     <input name="email" type="email" value="<%= email %>" required autocomplete="username">
-    <label>Password</label>
+    <label><%= t('Password') %></label>
     <input name="password" type="password" required autocomplete="current-password">
-    <button class="btn primary wide" type="submit">Sign in</button>
-    <small>No public sign-up. Ask the administrator for an account.</small>
-    <% if (dev) { %><small class="dev">Development login: admin@example.com / admin1234</small><% } %>
+    <button class="btn primary wide" type="submit"><%= t('Sign in') %></button>
+    <small><%= t('No public sign-up. Ask the administrator for an account.') %></small>
+    <% if (dev) { %><small class="dev"><%= t('Development login: admin@example.com / admin1234') %></small><% } %>
   </form>
 </main>
 </body>

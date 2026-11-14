@@ -2,9 +2,10 @@ import fs from 'node:fs';
 import fsp from 'node:fs/promises';
 import path from 'node:path';
 import ejs from 'ejs';
+import { z } from 'zod';
 import {
   LLM_BASE_URL, LLM_API_KEY, LLM_MODEL, LLM_MOCK, DEV_MOCK,
-  MAX_CONCURRENT_JOBS, SKILL_PATH, VIEWS_DIR
+  MAX_CONCURRENT_JOBS, MAX_JOB_ATTEMPTS, JOB_LEASE_MS, SKILL_PATH, VIEWS_DIR
 } from '../config.js';
 import { decrypt } from '../crypto.js';
 import { sqlite, ensureProfile, now, slugify, siteRow, siteJsonPath, siteUrl } from '../db/index.js';
@@ -153,6 +154,37 @@ function skillText() {
   try { return fs.readFileSync(SKILL_PATH, 'utf8'); } catch { return ''; }
 }
 
+/* ------------------------------------------------------------------ validation */
+const B = z.object({ hu: z.string().min(1), en: z.string().min(1) });
+const BOpt = z.object({ hu: z.string(), en: z.string() });
+const Theory = z.discriminatedUnion('type', [
+  z.object({ type: z.literal('formula'), title: B, latex: z.string().min(1), note: BOpt }),
+  z.object({ type: z.literal('list'), title: B, items: z.object({ hu: z.array(z.string().min(1)).min(1), en: z.array(z.string().min(1)).min(1) }) }),
+  z.object({ type: z.literal('p'), body: B }),
+  z.object({ type: z.enum(['def', 'thm', 'note', 'warn']), title: B, body: B })
+]);
+const Exercise = z.object({
+  q: B, a: z.string(), type: z.enum(['number', 'expr', 'text', 'choice', 'proof']),
+  hint: BOpt, sol: BOpt, choices: z.object({ hu: z.array(z.string().min(1)).min(2), en: z.array(z.string().min(1)).min(2) }).optional()
+}).superRefine((q, ctx) => {
+  if (q.type !== 'proof' && !q.a.trim()) ctx.addIssue({ code: 'custom', message: 'answer is required' });
+  if (q.type === 'choice' && !q.choices) ctx.addIssue({ code: 'custom', message: 'choice exercise needs choices' });
+});
+const Chapter = z.object({
+  id: z.string().min(1), num: z.string().min(1), title: B, lead: B,
+  why: z.object({ hu: z.array(z.string().min(1)).min(1), en: z.array(z.string().min(1)).min(1) }),
+  when: B, minutes: z.number().min(5).max(90),
+  theory: z.array(Theory).min(1), examples: z.array(z.object({ title: B, problem: B, steps: z.object({ hu: z.array(z.string().min(1)).min(1), en: z.array(z.string().min(1)).min(1) }), answer: B })).min(1),
+  mistakes: z.object({ hu: z.array(z.string().min(1)).min(1), en: z.array(z.string().min(1)).min(1) }),
+  exercises: z.array(Exercise).min(1)
+});
+const Section = z.object({ id: z.string().min(1), num: z.string().min(1), title: B, subtitle: B, intro: B, chapters: z.array(Chapter).min(1) });
+export const SiteSchema = z.object({ version: z.number(), title: z.string().min(1), subtitle: B, summary: B, sections: z.array(Section).min(1) });
+export function validateSite(site) {
+  const result = SiteSchema.safeParse(site);
+  return result.success ? { ok: true, error: '' } : { ok: false, error: result.error.issues.slice(0, 8).map(i => i.path.join('.') + ': ' + i.message).join('; ') };
+}
+
 /* ------------------------------------------------------------------ worker */
 const activeJobs = new Set();
 let kickTimer = null;
@@ -161,13 +193,27 @@ export function kick(delay = 0) {
   kickTimer = setTimeout(function () { kickTimer = null; drain(); }, delay);
 }
 function claimJob() {
-  const job = sqlite.prepare("SELECT * FROM jobs WHERE status='queued' ORDER BY id LIMIT 1").get();
-  if (!job) return null;
   const t = now();
-  const changed = sqlite.prepare("UPDATE jobs SET status='running',log='Contacting the model…',updated_at=? WHERE id=? AND status='queued'").run(t, job.id);
+  const job = sqlite.prepare("SELECT * FROM jobs WHERE status='queued' AND (next_attempt_at IS NULL OR next_attempt_at<=?) ORDER BY id LIMIT 1").get(t);
+  if (!job) return null;
+  const changed = sqlite.prepare("UPDATE jobs SET status='running',attempts=attempts+1,locked_at=?,next_attempt_at=NULL,log='Contacting the model…',updated_at=? WHERE id=? AND status='queued'").run(t, t, job.id);
   if (!changed.changes) return null;
   sqlite.prepare("UPDATE sites SET status='running',updated_at=? WHERE id=?").run(t, job.site_id);
   return job;
+}
+export function recoverJobs() {
+  const stale = new Date(Date.now() - JOB_LEASE_MS).toISOString();
+  const rows = sqlite.prepare("SELECT * FROM jobs WHERE status='running' AND (locked_at IS NULL OR locked_at<?)").all(stale);
+  for (const row of rows) {
+    if ((row.attempts || 0) >= MAX_JOB_ATTEMPTS) {
+      sqlite.prepare("UPDATE jobs SET status='failed',last_error='Worker lease expired',locked_at=NULL,updated_at=? WHERE id=?").run(now(), row.id);
+      sqlite.prepare("UPDATE sites SET status='failed',error='Generation worker stopped before completion. Try again.',updated_at=? WHERE id=?").run(now(), row.site_id);
+    } else {
+      sqlite.prepare("UPDATE jobs SET status='queued',locked_at=NULL,next_attempt_at=?,updated_at=? WHERE id=?").run(now(), now(), row.id);
+      sqlite.prepare("UPDATE sites SET status='queued',error='',updated_at=? WHERE id=?").run(now(), row.site_id);
+    }
+  }
+  return rows.length;
 }
 function drain() {
   while (activeJobs.size < MAX_CONCURRENT_JOBS) {
@@ -182,8 +228,13 @@ function drain() {
 }
 async function runJob(job) {
   const site = siteRow(job.site_id);
-  if (!site || site.status === 'ready') {
-    sqlite.prepare("UPDATE jobs SET status='failed',log='Site missing or already ready',updated_at=? WHERE id=?").run(now(), job.id);
+  if (!site || site.archived || site.status === 'ready') {
+    sqlite.prepare("UPDATE jobs SET status='failed',log='Site missing, archived or already ready',updated_at=? WHERE id=?").run(now(), job.id);
+    return;
+  }
+  if (sqlite.prepare('SELECT cancel_requested FROM jobs WHERE id=?').get(job.id)?.cancel_requested) {
+    sqlite.prepare("UPDATE jobs SET status='cancelled',locked_at=NULL,updated_at=? WHERE id=?").run(now(), job.id);
+    sqlite.prepare("UPDATE sites SET status='cancelled',error='Cancelled by user.',updated_at=? WHERE id=?").run(now(), site.id);
     return;
   }
   try {
@@ -199,7 +250,20 @@ Rules: every prose field is a {hu,en} object; math stays inside $...$; 1-8 secti
       { role: 'user', content: `SKILL:\n${skillText().slice(0, 60000)}\n\nREQUEST:\nTitle: ${req.title}\nDescription: ${req.description}\nTopic: ${req.topic}\nAudience: ${req.audience}\nLanguage preference: ${req.language}\n\nSOURCE MATERIAL:\n${req.long_text || '(none)'}\n\n${schema}` }
     ];
     messages.request = req;
-    const parsed = normalizeSite(extractJSON(await callLLM(cfg, messages)), req);
+    let parsed = null;
+    let validation = { ok: false, error: 'No output.' };
+    for (let repair = 0; repair < 2; repair++) {
+      parsed = normalizeSite(extractJSON(await callLLM(cfg, messages)), req);
+      validation = validateSite(parsed);
+      if (validation.ok) break;
+      messages.push({ role: 'user', content: 'The JSON failed validation. Fix every issue and return the complete corrected JSON only: ' + validation.error });
+    }
+    if (!validation.ok) throw new Error('Generated content failed validation: ' + validation.error);
+    if (sqlite.prepare('SELECT cancel_requested FROM jobs WHERE id=?').get(job.id)?.cancel_requested) {
+      sqlite.prepare("UPDATE jobs SET status='cancelled',locked_at=NULL,updated_at=? WHERE id=?").run(now(), job.id);
+      sqlite.prepare("UPDATE sites SET status='cancelled',error='Cancelled by user.',updated_at=? WHERE id=?").run(now(), site.id);
+      return;
+    }
     const dir = path.dirname(siteJsonPath(site.slug));
     await fsp.mkdir(dir, { recursive: true });
     await fsp.writeFile(siteJsonPath(site.slug), JSON.stringify(parsed, null, 2));
@@ -207,11 +271,20 @@ Rules: every prose field is a {hu,en} object; math stays inside $...$; 1-8 secti
     const html = await ejs.renderFile(path.join(VIEWS_DIR, 'generated.ejs'), { site: parsed, slug: site.slug, json });
     await fsp.writeFile(path.join(dir, 'index.html'), html);
     sqlite.prepare("UPDATE sites SET status='ready',error='',updated_at=? WHERE id=?").run(now(), site.id);
-    sqlite.prepare("UPDATE jobs SET status='done',log=?,updated_at=? WHERE id=?").run('Generated and routed at ' + siteUrl(site.slug), now(), job.id);
+    sqlite.prepare("UPDATE jobs SET status='done',log=?,last_error='',locked_at=NULL,next_attempt_at=NULL,updated_at=? WHERE id=?").run('Generated and routed at ' + siteUrl(site.slug), now(), job.id);
   } catch (e) {
-    sqlite.prepare("UPDATE sites SET status='failed',error=?,updated_at=? WHERE id=?").run(String(e.message || e).slice(0, 2000), now(), site.id);
-    sqlite.prepare("UPDATE jobs SET status='failed',log=?,updated_at=? WHERE id=?").run(String(e.stack || e).slice(0, 4000), now(), job.id);
+    const attempt = (job.attempts || 0) + 1;
+    const message = String(e.message || e).slice(0, 2000);
+    if (attempt < MAX_JOB_ATTEMPTS) {
+      const delay = Math.min(60000, 5000 * Math.pow(2, attempt - 1));
+      const next = new Date(Date.now() + delay).toISOString();
+      sqlite.prepare("UPDATE jobs SET status='queued',locked_at=NULL,next_attempt_at=?,last_error=?,log=?,updated_at=? WHERE id=?").run(next, message, 'Retrying after: ' + message, now(), job.id);
+      sqlite.prepare("UPDATE sites SET status='queued',error=?,updated_at=? WHERE id=?").run(message, now(), site.id);
+    } else {
+      sqlite.prepare("UPDATE sites SET status='failed',error=?,updated_at=? WHERE id=?").run(message, now(), site.id);
+      sqlite.prepare("UPDATE jobs SET status='failed',locked_at=NULL,last_error=?,log=?,updated_at=? WHERE id=?").run(message, String(e.stack || e).slice(0, 4000), now(), job.id);
+    }
     console.error('Job failed:', e);
   }
 }
-export function startWorker() { kick(0); }
+export function startWorker() { recoverJobs(); kick(0); }

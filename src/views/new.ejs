@@ -1,64 +1,64 @@
-<%- include('partials/head', { title: 'New site · Learning Book Builder' }) %>
+<%- include('partials/head', { title: t('New site') + ' · ' + t('Learning Book Builder') }) %>
 <section class="page-head">
   <div>
-    <div class="kicker">Create</div>
-    <h1>New learning site</h1>
-    <p class="lead">Give the model a topic, your notes, or both. Uploaded PDFs and text files are added to the skill as context. The result is routed at <code>/s/&lt;slug&gt;/</code>.</p>
+    <div class="kicker"><%= t('Create') %></div>
+    <h1><%= t('New learning site') %></h1>
+    <p class="lead"><%= t('Give the model a topic, your notes, or both. Uploaded PDFs and text files are added to the skill as context. The result is routed at') %> <code>/s/&lt;slug&gt;/</code>.</p>
   </div>
 </section>
 
-<% if (error) { %><div class="inline-err"><%= error %></div><% } %>
+<% if (error) { %><div class="inline-err"><%= t(error) %></div><% } %>
 <div class="split">
   <form id="newForm" class="card form" method="post" action="/new" enctype="multipart/form-data">
-    <label>Title</label>
-    <input name="title" value="<%= form.title || '' %>" placeholder="e.g. Linear algebra from scratch" maxlength="160">
-    <label>Topic / goal</label>
-    <input name="topic" value="<%= form.topic || '' %>" placeholder="What should the learner be able to do?" maxlength="300">
-    <label>Description</label>
-    <textarea name="description" rows="3" maxlength="600" placeholder="Audience, level, scope, exam format…"><%= form.description || '' %></textarea>
-    <label>Audience</label>
-    <input name="audience" value="<%= form.audience || '' %>" placeholder="e.g. first-year BSc, BME VIK" maxlength="160">
-    <label>Source language preference</label>
+    <label><%= t('Title') %></label>
+    <input name="title" value="<%= form.title || '' %>" placeholder="<%= t('e.g. Linear algebra from scratch') %>" maxlength="160">
+    <label><%= t('Topic / goal') %></label>
+    <input name="topic" value="<%= form.topic || '' %>" placeholder="<%= t('What should the learner be able to do?') %>" maxlength="300">
+    <label><%= t('Description') %></label>
+    <textarea name="description" rows="3" maxlength="600" placeholder="<%= t('Audience, level, scope, exam format…') %>"><%= form.description || '' %></textarea>
+    <label><%= t('Audience') %></label>
+    <input name="audience" value="<%= form.audience || '' %>" placeholder="<%= t('e.g. first-year BSc, BME VIK') %>" maxlength="160">
+    <label><%= t('Source language preference') %></label>
     <select name="language">
-      <option value="both" <%= (form.language || 'both') === 'both' ? 'selected' : '' %>>Both Hungarian and English</option>
-      <option value="en" <%= form.language === 'en' ? 'selected' : '' %>>English first</option>
-      <option value="hu" <%= form.language === 'hu' ? 'selected' : '' %>>Hungarian first</option>
+      <option value="both" <%= (form.language || 'both') === 'both' ? 'selected' : '' %>><%= t('Both Hungarian and English') %></option>
+      <option value="en" <%= form.language === 'en' ? 'selected' : '' %>><%= t('English first') %></option>
+      <option value="hu" <%= form.language === 'hu' ? 'selected' : '' %>><%= t('Hungarian first') %></option>
     </select>
-    <label>Long text / pasted notes</label>
-    <textarea name="longText" rows="9" placeholder="Paste a syllabus, lecture notes, exam requirements, or a detailed brief…"><%= form.longText || '' %></textarea>
-    <label>Files (PDF, TXT, MD, CSV, JSON, TEX, JS, HTML, CSS · max 6 × 8 MB)</label>
+    <label><%= t('Long text / pasted notes') %></label>
+    <textarea name="longText" rows="9" placeholder="<%= t('Paste a syllabus, lecture notes, exam requirements, or a detailed brief…') %>"><%= form.longText || '' %></textarea>
+    <label><%= t('Files (PDF, TXT, MD, CSV, JSON, TEX, JS, HTML, CSS · max 6 × 8 MB)') %></label>
     <input id="files" name="files" type="file" multiple>
     <div class="chips" id="uploadList"></div>
-    <label class="check"><input type="checkbox" name="published" <%= form.published === false ? '' : 'checked' %>> Show this site in the shared catalog</label>
+    <label class="check"><input type="checkbox" name="published" <%= form.published === false ? '' : 'checked' %>> <%= t('Show this site in the shared catalog') %></label>
     <div class="row" style="margin-top:14px">
-      <button class="btn primary" type="submit">Generate site</button>
+      <button class="btn primary" type="submit"><%= t('Generate site') %></button>
       <% if (suggestions && suggestions.length) { %>
-        <button class="btn" type="submit" name="force" value="1" formnovalidate>Generate a new one anyway</button>
+        <button class="btn" type="submit" name="force" value="1" formnovalidate><%= t('Generate a new one anyway') %></button>
       <% } %>
     </div>
-    <p class="muted small">Remaining today: <b><%= remaining %></b>. Uploads are saved as context; the generated site is routed, never downloadable.</p>
+    <p class="muted small"><%= t('Remaining today:') %> <b><%= remaining %></b>. <%= t('Uploads are saved as context; the generated site is routed, never downloadable.') %></p>
   </form>
 
   <aside class="card">
-    <h2>Reuse before generating</h2>
-    <p class="muted">The catalog is searched first. If an existing site already covers the need, open it or reuse it without spending a generation.</p>
+    <h2><%= t('Reuse before generating') %></h2>
+    <p class="muted"><%= t('The catalog is searched first. If an existing site already covers the need, open it or reuse it without spending a generation.') %></p>
     <% if (suggestions && suggestions.length) { %>
       <div class="suggestions">
         <% suggestions.forEach(function (s) { %>
           <div class="reuse-row">
             <div><b><%= s.title %></b><br><span class="muted small"><%= s.description || '' %></span></div>
             <div class="row">
-              <a class="btn sm" href="<%= s.url %>">Open</a>
+              <a class="btn sm" href="<%= s.url %>"><%= t('Open') %></a>
               <% if (s.reusable) { %>
-                <form method="post" action="/site/<%= s.id %>/clone" class="inline"><button class="btn sm" type="submit">Reuse</button></form>
+                <form method="post" action="/site/<%= s.id %>/clone" class="inline"><button class="btn sm" type="submit"><%= t('Reuse') %></button></form>
               <% } %>
             </div>
           </div>
         <% }) %>
       </div>
     <% } else { %>
-      <p class="muted small">No suggestions yet. Search the catalog or generate the first version.</p>
-      <a class="btn" href="/catalog">Open catalog</a>
+      <p class="muted small"><%= t('No suggestions yet. Search the catalog or generate the first version.') %></p>
+      <a class="btn" href="/catalog"><%= t('Open catalog') %></a>
     <% } %>
   </aside>
 </div>

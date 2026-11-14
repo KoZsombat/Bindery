@@ -1,23 +1,23 @@
-<%- include('partials/head', { title: 'Settings · Learning Book Builder' }) %>
+<%- include('partials/head', { title: t('Settings') + ' · ' + t('Learning Book Builder') }) %>
 <section class="page-head">
   <div>
-    <div class="kicker">Configuration</div>
-    <h1>API settings</h1>
-    <p class="lead">The platform has a server key. You can bring your own OpenAI-compatible endpoint and key; they are stored encrypted and never shown again.</p>
+    <div class="kicker"><%= t('Configuration') %></div>
+    <h1><%= t('API settings') %></h1>
+    <p class="lead"><%= t('The platform has a server key. You can bring your own OpenAI-compatible endpoint and key; they are stored encrypted and never shown again.') %></p>
   </div>
 </section>
-<% if (saved) { %><div class="notice">Saved.</div><% } %>
+<% if (saved) { %><div class="notice"><%= t('Saved.') %></div><% } %>
 <form class="card form narrow" method="post" action="/settings">
-  <label>API base URL</label>
+  <label><%= t('API base URL') %></label>
   <input name="apiBase" value="<%= profile.api_base || '' %>" placeholder="https://api.commandcode.ai/v1">
-  <label>Model</label>
+  <label><%= t('Model') %></label>
   <input name="apiModel" value="<%= profile.api_model || '' %>" placeholder="deepseek-v4.1">
-  <label>API key <span class="pill"><%= profile.api_key ? 'set' : 'not set' %></span></label>
-  <input name="apiKey" type="password" placeholder="Leave blank to keep the current key" autocomplete="off">
-  <label class="check"><input type="checkbox" name="clearKey"> Remove my key</label>
+  <label><%= t('API key') %> <span class="pill"><%= t(profile.api_key ? 'set' : 'not set') %></span></label>
+  <input name="apiKey" type="password" placeholder="<%= t('Leave blank to keep the current key') %>" autocomplete="off">
+  <label class="check"><input type="checkbox" name="clearKey"> <%= t('Remove my key') %></label>
   <div class="row" style="margin-top:12px">
-    <button class="btn primary" type="submit">Save</button>
-    <span class="muted small"><%= profile.api_key ? 'Your key is used for your jobs.' : 'The server key is used if configured.' %></span>
+    <button class="btn primary" type="submit"><%= t('Save') %></button>
+    <span class="muted small"><%= t(profile.api_key ? 'Your key is used for your jobs.' : 'The server key is used if configured.') %></span>
   </div>
 </form>
 <%- include('partials/foot') %>

@@ -1,4 +1,4 @@
-<%- include('partials/head', { title: 'Not found · Learning Book Builder' }) %>
-<section class="page-head"><div><div class="kicker">Error</div><h1>Something went wrong</h1><p class="lead"><%= message %></p></div></section>
-<p><a class="btn primary" href="/app">Back to sites</a></p>
+<%- include('partials/head', { title: t('Not found') + ' · ' + t('Learning Book Builder') }) %>
+<section class="page-head"><div><div class="kicker"><%= t('Error') %></div><h1><%= t('Something went wrong') %></h1><p class="lead"><%= t(message) %></p></div></section>
+<p><a class="btn primary" href="/app"><%= t('Back to sites') %></a></p>
 <%- include('partials/foot') %>

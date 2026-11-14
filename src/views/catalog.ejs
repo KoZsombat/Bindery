@@ -1,27 +1,27 @@
-<%- include('partials/head', { title: 'Catalog · Learning Book Builder' }) %>
+<%- include('partials/head', { title: t('Catalog') + ' · ' + t('Learning Book Builder') }) %>
 <section class="page-head">
   <div>
-    <div class="kicker">Shared catalog</div>
-    <h1>Existing sites</h1>
-    <p class="lead">Search published sites before creating a new one. Reuse copies a site into your workspace without calling the model.</p>
+    <div class="kicker"><%= t('Shared catalog') %></div>
+    <h1><%= t('Existing sites') %></h1>
+    <p class="lead"><%= t('Search published sites before creating a new one. Reuse copies a site into your workspace without calling the model.') %></p>
   </div>
 </section>
 
 <form class="row search-row" method="get" action="/catalog">
-  <input name="q" value="<%= q %>" placeholder="Search title, topic, description or source text…">
-  <button class="btn primary" type="submit">Search</button>
+  <input name="q" value="<%= q %>" placeholder="<%= t('Search title, topic, description or source text…') %>">
+  <button class="btn primary" type="submit"><%= t('Search') %></button>
 </form>
 
 <div class="grid" style="margin-top:16px">
-  <% if (!sites.length) { %><div class="empty">No matching sites yet.</div><% } %>
+  <% if (!sites.length) { %><div class="empty"><%= t('No matching sites yet.') %></div><% } %>
   <% sites.forEach(function (s) { %>
     <article class="site-card">
-      <div class="site-top"><h3><%= s.title %></h3><span class="status <%= s.status %>"><%= s.status %></span></div>
+      <div class="site-top"><h3><%= s.title %></h3><span class="status <%= s.status %>"><%= t(s.status) %></span></div>
       <p class="muted"><%= s.description || '' %></p>
-      <div class="site-meta"><span><%= s.slug %></span><span><%= fmt(s.createdAt) %></span><% if (s.example) { %><span class="pill">example</span><% } %></div>
+      <div class="site-meta"><span><%= s.slug %></span><span><%= fmt(s.createdAt) %></span><% if (s.example) { %><span class="pill"><%= t('example') %></span><% } %></div>
       <div class="site-actions">
-        <a class="btn primary sm" href="<%= s.url %>">Open</a>
-        <% if (s.reusable) { %><form method="post" action="/site/<%= s.id %>/clone" class="inline"><button class="btn sm" type="submit">Reuse</button></form><% } %>
+        <a class="btn primary sm" href="<%= s.url %>"><%= t('Open') %></a>
+        <% if (s.reusable) { %><form method="post" action="/site/<%= s.id %>/clone" class="inline"><button class="btn sm" type="submit"><%= t('Reuse') %></button></form><% } %>
       </div>
     </article>
   <% }) %>

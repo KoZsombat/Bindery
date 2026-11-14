@@ -7,14 +7,18 @@ import {
 } from './config.js';
 import { sqlite, ensureProfile, now } from './db/index.js';
 
+const AUTH_BASE = DEV ? `http://localhost:${PORT}` : BETTER_AUTH_URL;
 export const auth = betterAuth({
   database: sqlite,
   secret: BETTER_AUTH_SECRET,
-  baseURL: BETTER_AUTH_URL,
-  trustedOrigins: Array.from(new Set([BETTER_AUTH_URL, ...(DEV ? [`http://localhost:${PORT}`, `http://127.0.0.1:${PORT}`] : [])])).filter(Boolean),
+  baseURL: AUTH_BASE,
+  trustedOrigins: Array.from(new Set([AUTH_BASE, ...(DEV ? [`http://localhost:${PORT}`, `http://127.0.0.1:${PORT}`] : [])])).filter(Boolean),
   emailAndPassword: { enabled: true, disableSignUp: false },
   plugins: [admin()],
-  advanced: COOKIE_DOMAIN ? { crossSubDomainCookies: { enabled: true, domain: COOKIE_DOMAIN } } : undefined
+  advanced: {
+    useSecureCookies: AUTH_BASE.startsWith('https://'),
+    ...(COOKIE_DOMAIN ? { crossSubDomainCookies: { enabled: true, domain: COOKIE_DOMAIN } } : {})
+  }
 });
 
 export async function migrateAuth() {

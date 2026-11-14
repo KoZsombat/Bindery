@@ -2,6 +2,7 @@ import express from 'express';
 import { fromNodeHeaders } from 'better-auth/node';
 import multer from 'multer';
 import fs from 'node:fs';
+import fsp from 'node:fs/promises';
 import crypto from 'node:crypto';
 import path from 'node:path';
 import { auth } from '../auth.js';
@@ -12,6 +13,7 @@ import { extractUpload } from '../services/uploads.js';
 import { encrypt } from '../crypto.js';
 import { safeNext, copyAuthCookies, renderPage } from '../lib/http.js';
 import { requireUser } from '../middleware/session.js';
+import { rateLimit } from '../middleware/rate-limit.js';
 
 const router = express.Router();
 const storage = multer.diskStorage({
@@ -37,7 +39,7 @@ router.get('/login', (req, res) => {
   if (req.user) return res.redirect('/app');
   res.render('login', { error: '', email: '', next: safeNext(req.query.next), dev: !process.env.ADMIN_PASSWORD && process.env.NODE_ENV !== 'production' });
 });
-router.post('/login', async (req, res) => {
+router.post('/login', rateLimit({ windowMs: 15 * 60 * 1000, max: 15 }), async (req, res) => {
   const email = String(req.body.email || '').trim().toLowerCase();
   const password = String(req.body.password || '');
   const next = safeNext(req.body.next);
@@ -61,14 +63,14 @@ router.get('/', (req, res) => res.redirect(req.user ? '/app' : '/login'));
 
 router.get('/app', requireUser, (req, res) => {
   const usedToday = quotaUsed(req.user.id);
-  const sites = sqlite.prepare('SELECT * FROM sites WHERE owner_id=? OR example=1 ORDER BY created_at DESC').all(req.user.id).map(publicSite);
+  const sites = sqlite.prepare('SELECT * FROM sites WHERE (owner_id=? OR example=1) AND archived=0 ORDER BY created_at DESC').all(req.user.id).map(publicSite);
   renderPage(req, res, 'dashboard', { sites, usedToday, remaining: Math.max(0, req.profile.daily_limit - usedToday) });
 });
 router.get('/new', requireUser, (req, res) => {
   const usedToday = quotaUsed(req.user.id);
   renderPage(req, res, 'new', { form: {}, suggestions: [], error: '', remaining: Math.max(0, req.profile.daily_limit - usedToday) });
 });
-router.post('/new', requireUser, uploadGate, upload.array('files', MAX_FILES), async (req, res) => {
+router.post('/new', requireUser, rateLimit({ windowMs: 60 * 1000, max: 8, key: req => req.user?.id }), uploadGate, upload.array('files', MAX_FILES), async (req, res) => {
   const form = {
     title: String(req.body.title || '').trim().slice(0, 160),
     topic: String(req.body.topic || '').trim().slice(0, 300),
@@ -110,7 +112,7 @@ router.post('/new', requireUser, uploadGate, upload.array('files', MAX_FILES), a
 });
 router.get('/site/:id', requireUser, (req, res) => {
   const site = siteRow(Number(req.params.id));
-  if (!site || (site.owner_id !== req.user.id && req.user.role !== 'admin' && !site.published)) return renderPage(req, res, 'error', { message: 'Site not found.' }, 404);
+  if (!site || site.archived || (site.owner_id !== req.user.id && req.user.role !== 'admin' && !site.published)) return renderPage(req, res, 'error', { message: 'Site not found.' }, 404);
   const job = sqlite.prepare('SELECT * FROM jobs WHERE site_id=? ORDER BY id DESC LIMIT 1').get(site.id);
   renderPage(req, res, 'site', { site: publicSite(site), job });
 });
@@ -130,12 +132,40 @@ router.post('/site/:id/clone', requireUser, (req, res) => {
   if (fs.existsSync(sourceIndex)) fs.copyFileSync(sourceIndex, path.join(dir, 'index.html'));
   res.redirect('/site/' + result.lastInsertRowid);
 });
+router.post('/site/:id/cancel', requireUser, (req, res) => {
+  const site = siteRow(Number(req.params.id));
+  if (!site || site.owner_id !== req.user.id || site.archived) return res.status(404).send('Site not found.');
+  const t = now();
+  sqlite.prepare("UPDATE jobs SET cancel_requested=1,updated_at=? WHERE site_id=? AND status IN ('queued','running')").run(t, site.id);
+  sqlite.prepare("UPDATE jobs SET status='cancelled',locked_at=NULL,updated_at=? WHERE site_id=? AND status='queued'").run(t, site.id);
+  sqlite.prepare("UPDATE sites SET status='cancelled',error='Cancelled by user.',updated_at=? WHERE id=? AND status='queued'").run(t, site.id);
+  res.redirect('/site/' + site.id);
+});
+router.post('/site/:id/regenerate', requireUser, (req, res) => {
+  const site = siteRow(Number(req.params.id));
+  if (!site || site.owner_id !== req.user.id || site.archived) return res.status(404).send('Site not found.');
+  const t = now();
+  sqlite.prepare("UPDATE sites SET status='queued',error='',updated_at=? WHERE id=?").run(t, site.id);
+  sqlite.prepare("UPDATE jobs SET cancel_requested=0,locked_at=NULL,next_attempt_at=NULL,last_error='',updated_at=? WHERE site_id=? AND status IN ('queued','running')").run(t, site.id);
+  sqlite.prepare('INSERT INTO jobs (site_id,status,log,created_at,updated_at) VALUES (?,?,?,?,?)').run(site.id, 'queued', 'Queued for regeneration.', t, t);
+  kick(0);
+  res.redirect('/site/' + site.id);
+});
+router.post('/site/:id/delete', requireUser, async (req, res) => {
+  const site = siteRow(Number(req.params.id));
+  if (!site || (site.owner_id !== req.user.id && req.user.role !== 'admin') || site.archived) return res.status(404).send('Site not found.');
+  const t = now();
+  sqlite.prepare("UPDATE sites SET archived=1,status='deleted',updated_at=? WHERE id=?").run(t, site.id);
+  sqlite.prepare("UPDATE jobs SET cancel_requested=1,status=CASE WHEN status IN ('queued','running') THEN 'cancelled' ELSE status END,updated_at=? WHERE site_id=?").run(t, site.id);
+  await fsp.rm(path.dirname(siteJsonPath(site.slug)), { recursive: true, force: true });
+  res.redirect('/app');
+});
 router.get('/catalog', requireUser, (req, res) => {
   const q = String(req.query.q || '').trim();
   const like = '%' + q.replace(/[%_]/g, '') + '%';
   const sites = (q
-    ? sqlite.prepare("SELECT * FROM sites WHERE status='ready' AND (published=1 OR owner_id=?) AND (title LIKE ? OR description LIKE ? OR topic LIKE ? OR source_text LIKE ?) ORDER BY created_at DESC LIMIT 30").all(req.user.id, like, like, like, like)
-    : sqlite.prepare("SELECT * FROM sites WHERE status='ready' AND (published=1 OR owner_id=?) ORDER BY created_at DESC LIMIT 30").all(req.user.id)).map(publicSite);
+    ? sqlite.prepare("SELECT * FROM sites WHERE status='ready' AND archived=0 AND (published=1 OR owner_id=?) AND (title LIKE ? OR description LIKE ? OR topic LIKE ? OR source_text LIKE ?) ORDER BY created_at DESC LIMIT 30").all(req.user.id, like, like, like, like)
+    : sqlite.prepare("SELECT * FROM sites WHERE status='ready' AND archived=0 AND (published=1 OR owner_id=?) ORDER BY created_at DESC LIMIT 30").all(req.user.id)).map(publicSite);
   renderPage(req, res, 'catalog', { sites, q });
 });
 router.get('/settings', requireUser, (req, res) => renderPage(req, res, 'settings', { saved: req.query.saved === '1' }));

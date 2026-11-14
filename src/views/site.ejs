@@ -1,38 +1,41 @@
-<%- include('partials/head', { title: site.title + ' · Learning Book Builder' }) %>
+<%- include('partials/head', { title: site.title + ' · ' + t('Learning Book Builder') }) %>
 <section class="page-head">
   <div>
-    <div class="kicker">Site · <%= site.slug %></div>
+    <div class="kicker"><%= t('Site') %> · <%= site.slug %></div>
     <h1><%= site.title %></h1>
     <p class="lead"><%= site.description || '' %></p>
   </div>
   <div class="row">
-    <span class="status <%= site.status %>"><%= site.status %></span>
-    <% if (site.status === 'ready') { %><a class="btn primary" href="<%= site.url %>">Open site</a><% } %>
+    <span class="status <%= site.status %>"><%= t(site.status) %></span>
+    <% if (site.status === 'ready') { %><a class="btn primary" href="<%= site.url %>"><%= t('Open site') %></a><% } %>
   </div>
 </section>
 
 <div class="grid two">
   <div class="card">
-    <h2>Routing</h2>
-    <p class="muted">The site is served at this path. There is no ZIP or download.</p>
+    <h2><%= t('Routing') %></h2>
+    <p class="muted"><%= t('The site is served at this path. There is no ZIP or download.') %></p>
     <p><code><%= site.url %></code></p>
-    <p class="muted small">Status: <%= site.status %> · Updated: <%= fmt(site.updatedAt) %></p>
+    <p class="muted small"><%= t('Status:') %> <%= t(site.status) %> · <%= t('Updated:') %> <%= fmt(site.updatedAt) %></p>
     <% if (site.error) { %><div class="inline-err"><%= site.error %></div><% } %>
-    <% if (site.status === 'queued' || site.status === 'running') { %><p class="muted small">Generating… this page refreshes automatically.</p><% } %>
+    <% if (site.status === 'queued' || site.status === 'running') { %><p class="muted small"><%= t('Generating… this page refreshes automatically.') %></p><% } %>
   </div>
   <div class="card">
-    <h2>Actions</h2>
+    <h2><%= t('Actions') %></h2>
     <div class="row">
-      <% if (site.status === 'ready') { %><a class="btn primary" href="<%= site.url %>">Open</a><% } %>
-      <% if (site.reusable) { %><form method="post" action="/site/<%= site.id %>/clone" class="inline"><button class="btn" type="submit">Reuse in my workspace</button></form><% } %>
-      <a class="btn" href="/app">Back to sites</a>
+      <% if (site.status === 'ready') { %><a class="btn primary" href="<%= site.url %>"><%= t('Open') %></a><% } %>
+      <% if (site.reusable) { %><form method="post" action="/site/<%= site.id %>/clone" class="inline"><button class="btn" type="submit"><%= t('Reuse in my workspace') %></button></form><% } %>
+      <% if (site.status === 'queued' || site.status === 'running') { %><form method="post" action="/site/<%= site.id %>/cancel" class="inline"><button class="btn" type="submit"><%= t('Cancel') %></button></form><% } %>
+      <% if (site.status === 'ready' || site.status === 'failed' || site.status === 'cancelled') { %><form method="post" action="/site/<%= site.id %>/regenerate" class="inline"><button class="btn" type="submit"><%= t('Regenerate') %></button></form><% } %>
+      <a class="btn" href="/app"><%= t('Back to sites') %></a>
+      <form method="post" action="/site/<%= site.id %>/delete" class="inline" onsubmit="return confirm('<%= t('Delete this site permanently?') %>')"><button class="btn danger" type="submit"><%= t('Delete') %></button></form>
     </div>
   </div>
 </div>
 
 <div class="card">
-  <h2>Job log</h2>
-  <pre class="log"><%= job ? (job.status + '\n\n' + (job.log || '')) : 'No job recorded.' %></pre>
+  <h2><%= t('Job log') %></h2>
+  <pre class="log"><%= job ? (t(job.status) + '\n\n' + (job.log || '')) : t('No job recorded.') %></pre>
 </div>
 
 <% if (site.status === 'queued' || site.status === 'running') { %>
