@@ -34,6 +34,15 @@
     <div class="nav-group-label" data-i18n="Tartalomjegyzék">Tartalomjegyzék</div>
     <nav class="nav" id="nav"></nav>
 
+    <div class="nav-group-label" data-i18n="Napi gyakorlás">Napi gyakorlás</div>
+    <div class="side-jump">
+      <a href="#/daily" class="side-link" data-nav="daily"><span class="ico" data-icon="flame"></span><span data-i18n="Napi küldetés">Napi küldetés</span><span class="side-badge" id="streakBadge"></span></a>
+      <a href="#/review" class="side-link" data-nav="review"><span class="ico" data-icon="notebook"></span><span data-i18n="Hibafüzet">Hibafüzet</span><span class="side-badge" id="dueBadge"></span></a>
+      <a href="#/mixed" class="side-link" data-nav="mixed"><span class="ico" data-icon="shuffle"></span><span data-i18n="Vegyes menet">Vegyes menet</span></a>
+      <a href="#/hunt" class="side-link" data-nav="hunt"><span class="ico" data-icon="search"></span><span data-i18n="Hibavadászat">Hibavadászat</span></a>
+      <a href="#/progress" class="side-link" data-nav="progress"><span class="ico" data-icon="target"></span><span data-i18n="Haladás">Haladás</span></a>
+    </div>
+
     <div class="side-foot">
       <a href="#/formulas" class="side-link" data-nav="formulas"><span class="ico" data-icon="sigma"></span>Képletgyűjtemény</a>
       <a href="#/videos" class="side-link" data-nav="videos"><span class="ico" data-icon="play"></span>Videók</a>
@@ -52,6 +61,7 @@
           <span data-i18n="Keresés a tananyagban…">Keresés a tananyagban…</span>
           <kbd>Ctrl K</kbd>
         </button>
+        <a class="streak-chip" id="streakChip" href="#/daily" aria-label="Napi sorozat" title="Napi sorozat"><span class="ico" data-icon="flame"></span><b>0</b></a>
         <button class="lang-btn" id="langBtn" aria-label="Nyelv / Language">EN</button>
         <button class="icon-btn" id="themeBtn" aria-label="Világos / sötét téma">
           <span class="ico" data-icon="sun"></span>
@@ -109,6 +119,7 @@
 <script src="assets/js/generators.js"></script>
 <script src="assets/js/demos.js"></script>
 <script src="assets/js/features.js"></script>
+<script src="assets/js/fun.js"></script>
 <script src="assets/js/app.js"></script>
 </body>
 </html>

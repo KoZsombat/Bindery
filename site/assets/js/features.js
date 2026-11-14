@@ -33,7 +33,11 @@
     }
     const ans = it.a == null ? '' : esc(typeof it.a === 'object' ? JSON.stringify(it.a) : it.a);
     const alt = it.alt ? esc(JSON.stringify(it.alt)) : '';
-    return '<div class="ex gen-item" data-gencat="' + catId + '" data-genidx="' + idx + '" data-level="' + it.level + '" data-ans="' + ans + '" data-type="' + type + '" data-alt="' + alt + '">' +
+    const choices = it.choices ? esc(JSON.stringify(it.choices)) : '';
+    const topic = MB.fun && MB.fun.secOfCat ? MB.fun.secOfCat(catId) : catId;
+    return '<div class="ex gen-item" data-gencat="' + catId + '" data-genidx="' + idx + '" data-level="' + it.level + '" data-ans="' + ans + '" data-type="' + type + '" data-alt="' + alt + '"' +
+      ' data-kind="practice" data-topic="' + esc(topic) + '" data-cat="' + esc(catId) + '" data-funid="p:' + esc(catId) + ':' + idx + '"' +
+      ' data-q="' + esc(it.q) + '" data-solution="' + esc(it.sol || '') + '" data-exhint="' + esc(it.hint || '') + '" data-choices="' + choices + '">' +
       '<div class="ex-top"><div class="ex-idx">' + String(idx + 1).padStart(3, '0') + '</div><div class="ex-body"><div class="ex-q">' + it.q +
       '<span class="ex-level" title="Nehézség">' + [1, 2, 3].map(function (n) { return '<i class="' + (n <= it.level ? 'on' : '') + '"></i>'; }).join('') + '</span></div></div>' +
       '<button class="icon-btn reroll" data-reroll="' + catId + ':' + idx + '" title="Új feladat" aria-label="Új feladat">' + MB.icon('refresh') + '</button></div>' +
@@ -208,7 +212,8 @@
     body.innerHTML = MB.protectMath(h);
     MB.renderMath(body);
     const tests = MB.app.state.tests;
-    tests[R.title + '@' + Date.now()] = { pct: pct, correct: correct, total: R.items.length, date: new Date().toISOString() };
+    if (MB.fun && MB.fun.batch) MB.fun.batch(review, R.kind, R.section);
+    tests[R.title + '@' + Date.now()] = { pct: pct, correct: correct, total: R.items.length, date: new Date().toISOString(), section: R.section || null, tag: R.tag || null };
     MB.app.save();
   }
 
@@ -236,7 +241,7 @@
   MB.testView = function (s, c) {
     const items = [];
     const own = (c.exercises || []).filter(function (q) { return q.type !== 'proof' && q.type !== 'open' && q.a != null; });
-    own.forEach(function (q) { items.push({ q: q.q, a: q.a, type: q.type || 'expr', alt: q.alt, sol: q.sol, level: q.level || 1, source: c }); });
+    own.forEach(function (q) { items.push({ q: q.q, a: q.a, type: q.type || 'expr', alt: q.alt, sol: q.sol, choices: q.choices, level: q.level || 1, topic: s.id, source: c }); });
     const map = {
       alapok: ['algebra', 'equations', 'functions', 'trig'],
       logika: ['logic'], komplex: ['complex'], sorozatok: ['sequences'], hatarertek: ['limits'],
@@ -246,10 +251,11 @@
     const cats = map[s.id] || [MB.genCats[0].id];
     let guard = 0;
     while (items.length < 8 && guard++ < 20) {
-      const cat = MB.generateOne(cats[items.length % cats.length], items.length < 3 ? 1 : items.length < 5 ? 2 : 3, Date.now() + items.length * 17 + guard);
-      items.push({ q: cat.q, a: cat.a, type: cat.type, alt: cat.alt, sol: cat.sol, level: cat.level });
+      const cid = cats[items.length % cats.length];
+      const cat = MB.generateOne(cid, items.length < 3 ? 1 : items.length < 5 ? 2 : 3, Date.now() + items.length * 17 + guard);
+      items.push({ q: cat.q, a: cat.a, type: cat.type, alt: cat.alt, sol: cat.sol, choices: cat.choices, level: cat.level, cat: cid, topic: MB.fun && MB.fun.secOfCat ? MB.fun.secOfCat(cid) : cid });
     }
-    MB.runner = { items: items.slice(0, 8), idx: 0, answers: {}, left: 10 * 60, kind: 'test', title: 'Fejezet teszt · ' + c.num + '. ' + c.title, chapter: c };
+    MB.runner = { items: items.slice(0, 8), idx: 0, answers: {}, left: 10 * 60, kind: 'test', title: 'Fejezet teszt · ' + c.num + '. ' + c.title, chapter: c, section: s.id, tag: 'test' };
     setTimeout(function () { MB.initRunner(); }, 0);
     return '<div class="page-head"><div class="kicker">Fejezet teszt · ' + esc(c.num) + '</div><h1>' + esc(c.title) + '</h1><p class="lead">8 kérdés · 10 perc · a fejezet könnyű, közepes és nehéz feladataiból. A végén pontszám és részletes megoldás.</p></div>' + runnerHTML('Fejezet teszt · ' + c.title, c.num + '. ' + c.title + ' · 8 kérdés · 10 perc', 10);
   };
@@ -280,10 +286,11 @@
     const items = [];
     for (let i = 0; i < cfg.n; i++) {
       const level = i < 3 ? 1 : i < 6 ? 2 : 3;
-      const cat = MB.generateOne(cfg.cats[i % cfg.cats.length], level, Date.now() + i * 104729 + mode.length);
-      items.push({ q: cat.q, a: cat.a, type: cat.type, alt: cat.alt, sol: cat.sol, level: level });
+      const cid = cfg.cats[i % cfg.cats.length];
+      const cat = MB.generateOne(cid, level, Date.now() + i * 104729 + mode.length);
+      items.push({ q: cat.q, a: cat.a, type: cat.type, alt: cat.alt, sol: cat.sol, choices: cat.choices, level: level, cat: cid, topic: MB.fun && MB.fun.secOfCat ? MB.fun.secOfCat(cid) : cid });
     }
-    MB.runner = { items: items, idx: 0, answers: {}, left: cfg.min * 60, kind: 'exam', title: cfg.title };
+    MB.runner = { items: items, idx: 0, answers: {}, left: cfg.min * 60, kind: 'exam', title: cfg.title, tag: mode };
     setTimeout(function () { MB.initRunner(); }, 0);
     return '<div class="page-head"><div class="kicker">Számonkérés · szimulátor</div><h1>' + cfg.title + '</h1><p class="lead">' + cfg.n + ' kérdés · ' + cfg.min + ' perc. A válaszokat a „Mentés” gombbal vagy a kérdésváltással rögzítheted. Lejáratkor automatikus beadás.</p></div>' +
       runnerHTML(cfg.title, cfg.n + ' kérdés · ' + cfg.min + ' perc · jegyhatárok 40/55/65/80%', cfg.min);

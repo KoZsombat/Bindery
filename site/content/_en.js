@@ -226,7 +226,17 @@
       'Ez a rész nem szükséges az első hetekhez. Akkor vedd elő, ha a felkészítő magja már megy; különben előbb térj vissza az alapokhoz.': 'This part is not required for the first weeks. Open it after the core is solid; otherwise return to the foundations first.',
       'Feltételezem, hogy középszintű érettségi szinten tanultál matematikát, de sok mindent elfelejtettél. Ez a rész ezért ismétlés, nem nulláról kezdés: a „Miért?” blokkok a régi szabályokat elevenítik fel, a feladatok visszamérnek. Ha valami ismerős, ugorj a feladatokra.': 'I assume you studied mathematics at Hungarian középszintű érettségi level but have forgotten much of it. This part is therefore revision, not a from-zero course: the “Why?” boxes rebuild the old rules and the exercises check them. If something is familiar, skip to the exercises.',
       'A feladatok szövege magyar nyelven van. A képletek és a mintapéldák segítenek; az ellenőrző ugyanúgy működik.': 'Exercise texts are in Hungarian. The formulas and worked examples still help; the checker works the same way.',
-      'A fejezet részletes elmélete, példái és feladatai magyarul olvashatók. Az angol összefoglaló a kulcsötletet adja meg; a képletek nyelvfüggetlenek.': 'The detailed theory, examples and exercises below are in Hungarian. The English overview gives the key idea; the formulas are language-independent.'
+      'A fejezet részletes elmélete, példái és feladatai magyarul olvashatók. Az angol összefoglaló a kulcsötletet adja meg; a képletek nyelvfüggetlenek.': 'The detailed theory, examples and exercises below are in Hungarian. The English overview gives the key idea; the formulas are language-independent.',
+      'Napi gyakorlás': 'Daily practice',
+      'Napi küldetés': 'Daily quest',
+      'Hibafüzet': 'Error notebook',
+      'Vegyes menet': 'Mixed run',
+      'Hibavadászat': 'Error hunt',
+      'Haladás': 'Progress',
+      'Ismétlés': 'Review',
+      'Magyarázd el': 'Explain it',
+      'esedékes ismétlés': 'reviews due',
+      'ZH-felkészültség': 'Exam readiness'
     }
   };
   MB.i18n = { en: MB.en.ui };

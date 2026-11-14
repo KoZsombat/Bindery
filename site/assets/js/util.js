@@ -31,7 +31,10 @@
     chevronRight: '<path d="m9 6 6 6-6 6"/>',
     refresh: '<path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/>',
     trophy: '<path d="M8 4h8v4a4 4 0 0 1-8 0z"/><path d="M8 5H5v2a3 3 0 0 0 3 3M16 5h3v2a3 3 0 0 1-3 3M12 12v5M9 21h6M10 17h4"/>',
-    send: '<path d="M21 3 10 14"/><path d="M21 3 14 21l-4-7-7-4z"/>'
+    send: '<path d="M21 3 10 14"/><path d="M21 3 14 21l-4-7-7-4z"/>',
+    flame: '<path d="M12 3c2.5 3 5 5.5 5 9a5 5 0 0 1-10 0c0-2.4 1.4-4 2.6-5.4C10.6 9.2 12 7.5 12 3Z"/><path d="M12 21a3.2 3.2 0 0 0 3.2-3.2c0-1.6-1-2.8-2.2-3.8-1.2 1-2.2 2.2-2.2 3.8A3.2 3.2 0 0 0 12 21Z"/>',
+    notebook: '<path d="M6 4.5A1.5 1.5 0 0 1 7.5 3H19v18H7.5A1.5 1.5 0 0 1 6 19.5z"/><path d="M6 4.5v15"/><path d="M10 8h5M10 12h5M10 16h3"/>',
+    shuffle: '<path d="M16 4h4v4"/><path d="M4 20 20 4"/><path d="M20 16v4h-4"/><path d="m14 14 6 6"/><path d="M4 4l4 4"/>'
   };
 
   MB.icon = function (name, cls) {

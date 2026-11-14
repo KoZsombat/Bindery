@@ -12,6 +12,10 @@ No build step, no installation, no HTML knowledge needed. The only online part i
 - 7 core parts + 6 optional parts, 34 chapters, 266 in-chapter exercises.
 - Prerequisite-first order: basics first, each part explicitly builds on the previous ones.
 - 15 practice categories × 50 generated exercises (10 easy / 10 medium / 30 hard, 1 : 1 : 3), rerollable.
+- Daily quest: 5 mixed exercises per day, with a solve-streak and a weekly freeze.
+- Error notebook: every miss returns on a 1 / 3 / 7 / 21-day Leitner schedule.
+- Mixed run (interleaved practice) and 22 error hunts (find the false statement).
+- Teach-back box in every chapter, exam-readiness score and weekly recap.
 - 94-formula searchable reference, video library, original 2025–2026 exam PDFs.
 - **English / Hungarian** toggle: translated interface, section/chapter titles, leads and chapter overviews in English; detailed theory and exercises remain Hungarian with a visible notice.
 - Progress saved in the browser; `Ctrl+K` search; print-friendly.

@@ -208,7 +208,11 @@
     }
     const dataAns = q.a == null ? '' : MB.esc(typeof q.a === 'object' ? JSON.stringify(q.a) : q.a);
     const dataAlt = q.alt ? MB.esc(JSON.stringify(q.alt)) : '';
-    return '<div class="ex' + (done ? ' done' : '') + '" data-ex="' + i + '" data-ans="' + dataAns + '" data-type="' + type + '" data-alt="' + dataAlt + '">' +
+    const dataChoices = q.choices ? MB.esc(JSON.stringify(q.choices)) : '';
+    return '<div class="ex' + (done ? ' done' : '') + '" data-ex="' + i + '" data-ans="' + dataAns + '" data-type="' + type + '" data-alt="' + dataAlt + '"' +
+      ' data-kind="chapter" data-topic="' + MB.esc(c.sectionId) + '" data-funid="' + MB.esc(key + '/' + i) + '"' +
+      ' data-q="' + MB.esc(q.q) + '" data-solution="' + MB.esc(q.sol || '') + '" data-exhint="' + MB.esc(q.hint || '') + '"' +
+      ' data-level="' + (q.level || 1) + '" data-choices="' + dataChoices + '">' +
       '<div class="ex-top"><div class="ex-idx">' + String(i + 1).padStart(2, '0') + '</div><div class="ex-body"><div class="ex-q">' + q.q +
       '<span class="ex-level" title="Nehézség">' + [1, 2, 3].map(function (n) { return '<i class="' + (n <= (q.level || 1) ? 'on' : '') + '"></i>'; }).join('') + '</span></div></div></div>' +
       '<div class="ex-bottom">' + controls +
@@ -285,7 +289,10 @@
     exs.forEach(function (q, i) { h += exerciseHTML(q, i, c); });
     h += '</div></section>';
 
-    /* 6 — test CTA */
+    /* 6 — explain it */
+    if (MB.teachHTML) h += MB.teachHTML(c, s);
+
+    /* 7 — test CTA */
     if (nAuto > 0) {
       h += '<div class="test-cta"><div><h3>Készen állsz a fejezet tesztre?</h3><p>' + nAuto + ' automatikusan ellenőrizhető feladat · időlimit 10 perc · pontszám és részletes kiértékelés a végén.</p></div>' +
         '<a class="btn primary" href="#/test/' + s.id + '/' + c.id + '">' + MB.icon('trophy') + ' Teszt indítása</a></div>';
@@ -331,6 +338,7 @@
       '<div class="stat"><b>' + MB.videos.length + '</b><span>' + (en ? H.videos : 'Ajánlott videó') + '</span></div>' +
       '<div class="stat"><b>' + Object.keys(state.tests).length + '</b><span>' + (en ? H.tests : 'Kitöltött teszt') + '</span></div>' +
       '</div>';
+    h += (MB.fun && MB.fun.homeHTML) ? MB.fun.homeHTML() : '';
     h += '<div class="note-box" style="margin:0 0 12px"><h4>' + (en ? H.assumeTitle : 'Miből indulunk ki?') + '</h4><p style="margin:0 0 8px">' + (en ? H.assumeBody : 'Feltételezem, hogy <b>középszintű érettségi</b> szinten tanultál matematikát, de sok mindent elfelejtettél. Az <b>1. rész</b> ezért ismétlés, nem nulláról kezdés: a „Miért?” blokkok a régi szabályokat elevenítik fel, a feladatok pedig visszamérnek. Ha valami ismerős, ugorj a feladatokra; ha nem, olvasd el a magyarázatot.') + '</p><p style="margin:0">' + (en ? H.assumeBody2 : 'Ez <b>felkészítő</b>, nem a teljes félév anyaga. A 08–13. részek opcionális előretekintések: csak akkor vedd őket elő, ha a magabiztos alap megvan.') + '</p></div>';
     h += '<div class="note-box" style="margin:0 0 32px"><h4>' + (en ? H.installTitle : 'Nem kell telepíteni semmit') + '</h4><p style="margin:0">' + (en ? H.installBody : 'Nyisd meg az <b>index.html</b>-t dupla kattintással, vagy indítsd a <b>start.bat</b>-ot (Windows) / <b>start.command</b>-ot (macOS). Minden helyben fut: a videók kivételével internet sem kell hozzá.') + '</p></div>';
 
@@ -515,6 +523,11 @@
     if (parts[0] === 'practice') return { name: 'practice', cat: parts[1] };
     if (parts[0] === 'exam') return { name: 'exam', mode: parts[1] };
     if (parts[0] === 'test') return { name: 'test', section: parts[1], chapter: parts[2] };
+    if (parts[0] === 'daily') return { name: 'daily' };
+    if (parts[0] === 'review') return { name: 'review' };
+    if (parts[0] === 'mixed') return { name: 'mixed' };
+    if (parts[0] === 'hunt') return { name: 'hunt', id: parts[1] };
+    if (parts[0] === 'progress') return { name: 'progress' };
     return { name: 'home' };
   }
 
@@ -554,6 +567,21 @@
       if (!s || !c) { location.hash = '#/'; return; }
       html = viewTest(s, c);
       setCrumbs([{ label: s.num + '. ' + MB.sTitle(s), href: '#/section/' + s.id }, { label: c.num + '. ' + MB.cTitle(c), href: '#/chapter/' + s.id + '/' + c.id }, { label: 'Teszt' }]);
+    } else if (r.name === 'daily') {
+      html = MB.dailyView ? MB.dailyView() : '';
+      setCrumbs([{ label: MB.t('Napi küldetés') }]);
+    } else if (r.name === 'review') {
+      html = MB.reviewView ? MB.reviewView() : '';
+      setCrumbs([{ label: MB.t('Hibafüzet') }]);
+    } else if (r.name === 'mixed') {
+      html = MB.mixedView ? MB.mixedView() : '';
+      setCrumbs([{ label: MB.t('Vegyes menet') }]);
+    } else if (r.name === 'hunt') {
+      html = MB.huntView ? MB.huntView(r.id) : '';
+      setCrumbs([{ label: MB.t('Hibavadászat') }]);
+    } else if (r.name === 'progress') {
+      html = MB.progressView ? MB.progressView() : '';
+      setCrumbs([{ label: MB.t('Haladás') }]);
     }
     main.innerHTML = MB.protectMath(html);
     updateNav(r);
@@ -563,6 +591,7 @@
     window.scrollTo({ top: 0, behavior: 'instant' in window ? 'instant' : 'auto' });
     closeSidebar();
     if (r.name === 'formulas') initFormulaSearch();
+    if (MB.fun && MB.fun.afterRender) MB.fun.afterRender(r);
   }
 
   /* ---------- interactions ---------- */
@@ -599,6 +628,7 @@
       const ok = MB.check(input.value, ans, type, alt);
       fb.className = 'feedback show ' + (ok ? 'ok' : 'bad');
       fb.textContent = ok ? (MB.lang === 'en' ? 'Correct. The answer is not shown here — use “Show answer” if you want to compare.' : 'Helyes eredmény. Az eredményt itt nem áruljuk el — használd a „Megoldás mutatása” gombot, ha össze akarod vetni.') : (MB.lang === 'en' ? 'Not correct. Check your transformation, or ask for a hint.' : 'Nem stimmel. Ellenőrizd az átalakítást, vagy kérj segítséget.');
+      if (MB.fun && MB.fun.answer) MB.fun.answer(ex, ok, input.value);
       if (ok && c) { markDone(c, i, true); ex.classList.add('done'); updateNav(parseRoute()); }
       input.focus();
       return;
@@ -625,6 +655,7 @@
       const ok = String(choice.dataset.choice) === String(ans);
       fb.className = 'feedback show ' + (ok ? 'ok' : 'bad');
       fb.textContent = ok ? 'Helyes válasz.' : 'Nem ez a helyes válasz. Gondold végig újra.';
+      if (MB.fun && MB.fun.answer) MB.fun.answer(ex, ok, choice.dataset.choice);
       if (ok && c) { markDone(c, i, true); ex.classList.add('done'); updateNav(parseRoute()); }
       return;
     }
@@ -632,6 +663,7 @@
     if (self) {
       const ex = self.closest('.ex');
       const c = chapterFromEx(ex);
+      if (MB.fun && MB.fun.answer) MB.fun.answer(ex, self.dataset.self === '1', '');
       if (c) { markDone(c, +ex.dataset.ex, self.dataset.self === '1'); updateNav(parseRoute()); }
       self.closest('.self-check').innerHTML = self.dataset.self === '1'
         ? '<span style="color:var(--ok);font-family:var(--font-ui);font-size:.78rem">Elmentve: megvan.</span>'

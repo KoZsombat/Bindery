@@ -32,6 +32,12 @@ Feltételezem, hogy **középszintű érettségi** szinten tanultál matematiká
 - **Fejezet teszt**: a fejezet végén 8 kérdés, 10 perc, pontszám és részletes kiértékelés.
 - **Feladatbank**: 15 kategória, kategóriánként 50 generált feladat (10 könnyű / 10 közepes / 30 nehéz, arány 1 : 1 : 3). Az „Új feladatsor” gombbal új változatokat kapsz; az egyes feladatok mellett is van újragenerálás.
 - **ZH / vizsga szimulátor**: ZH1, ZH2, vizsga és gyors gyakorlás, időlimittel és jegybecsléssel.
+- **Napi küldetés**: 5 vegyes feladat naponta, kb. öt perc. A sorozat a megoldott napokat számolja, heti egy fagyasztóval.
+- **Hibafüzet**: minden hibás válasz visszatér 1, 3, 7, majd 21 nap múlva. Az esedékes ismétlések száma a bal oldalon látszik.
+- **Vegyes menet**: 10 feladat témacímkék nélkül — a módszer felismerése a feladat.
+- **Hibavadászat**: 22 feladat, mindegyikben három állítás és pontosan egy hamis.
+- **Magyarázd el**: minden fejezet végén két-három mondatban elmondhatod a fő ötletet; a szöveg mentődik.
+- **Haladás**: ZH-felkészültség részenként és heti riport (válaszok, pontosság, ismétlések, gyenge témák).
 - **Képletgyűjtemény**: 94 képlet, kereshető.
 - **Nyelv**: a jobb felső `EN` / `HU` gombbal válthatsz. Az angol mód a felületet, a fejezetcímeket, a leírásokat és a fejezet-összefoglalókat fordítja; a részletes magyar elmélet és a feladatok magyarul maradnak, ezt a fejezet jelzi.
 - **Keresés**: `Ctrl + K` (vagy `/`), majd gépelj.
