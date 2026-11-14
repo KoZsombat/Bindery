@@ -1,6 +1,6 @@
 ---
 name: learning-book-site
-description: Build a self-contained, bilingual (EN/HU), book-style preparation or full-course learning website, with supplied files or from research. Covers source discovery, prerequisite-first curriculum mapping, content schema, KaTeX rendering, checkable exercises, rerollable 50-item practice banks (10 easy / 10 medium / 30 hard), chapter tests, timed exam simulators, progress tracking, search, and verification. Works for a university semester or a single topic such as JavaScript classes.
+description: Build a self-contained, bilingual (EN/HU), book-style preparation or full-course learning website, with supplied files or from research. Covers source discovery, prerequisite-first curriculum mapping, content schema, KaTeX rendering, checkable exercises, rerollable 50-item practice banks (10 easy / 10 medium / 30 hard), chapter tests, timed exam simulators, daily quests with a solve-streak, a Leitner error notebook, interleaved mixed runs, error hunts, teach-back boxes, exam-readiness scoring, progress tracking, search, and verification. Works for a university semester or a single topic such as JavaScript classes.
 ---
 
 # Learning Book Site
@@ -116,6 +116,7 @@ site/
     js/generators.js    # deterministic exercise bank
     js/demos.js         # interactive SVG demos
     js/features.js      # practice / test / exam runners
+    js/fun.js           # daily quest, notebook, mixed run, hunts, teach-back, readiness
     js/app.js           # router, views, progress, search
   content/
     _helpers.js         # content authoring helpers
@@ -129,11 +130,12 @@ site/
 ```
 
 Key decisions:
-- **Hash router**: `#/`, `#/section/:sid`, `#/chapter/:sid/:cid`, `#/practice/:cat`, `#/exam/:mode`, `#/test/:sid/:cid`, `#/formulas`, `#/videos`, `#/resources`. No server rewrites needed.
+- **Hash router**: `#/`, `#/section/:sid`, `#/chapter/:sid/:cid`, `#/practice/:cat`, `#/exam/:mode`, `#/test/:sid/:cid`, `#/formulas`, `#/videos`, `#/resources`, plus the retention routes `#/daily`, `#/review`, `#/mixed`, `#/hunt[/:id]`, `#/progress`. No server rewrites needed.
 - **Content as JS data**, not Markdown: gives structure (theory blocks, examples, exercises) and avoids a markdown parser.
 - **Vendor KaTeX locally** so the site works offline. Use `auto-render` with `$...$` and `$$...$$`.
 - **localStorage** for progress, theme, test history. Namespace the key (`appname.v1`).
 - **No framework**. Vanilla JS keeps the site portable and fast.
+- **Retention layer as one optional module.** `fun.js` adds routes and bookkeeping but owns no content: it reads tracking data from the DOM (see §6.9) and stores everything under one `MB.app.state.fun` key. `app.js` calls its hooks only when present, so deleting the module leaves a working site.
 
 ## 5. Content model
 
@@ -253,9 +255,118 @@ Generator design:
 - Grade thresholds: 40 / 55 / 65 / 80%.
 - Show a clear disclaimer: simulator ≠ official exam.
 
+### 6.5 Daily quest (the habit loop)
+
+Five mixed items per day, one from five different core practice categories:
+
+- Seed the set by date: `hash32('daily:' + YYYY-MM-DD)`. The same date always yields the same five items, so a reload is not a reroll.
+- Shuffle the core practice categories and take five distinct ones; assign levels `1, 1, 2, 2, 3`.
+- Hide the topic until the answer is checked. The point is recognising which method applies, not following a label.
+- Reset the answer map when the date changes; store completion dates in a capped list (120 is plenty).
+- Lock each item once it is answered correctly; at 5/5 show a toast and record the day.
+
+**Streak rules** (any correct answer counts, not only the daily quest):
+
+| Gap since last active day | Effect |
+|---|---|
+| 0 (same day) | no change |
+| 1 day | `count += 1` |
+| 2 days | consume the weekly freeze, then `count += 1` (reset to 1 if already spent) |
+| > 2 days | reset to 1 |
+
+- One freeze per ISO week, replenished automatically; show it as `freeze: 1/1` and tell the learner when it is spent.
+- Track `best` alongside `count`; never let the streak display become a source of anxiety. A missed day is recoverable.
+- The first correct answer of the day calls `markActive()`; show a toast with the new count.
+
+### 6.6 Error notebook (Leitner queue)
+
+Every missed auto-checkable item returns on a spaced schedule. This is the part that turns a practice site into a study system.
+
+- On a wrong answer, add the item with `box = 0` and `due = tomorrow`.
+- On a correct answer, promote: `box = min(4, box + 1)`. Due dates follow the intervals **1 / 3 / 7 / 21 days** (`LEITNER = [1, 3, 7, 21]`).
+- At `box >= 4`, mark `mastered`, set `due = null`, and drop it from the queue. A later miss resets to box 0 and increments `lapses`.
+- Identify an item by `hash(topic + '|' + question)`, not by DOM index or route. The same question missed in a chapter, a test and the practice bank is one notebook entry.
+- Only schedule checkable items: skip `proof` and `open` types.
+- Cap the notebook (300 entries). Trim mastered items first, then the oldest due dates.
+- Review view: due items only (`due <= today`), sorted by due date then added date, capped at 25 visible with a note that the rest come next round. Offer a delete button per entry.
+- After each review answer, show the next due date on success and "returns tomorrow" on failure. Do not demand an immediate retry; the schedule is the point.
+
+### 6.7 Interleaved mixed run and error hunts
+
+Both attack the "I know it when the chapter title tells me" illusion.
+
+**Mixed run**
+- 10 items, cycling through the core categories, levels `1,1,1,2,2,2,2,3,3,3`.
+- Hide the topic label until the item is answered.
+- Persist per-run answers and a seed; "New run" increments the seed and clears the answers.
+- Score as `correct / 10`.
+
+**Error hunts**
+- Author 12–25 static items: a short problem, **three statements, exactly one false**.
+- The false statement must be a *plausible* misconception (chain rule omitted, `\ln(a+b)` split, harmonic series declared convergent), never a typo or a trivial arithmetic slip.
+- Clicking a true statement marks it correct but does not solve the hunt; clicking the false one locks the item and reveals an explanation naming the rule plus a counterexample.
+- Group by section, show a per-topic solved count, and feed completion into the log and streak.
+- Validate by construction that each item has exactly one false statement; do not generate hunts randomly.
+
+### 6.8 Teach-back box (Feynman test)
+
+Every chapter ends with a short explanation prompt. It is not graded.
+
+- Textarea for 2–3 sentences, debounced autosave (~700 ms), and an explicit Save button for reassurance.
+- Word counter; an empty textarea deletes the saved entry.
+- Three self-check boxes: named the definition, stated a condition or exception, gave an example or counterexample.
+- Collapsible model answer assembled from the chapter's existing fields: `lead`, first `why`, `when`, plus the names of formulas whose `ref` points at this chapter. No new content schema.
+- Store under `teach[sectionId + '/' + chapterId] = { text, checks, date }`.
+- Surface unfinished chapters on the progress page; completion is a diagnostic, not a gate.
+
+### 6.9 Exam readiness and the weekly recap
+
+A single percentage that is honest about missing data.
+
+**Per-section readiness** is the weighted mean of the components that exist:
+
+| Component | Weight | Available when |
+|---|---|---|
+| exercise coverage (`solved / checkable`) | 0.45 | the section has exercises |
+| answer accuracy | 0.30 | at least 3 logged answers for the section |
+| review health (`1 - overdue / open notebook items`) | 0.15 | the section has notebook entries |
+| best test score | 0.30 | a test with `section` recorded exists |
+
+- Divide by the sum of present weights (renormalise). If no component exists, return `null` and render `—`, never `0%`.
+- Labels: `< 35%` starting, `< 55%` building, `< 75%` solid, otherwise exam-ready.
+- Aggregate overall readiness over **core** sections only; show optional sections as separate groups so preview material never drags the score down.
+- Record `section` (and a `tag` such as `test` or `exam`) whenever a test or exam is submitted. Without it the test component silently never appears.
+
+**Weekly recap** (last 7 days): answers and accuracy, active days, successful reviews, daily quests completed, explanations saved, hunts solved, and the weakest topic with at least 3 answers. Derive it from the same append-only log; do not store counters that can drift.
+
+**Home dashboard**: one card each for the daily quest (with streak), the error notebook (due count), and readiness, plus a next-action link. Keep the cards terse; the detail lives on `#/progress`.
+
+### 6.10 Wiring the retention layer
+
+Keep the tracker decoupled from the renderer: put the data on the exercise node, and give the tracker three hooks.
+
+```html
+<div class="ex" data-kind="chapter|practice|daily|mixed|review"
+     data-topic="sectionId" data-funid="optional-unique-key"
+     data-q="..." data-ans="..." data-type="number|expr|text|choice"
+     data-alt="[...]" data-choices="[...]"
+     data-solution="..." data-exhint="..." data-level="2">
+```
+
+- Retention views also need `data-idx` (daily and mixed answers are keyed by position in the day/run) and `data-review-id` (the notebook key) on their nodes.
+- Notebook identity is derived, not stored in the DOM: `hash(topic + '|' + question)`. `data-funid` is only a convenience for view-local progress.
+- `MB.fun.answer(ex, ok, value)` after every single checked answer. It logs the first attempt only, adds misses to the notebook, schedules successes, advances the streak, and updates the chrome.
+- `MB.fun.batch(results, kind, section)` once after a chapter test or exam submits, with `{ it, ok }` per item. Runner items must carry `topic`, `cat` and `choices` through to the result.
+- `MB.fun.afterRender(route)` after each route render to refresh the streak chip, sidebar badges and due count.
+- Guard every call (`MB.fun && MB.fun.answer(...)`) so the site still works if the module is removed.
+- Store all state under one object (`MB.app.state.fun`): `review`, `log`, `hunts`, `teach`, `dailyDone`, `streak`, `daily`, `mixed`. Cap the log at ~800 entries.
+- Load order: `util → generators → demos → features → fun → app`.
+
 ## 7. UX features worth building
 
-- **Progress**: mark chapter read; count solved exercises; overall bar in sidebar.
+- **Progress**: mark chapter read; count solved exercises; overall bar in sidebar; readiness dashboard (see §6.9).
+- **Daily practice group**: sidebar links for the daily quest, error notebook, mixed run, error hunts and progress, with a due-count badge.
+- **Streak chip**: one compact flame + count in the topbar, linking to the daily quest; render the zero state muted rather than hiding it.
 - **Search**: `Ctrl/Cmd+K`; index sections, chapters, theory text, formula names, videos; keyboard navigation.
 - **Formula sheet**: searchable, grouped by category, each formula links back to its chapter.
 - **Video library**: lazy-load iframes on click; always offer a YouTube search link as fallback.
@@ -283,6 +394,15 @@ Do these before declaring done:
    - Progress persists after reload.
    - Search returns results and navigates.
    - Videos load only on click.
+   - Daily quest: reloading on the same date shows the same five items; answering all five records the day and advances the streak once.
+   - Streak: a one-day gap increments, a two-day gap consumes the weekly freeze (only once per week), a longer gap resets to 1.
+   - Error notebook: a wrong answer is due tomorrow; a correct review moves through 1 → 3 → 7 → 21 days; box 4 marks it mastered and removes it; a later miss resets to box 0.
+   - Mixed run hides topics until answered; "New run" yields a different set and clears the score.
+   - Error hunts: every item has exactly one false statement; clicking a true one does not solve it; the explanation appears only after the false one.
+   - Teach-back text and checkboxes survive reload; clearing the text deletes the entry.
+   - Readiness: missing components show `—`; with coverage alone the value equals coverage; test scores only appear when a test recorded its section.
+   - Week recap counts only the last seven days.
+   - All new chrome (daily quest, notebook, mixed run, error hunt, progress, explain it) switches language with the toggle.
 4. Test mobile width (360 px) and print preview.
 5. Check console for errors on every route.
 6. Verify content accuracy against the source exam papers for at least 3 topics.
@@ -298,6 +418,7 @@ The same architecture works for "JavaScript classes" in a weekend:
 - One 10-question test.
 - No exam simulator, no video page (or 3 links).
 - Same checker, progress, search, formula sheet (syntax cheat sheet instead of formulas).
+- Keep the daily quest and error notebook even at this size: five generated items per day and a one-tap review queue cost little and are the difference between a demo and a habit.
 
 Keep the content schema and generator contract; delete unused pages from the nav.
 
@@ -312,6 +433,12 @@ Keep the content schema and generator contract; delete unused pages from the nav
 - **Fake official branding.** Use the institution's colours and a neutral text mark, not its logo.
 - **No mobile handling.** The sidebar and math overflow are the usual breakages.
 - **Progress that lives only in memory.** Persist to localStorage.
+- **A streak with no recovery.** One missed day must not erase months; ship a weekly freeze and show when it is consumed.
+- **Readiness that counts missing data as zero.** Renormalise over present components and show `—`; a new learner should not start at 0%.
+- **A daily quest the learner can topic-pick.** Interleaving is the feature; hide the category until the answer is checked.
+- **Tracking logic spread across the renderer.** Put the data on the node and use one answer hook (§6.10), or every new view silently loses progress.
+- **Error hunts with a trivial or negative false statement.** The distractor must be a real misconception the learner is likely to hold.
+- **Teach-back that is graded.** It is a self-diagnostic; grading it turns reflection into performance.
 
 ## 11. Kickoff prompt template
 
@@ -340,6 +467,12 @@ Practice: 50 generated exercises per category (10 easy / 10 medium / 30 hard,
 show 1:1:3 and 10/10/30), deterministic PRNG, reroll all and reroll one.
 
 Tests: 8-question/10-minute chapter test; timed ZH/vizsga simulators with grade thresholds.
+
+Retention: date-seeded daily quest (5 items, levels 1/1/2/2/3, topic hidden until answered),
+solve-streak with one weekly freeze, Leitner error notebook (1/3/7/21 days, mastered at box 4),
+interleaved 10-item mixed run, three-statement error hunts with exactly one false statement,
+per-chapter teach-back box with autosave, and per-section exam readiness
+(45% coverage + 30% accuracy + 15% review health + 30% best test, renormalised).
 
 Also build: searchable formula sheet, video library, resources page, progress dashboard.
 
@@ -382,6 +515,7 @@ output_dir/
   assets/js/util.js
   assets/js/app.js
   assets/js/features.js      # practice / chapter test / exam runners
+  assets/js/fun.js           # daily quest, notebook, mixed run, hunts, teach-back, readiness
   assets/js/generators.js    # deterministic 50-item banks
   assets/js/demos.js
   content/_helpers.js
@@ -400,8 +534,9 @@ output_dir/
 4. **Content** — one JS file per part; each chapter follows the schema in §5.
 5. **Practice** — at least one generator category per part; 50 items (10/10/30) and reroll.
 6. **Tests** — chapter test + timed exam simulator with grade thresholds.
-7. **Verify** — see §8 and the gates below.
-8. **Package** — README, launchers, ZIP; test the ZIP in a fresh folder.
+7. **Retention** — daily quest, Leitner notebook, mixed run, error hunts, teach-back, readiness dashboard; wire the answer hook from §6.10.
+8. **Verify** — see §8 and the gates below.
+9. **Package** — README, launchers, ZIP; test the ZIP in a fresh folder.
 
 ### Tool fallbacks
 
@@ -422,7 +557,12 @@ output_dir/
 7. Search returns at least one result for a known term.
 8. Progress persists after reload.
 9. Mobile width (360 px) and print preview do not overflow.
-10. `index.html` opens directly from `file://` without console errors.
+10. Daily quest is date-stable, completes at 5/5, and advances the streak once per day.
+11. Streak freeze is consumed at most once per ISO week; a longer gap resets cleanly.
+12. Notebook promotes 1/3/7/21 and retires mastered items; a later miss resets to box 0.
+13. Readiness renormalises over present components and shows `—` with no data.
+14. Every error hunt has exactly one false statement and validates it by construction.
+15. `index.html` opens directly from `file://` without console errors.
 
 ### Non-negotiables
 
@@ -431,6 +571,7 @@ output_dir/
 - No official logo misuse; colours + neutral text mark.
 - No content copied wholesale from copyrighted books; summarize and link.
 - No hidden telemetry, accounts, or network calls beyond optional video embeds.
+- No dark-pattern engagement: no loss-framed streak pressure, no punitive reset for one missed day, no fabricated social proof.
 
 
 ## 14. Preparation-first scoping (basics, not the whole course)
@@ -664,6 +805,8 @@ Then render with `field[lang]`. For a large existing Hungarian corpus, a separat
 - The default language matches the audience; the toggle is always visible.
 - Switching language must not reload the page or lose progress.
 - Navigation, breadcrumbs, section titles, chapter titles and buttons must switch together. No mixed chrome.
+- Translate the retention chrome explicitly: *Napi küldetés / Daily quest*, *Hibafüzet / Error notebook*, *Vegyes menet / Mixed run*, *Hibavadászat / Error hunt*, *Haladás / Progress*, *Magyarázd el / Explain it*, plus streak, freeze, due, mastered and the readiness labels. These strings are new UI, so they are easy to forget in the dictionary.
+- Keep dates, day counts and percentages locale-neutral or format them per language; do not let a translated label break the stored keys (`sectionId/chapterId`).
 - Hungarian course terms may stay in parentheses in English mode: *középszintű érettségi*, *ZH*, *vizsga*.
 - Do not translate exam names, dates, official course codes or people’s names.
 - Keep answer hiding consistent in both languages: the correct answer appears only after “Show answer” / “Megoldás mutatása”.
