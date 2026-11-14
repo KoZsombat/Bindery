@@ -1038,6 +1038,10 @@ downloads. The creator stores one JSON book per project and serves it at a route
   validate structurally on the server.
 - **One static renderer.** A small `index.html` + `app.js` + `styles.css` reads `site.json`.
   Do not generate a separate app per site and do not run a container per site.
+- **Match the reference shell.** The rendered site must use the same design tokens and layout as the
+  example: navy/gold topbar, paper background, serif reading column, fixed contents sidebar, chapter
+  opener, callouts and card rhythm. Do not ship a generic sans-serif template or a second visual
+  language. Keep the renderer CSS and the example tokens in sync when either changes.
 - **Routed, not downloadable.** Serve at `/s/<slug>/` and optionally at `<slug>.<SITE_DOMAIN>`.
   Never expose a ZIP, archive, attachment or download button. The learner opens the URL.
 - **Auth and quota belong to the creator.** Only authenticated users may open the builder, the

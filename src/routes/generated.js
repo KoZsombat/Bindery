@@ -29,7 +29,7 @@ async function serveGenerated(req, res, slug, sub) {
     return res.sendFile(siteJsonPath(slug));
   }
   if (clean === 'app.js' || clean === 'styles.css') {
-    return res.sendFile(path.join(TEMPLATE_DIR, clean), { headers: { 'Cache-Control': 'private, max-age=86400, immutable' } });
+    return res.sendFile(path.join(TEMPLATE_DIR, clean), { headers: { 'Cache-Control': 'private, no-cache' } });
   }
   res.status(404).send('Not found.');
 }

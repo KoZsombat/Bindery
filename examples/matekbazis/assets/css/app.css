@@ -858,7 +858,7 @@ html[data-theme="dark"] .week-stats b { color: var(--bme-gold-2); }
    Coach: motivation-aware launchpad
    ============================================================ */
 .coach-strip{display:grid;grid-template-columns:repeat(3,1fr);border:1px solid var(--line);background:var(--surface);margin:0 0 22px;box-shadow:var(--shadow-sm)}
-.coach-card{display:flex;flex-direction:column;gap:5px;padding:18px 20px;color:var(--ink-2);text-decoration:none;border-right:1px solid var(--line);position:relative;min-height:150px;transition:.18s var(--ease)}
+.coach-card{display:flex;flex-direction:column;gap:6px;padding:20px 22px;color:var(--ink-2);text-decoration:none;border-right:1px solid var(--line);position:relative;min-height:150px;transition:.18s var(--ease)}
 .coach-card:last-child{border-right:0}
 .coach-card:hover{background:var(--surface-2);text-decoration:none;transform:translateY(-2px)}
 .coach-card.coach-primary{background:linear-gradient(145deg,var(--bme-navy),var(--bme-navy-2));color:#fff;border-right:1px solid var(--bme-navy)}
@@ -873,7 +873,7 @@ html[data-theme="dark"] .week-stats b { color: var(--bme-gold-2); }
 .coach-primary .coach-go{color:var(--bme-gold-2)}
 
 .coach-hero{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(220px,.7fr);background:linear-gradient(120deg,var(--bme-navy-3),var(--bme-navy) 55%,var(--bme-navy-2));color:#fff;border-top:4px solid var(--bme-gold);box-shadow:var(--shadow);margin:0 0 20px}
-.coach-hero-main{padding:25px 28px}
+.coach-hero-main{padding:clamp(24px,3.2vw,34px)}
 .coach-hero .eyebrow{display:inline-flex;align-items:center;gap:9px;font-family:var(--font-ui);font-size:.64rem;letter-spacing:.16em;text-transform:uppercase;color:var(--bme-gold-2);font-weight:700;margin-bottom:10px}
 .coach-hero .eyebrow::before{content:"";width:20px;height:2px;background:var(--bme-gold-2)}
 .coach-hero h2{font-size:clamp(1.55rem,3vw,2.25rem);line-height:1.1;color:#fff;margin:0 0 8px}
@@ -887,14 +887,14 @@ html[data-theme="dark"] .week-stats b { color: var(--bme-gold-2); }
 .coach-stats .stat b{color:var(--bme-gold-2);font-size:1.5rem}
 .coach-stats .stat span{color:#b9c9da}
 .coach-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px}
-.coach-panel{border:1px solid var(--line);background:var(--surface);padding:18px 20px;box-shadow:var(--shadow-sm)}
+.coach-panel{border:1px solid var(--line);background:var(--surface);padding:22px 24px;box-shadow:var(--shadow-sm)}
 .coach-panel h3{font-family:var(--font-body);font-size:1.08rem;margin:0 0 10px;color:var(--bme-navy)}
 .coach-label{display:block;font-family:var(--font-ui);font-size:.62rem;letter-spacing:.11em;text-transform:uppercase;color:var(--muted);font-weight:800;margin:10px 0 5px}
 .coach-panel input,.coach-panel select{width:100%;padding:8px 10px;border:1px solid var(--line);background:var(--paper);font:13px var(--font-ui);color:var(--ink)}
 .coach-measure{margin-top:13px}.cm-top{display:flex;justify-content:space-between;font:10px var(--font-ui);letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:5px}.cm-top b{color:var(--bme-navy)}
 .coach-note{font-family:var(--font-ui);font-size:.76rem;line-height:1.55;color:var(--muted);margin:10px 0 0}
 .coach-actions-list{display:flex;flex-direction:column;border-top:1px solid var(--line)}
-.coach-action{display:flex;align-items:center;gap:10px;padding:11px 0;border-bottom:1px solid var(--line-2);color:var(--ink-2);text-decoration:none}
+.coach-action{display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--line-2);color:var(--ink-2);text-decoration:none}
 .coach-action:hover{text-decoration:none;color:var(--bme-navy)}
 .coach-action span{font-family:var(--font-ui);font-size:.8rem;font-weight:700;flex:1}
 .coach-action small{font:10px var(--font-ui);color:var(--muted);text-align:right}
@@ -905,7 +905,7 @@ html[data-theme="dark"] .week-stats b { color: var(--bme-gold-2); }
 .dot{width:9px;height:9px;border-radius:50%;display:inline-block;background:var(--line)}
 .dot.new{background:#aab4c0}.dot.weak{background:var(--bad)}.dot.building{background:var(--warn)}.dot.solid{background:var(--bme-blue)}.dot.ready{background:var(--ok)}
 .map-board{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
-.map-node{border:1px solid var(--line);border-top:3px solid var(--line);background:var(--surface);padding:13px 14px;min-height:190px;display:flex;flex-direction:column;box-shadow:var(--shadow-sm)}
+.map-node{border:1px solid var(--line);border-top:3px solid var(--line);background:var(--surface);padding:16px 17px;min-height:190px;display:flex;flex-direction:column;box-shadow:var(--shadow-sm)}
 .map-node.new{border-top-color:#aab4c0}.map-node.weak{border-top-color:var(--bad)}.map-node.building{border-top-color:var(--warn)}.map-node.solid{border-top-color:var(--bme-blue)}.map-node.ready{border-top-color:var(--ok)}
 .map-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:5px}
 .map-num{font:800 10px var(--font-ui);letter-spacing:.1em;color:var(--muted)}
@@ -913,7 +913,7 @@ html[data-theme="dark"] .week-stats b { color: var(--bme-gold-2); }
 .map-link{color:var(--ink);text-decoration:none}.map-link:hover{text-decoration:none;color:var(--bme-navy)}
 .map-link h3{font-family:var(--font-body);font-size:1rem;margin:0 0 3px}.map-link p{font:11px/1.4 var(--font-ui);color:var(--muted);margin:0 0 9px}
 .map-prereq{font:10px/1.45 var(--font-ui);color:var(--muted);margin-top:8px}.map-prereq b{color:var(--ink-2)}
-.map-actions{display:flex;gap:7px;margin-top:auto;padding-top:9px}.map-actions a{font:10px var(--font-ui);color:var(--bme-blue);border-bottom:1px solid transparent}.map-actions a:hover{text-decoration:none;border-bottom-color:var(--bme-gold)}
+.map-actions{display:flex;gap:9px;margin-top:auto;padding-top:10px}.map-actions a{font:10px var(--font-ui);color:var(--bme-blue);border-bottom:1px solid transparent}.map-actions a:hover{text-decoration:none;border-bottom-color:var(--bme-gold)}
 .coach-inline{display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap;border:1px solid var(--line);border-left:3px solid var(--bme-gold);background:var(--surface-2);padding:11px 13px;margin:0 0 14px;font-family:var(--font-ui)}
 .coach-inline b{font-size:.76rem;color:var(--bme-navy)}.coach-inline span{display:block;font-size:.7rem;color:var(--muted);margin-top:2px}
 .coach-inline-actions{display:flex;gap:6px;flex-wrap:wrap}

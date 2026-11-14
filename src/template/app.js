@@ -44,6 +44,8 @@
 
   function renderTOC() {
     const nav = $('#toc');
+    const count = $('#sideCount');
+    if (count) count.textContent = readCount() + ' / ' + total();
     nav.innerHTML = site.sections.map(s => {
       const done = s.chapters.filter(c => progress[s.id + '/' + c.id]).length;
       return '<div class="toc-sec"><div class="toc-head"><b>' + esc(s.num) + '</b> ' + esc(biv(s.title)) +
@@ -72,8 +74,11 @@
     const s = site.sections.find(x => x.id === sid);
     if (!s) return renderHome();
     current = null;
+    const done = s.chapters.filter(c => progress[s.id + '/' + c.id]).length;
+    const mins = s.chapters.reduce((n, c) => n + (Number(c.minutes) || 20), 0);
     $('#main').innerHTML = '<div class="kicker">' + esc(s.num) + '. ' + T('rész', 'PART') + '</div><h1>' + esc(biv(s.title)) + '</h1>' +
       '<p class="lead">' + esc(biv(s.subtitle)) + '</p><p>' + esc(biv(s.intro)) + '</p>' +
+      '<div class="section-meta"><span><b>' + s.chapters.length + '</b> ' + T('fejezet', 'chapters') + '</span><span><b>' + done + '</b> ' + T('elolvasva', 'read') + '</span><span><b>' + mins + '</b> ' + T('perc', 'min') + '</span></div>' +
       '<div class="chapter-list">' + s.chapters.map(c => '<a class="chapter-row" href="#/chapter/' + encodeURIComponent(s.id) + '/' + encodeURIComponent(c.id) + '">' +
         '<span class="n">' + esc(c.num) + '</span><div><h3>' + esc(biv(c.title)) + '</h3><p>' + esc(biv(c.lead)).slice(0, 150) + '…</p></div><span>' + (progress[s.id + '/' + c.id] ? '✓' : '→') + '</span></a>').join('') + '</div>';
     saveProgress();
@@ -86,7 +91,8 @@
     if (type === 'list') return '<div class="callout note"><div class="ct">' + esc(biv(t.title, T('Lista', 'List'))) + '</div><ul>' + bivArr(t.items).map(x => '<li>' + esc(x) + '</li>').join('') + '</ul></div>';
     const labels = { def: T('Definíció', 'Definition'), thm: T('Tétel', 'Theorem'), note: T('Megjegyzés', 'Note'), warn: T('Vigyázat', 'Warning'), p: T('Szöveg', 'Note') };
     const cls = type === 'warn' ? 'warn' : type === 'def' ? 'def' : type === 'thm' ? 'thm' : 'note';
-    return '<div class="callout ' + cls + '"><div class="ct">' + (labels[type] || labels.p) + (biv(t.title) ? ' · ' + esc(biv(t.title)) : '') + '</div><p>' + esc(biv(t.body)) + '</p></div>';
+    const label = labels[type] || labels.p, heading = biv(t.title);
+    return '<div class="callout ' + cls + '"><div class="ct">' + label + (heading && heading !== label ? ' · ' + esc(heading) : '') + '</div><p>' + esc(biv(t.body)) + '</p></div>';
   }
 
   function exerciseHTML(q, i) {
@@ -202,10 +208,14 @@
   function setChrome() {
     if (!site) return;
     $('#siteTitle').textContent = biv(site.title);
-    $('#siteSubtitle').textContent = biv(site.subtitle);
+    $('#siteSubtitle').textContent = biv(site.subtitle) || T('tanulókönyv', 'learning book');
     $('#footTitle').textContent = biv(site.title);
     document.title = biv(site.title) + ' — Learning book';
     document.documentElement.lang = lang;
+    const tocLabel = $('#tocLabel');
+    if (tocLabel) tocLabel.textContent = T('Tartalomjegyzék', 'Contents');
+    const footNote = $('#footNote');
+    if (footNote) footNote.textContent = T('a Learning Book Builderrel készült', 'generated with Learning Book Builder');
     $('#langBtn').textContent = lang === 'en' ? 'HU' : 'EN';
     $('#searchInput').placeholder = T('Keresés…', 'Search…');
   }
