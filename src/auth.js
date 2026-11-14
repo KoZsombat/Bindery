@@ -3,7 +3,7 @@ import { admin } from 'better-auth/plugins';
 import { getMigrations } from 'better-auth/db/migration';
 import {
   BETTER_AUTH_URL, BETTER_AUTH_SECRET, COOKIE_DOMAIN,
-  ADMIN_EMAIL, ADMIN_PASSWORD, ADMIN_DAILY_LIMIT, DEV_LOGIN_HINT
+  ADMIN_EMAIL, ADMIN_PASSWORD, ADMIN_DAILY_LIMIT, DEV_LOGIN_HINT, DEV, PORT
 } from './config.js';
 import { sqlite, ensureProfile, now } from './db/index.js';
 
@@ -11,7 +11,7 @@ export const auth = betterAuth({
   database: sqlite,
   secret: BETTER_AUTH_SECRET,
   baseURL: BETTER_AUTH_URL,
-  trustedOrigins: BETTER_AUTH_URL ? [BETTER_AUTH_URL] : [],
+  trustedOrigins: Array.from(new Set([BETTER_AUTH_URL, ...(DEV ? [`http://localhost:${PORT}`, `http://127.0.0.1:${PORT}`] : [])])).filter(Boolean),
   emailAndPassword: { enabled: true, disableSignUp: false },
   plugins: [admin()],
   advanced: COOKIE_DOMAIN ? { crossSubDomainCookies: { enabled: true, domain: COOKIE_DOMAIN } } : undefined

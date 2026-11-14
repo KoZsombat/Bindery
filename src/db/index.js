@@ -86,7 +86,7 @@ export function publicSite(s) {
     id: s.id, slug: s.slug, title: s.title, description: s.description,
     status: s.status, published: !!s.published, example: !!s.example,
     createdAt: s.created_at, updatedAt: s.updated_at, error: s.error,
-    url: siteUrl(s.slug), owner: s.owner_id,
+    url: s.example ? '/example/matekbazis/' : siteUrl(s.slug), owner: s.owner_id,
     reusable: !s.example && fs.existsSync(siteJsonPath(s.slug))
   };
 }

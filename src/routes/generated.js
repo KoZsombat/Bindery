@@ -12,6 +12,7 @@ async function serveGenerated(req, res, slug, sub) {
   if (!req.user) return res.redirect(BETTER_AUTH_URL + '/login?next=' + encodeURIComponent(req.originalUrl || '/'));
   const site = sqlite.prepare('SELECT * FROM sites WHERE slug=?').get(slug);
   if (!site || site.status !== 'ready') return res.status(404).send('This site is not ready.');
+  if (site.example) return res.redirect('/example/matekbazis/');
   if (!site.published && site.owner_id !== req.user.id && req.user.role !== 'admin') return res.status(404).send('This site is private.');
   const clean = String(sub || '').replace(/^\/+/, '');
   if (!clean) {
