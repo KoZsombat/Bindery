@@ -9,24 +9,24 @@
 <link rel="stylesheet" href="assets/css/app.css">
 </head>
 <body>
-<a class="skip" href="#main">Ugrás a tartalomra</a>
+<a class="skip" href="#main" data-i18n="Ugrás a tartalomra">Ugrás a tartalomra</a>
 
 <div id="app">
-  <aside class="sidebar" id="sidebar" aria-label="Fő navigáció">
-    <a class="brand" href="#/" aria-label="MatekBázis kezdőlap">
+  <aside class="sidebar" id="sidebar" aria-label="Fő navigáció" data-i18n-aria-label="Fő navigáció">
+    <a class="brand" href="#/" aria-label="MatekBázis kezdőlap" data-i18n-aria-label="MatekBázis kezdőlap">
       <span class="brand-mark" aria-hidden="true">
         <svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M5 26V9l8 10 8-10v17"/><path d="M25 9v17"/><path d="M21 9h8"/>
         </svg>
       </span>
       <span class="brand-text">
-        <span class="brand-kicker">BME VIK · Mérnökinformatikus</span>
+        <span class="brand-kicker" data-i18n="BME VIK · Mérnökinformatikus">BME VIK · Mérnökinformatikus</span>
         <b>MatekBázis</b>
         <small data-i18n="Az első félév alapjai">Az első félév alapjai</small>
       </span>
     </a>
 
-    <div class="side-progress" title="Összesített haladás">
+    <div class="side-progress" title="Összesített haladás" data-i18n-title="Összesített haladás">
       <div class="side-progress-top"><span data-i18n="Olvasási haladás">Olvasási haladás</span><b id="sidePct">0%</b></div>
       <div class="bar"><i id="sideBar" style="width:0%"></i></div>
     </div>
@@ -44,11 +44,11 @@
     </div>
 
     <div class="side-foot">
-      <a href="#/formulas" class="side-link" data-nav="formulas"><span class="ico" data-icon="sigma"></span>Képletgyűjtemény</a>
-      <a href="#/videos" class="side-link" data-nav="videos"><span class="ico" data-icon="play"></span>Videók</a>
-      <a href="#/practice" class="side-link" data-nav="practice"><span class="ico" data-icon="dumbbell"></span>Feladatbank</a>
-      <a href="#/exam" class="side-link" data-nav="exam"><span class="ico" data-icon="clock"></span>ZH / vizsga szimulátor</a>
-      <a href="#/resources" class="side-link" data-nav="resources"><span class="ico" data-icon="file"></span>Forrásanyagok</a>
+      <a href="#/formulas" class="side-link" data-nav="formulas"><span class="ico" data-icon="sigma"></span><span data-i18n="Képletgyűjtemény">Képletgyűjtemény</span></a>
+      <a href="#/videos" class="side-link" data-nav="videos"><span class="ico" data-icon="play"></span><span data-i18n="Videók">Videók</span></a>
+      <a href="#/practice" class="side-link" data-nav="practice"><span class="ico" data-icon="dumbbell"></span><span data-i18n="Feladatbank">Feladatbank</span></a>
+      <a href="#/exam" class="side-link" data-nav="exam"><span class="ico" data-icon="clock"></span><span data-i18n="ZH / vizsga szimulátor">ZH / vizsga szimulátor</span></a>
+      <a href="#/resources" class="side-link" data-nav="resources"><span class="ico" data-icon="file"></span><span data-i18n="Forrásanyagok">Forrásanyagok</span></a>
     </div>
   </aside>
 
@@ -56,14 +56,14 @@
     <header class="topbar">
       <div class="crumbs" id="crumbs"></div>
       <div class="top-actions">
-        <button class="search-trigger" id="searchTrigger" aria-label="Keresés">
+        <button class="search-trigger" id="searchTrigger" aria-label="Keresés" data-i18n-aria-label="Keresés">
           <span class="ico" data-icon="search"></span>
           <span data-i18n="Keresés a tananyagban…">Keresés a tananyagban…</span>
           <kbd>Ctrl K</kbd>
         </button>
-        <a class="streak-chip" id="streakChip" href="#/daily" aria-label="Napi sorozat" title="Napi sorozat"><span class="ico" data-icon="flame"></span><b>0</b></a>
+        <a class="streak-chip" id="streakChip" href="#/daily" aria-label="Napi sorozat" title="Napi sorozat" data-i18n-aria-label="Napi sorozat" data-i18n-title="Napi sorozat"><span class="ico" data-icon="flame"></span><b>0</b></a>
         <button class="lang-btn" id="langBtn" aria-label="Nyelv / Language">EN</button>
-        <button class="icon-btn" id="themeBtn" aria-label="Világos / sötét téma">
+        <button class="icon-btn" id="themeBtn" aria-label="Világos / sötét téma" data-i18n-aria-label="Világos / sötét téma">
           <span class="ico" data-icon="sun"></span>
         </button>
       </div>
@@ -72,26 +72,26 @@
     <main id="main" tabindex="-1"></main>
 
     <footer class="footer">
-      <p>Felkészítő a BME VIK mérnökinformatikus első félévének alapjaihoz, az első év tananyagainak felhasználásával: Fritz–Kónya–Pataki–Tasnádi <i>Matematika 1</i>, az Analízis 1–2 jegyzetek, a 2025–2026-os zárthelyik és vizsgák, valamint a saját felkészítő jegyzeteid.</p>
-      <p class="muted">A tartalom tanulást segítő összefoglaló, nem hivatalos jegyzet. A számonkérés szintjét mindig az aktuális tárgyi követelmény és a tanszéki anyagok adják.</p>
+      <p><span data-i18n="Felkészítő a BME VIK mérnökinformatikus első félévének alapjaihoz, az első év tananyagainak felhasználásával: Fritz–Kónya–Pataki–Tasnádi">Felkészítő a BME VIK mérnökinformatikus első félévének alapjaihoz, az első év tananyagainak felhasználásával: Fritz–Kónya–Pataki–Tasnádi</span> <i>Matematika 1</i><span data-i18n=", az Analízis 1–2 jegyzetek, a 2025–2026-os zárthelyik és vizsgák, valamint a saját felkészítő jegyzeteid.">, az Analízis 1–2 jegyzetek, a 2025–2026-os zárthelyik és vizsgák, valamint a saját felkészítő jegyzeteid.</span></p>
+      <p class="muted" data-i18n="A tartalom tanulást segítő összefoglaló, nem hivatalos jegyzet. A számonkérés szintjét mindig az aktuális tárgyi követelmény és a tanszéki anyagok adják.">A tartalom tanulást segítő összefoglaló, nem hivatalos jegyzet. A számonkérés szintjét mindig az aktuális tárgyi követelmény és a tanszéki anyagok adják.</p>
     </footer>
   </div>
 </div>
 
-<button class="nav-fab" id="navFab" aria-label="Tartalomjegyzék megnyitása" aria-expanded="false">
+<button class="nav-fab" id="navFab" aria-label="Tartalomjegyzék megnyitása" data-i18n-aria-label="Tartalomjegyzék megnyitása" aria-expanded="false">
   <span class="ico" data-icon="menu"></span><span data-i18n="Tartalom">Tartalom</span>
 </button>
 
 <div class="scrim" id="scrim"></div>
 
-<div class="search-modal" id="searchModal" role="dialog" aria-modal="true" aria-label="Keresés">
+<div class="search-modal" id="searchModal" role="dialog" aria-modal="true" aria-label="Keresés" data-i18n-aria-label="Keresés">
   <div class="search-box">
     <span class="ico" data-icon="search"></span>
-    <input id="searchInput" type="search" data-i18n-placeholder="Keresés a tananyagban…" placeholder="Téma, fogalom, képlet, feladat…" autocomplete="off" spellcheck="false">
-    <button class="icon-btn" id="searchClose" aria-label="Bezárás"><span class="ico" data-icon="x"></span></button>
+    <input id="searchInput" type="search" data-i18n-placeholder="Téma, fogalom, képlet, feladat…" placeholder="Téma, fogalom, képlet, feladat…" autocomplete="off" spellcheck="false">
+    <button class="icon-btn" id="searchClose" aria-label="Bezárás" data-i18n-aria-label="Bezárás"><span class="ico" data-icon="x"></span></button>
   </div>
   <div class="search-results" id="searchResults"></div>
-  <div class="search-help"><kbd>↑</kbd><kbd>↓</kbd> választás <kbd>Enter</kbd> megnyitás <kbd>Esc</kbd> zárás</div>
+  <div class="search-help"><kbd>↑</kbd><kbd>↓</kbd> <span data-i18n="választás">választás</span> <kbd>Enter</kbd> <span data-i18n="megnyitás">megnyitás</span> <kbd>Esc</kbd> <span data-i18n="zárás">zárás</span></div>
 </div>
 
 <noscript><p style="padding:2rem">A tananyag megjelenítéséhez JavaScript szükséges.</p></noscript>
@@ -113,9 +113,24 @@
 <script src="content/11-diff-fourier.js"></script>
 <script src="content/12-linearis.js"></script>
 <script src="content/13-diszkret.js"></script>
+<script src="content/_en/01-alapok.js"></script>
+<script src="content/_en/02-logika.js"></script>
+<script src="content/_en/03-komplex.js"></script>
+<script src="content/_en/04-sorozatok.js"></script>
+<script src="content/_en/05-hatarertek.js"></script>
+<script src="content/_en/06-derivalas.js"></script>
+<script src="content/_en/07-integralas.js"></script>
+<script src="content/_en/08-sorok.js"></script>
+<script src="content/_en/09-taylor.js"></script>
+<script src="content/_en/10-tobbszoros.js"></script>
+<script src="content/_en/11-diff-fourier.js"></script>
+<script src="content/_en/12-linearis.js"></script>
+<script src="content/_en/13-diszkret.js"></script>
 <script src="content/_en.js"></script>
 <script src="content/_formulas.js"></script>
 <script src="content/_videos.js"></script>
+<script src="content/_en/_formulas.js"></script>
+<script src="content/_en/_videos.js"></script>
 <script src="assets/js/generators.js"></script>
 <script src="assets/js/demos.js"></script>
 <script src="assets/js/features.js"></script>

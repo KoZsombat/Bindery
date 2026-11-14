@@ -220,7 +220,6 @@
       'Kötelező mag': 'Core path',
       '07 után': 'After 07',
       'A felkészítő magja': 'The core of the preparation',
-      'Mielőtt elkezded': 'Before you start',
       'Ez a rész erre épül:': 'This part builds on:',
       'Ha valamelyik hiányos, előbb azt vedd át.': 'If any of them is shaky, review it first.',
       'Ez a rész nem szükséges az első hetekhez. Akkor vedd elő, ha a felkészítő magja már megy; különben előbb térj vissza az alapokhoz.': 'This part is not required for the first weeks. Open it after the core is solid; otherwise return to the foundations first.',
@@ -236,8 +235,120 @@
       'Ismétlés': 'Review',
       'Magyarázd el': 'Explain it',
       'esedékes ismétlés': 'reviews due',
-      'ZH-felkészültség': 'Exam readiness'
+      'ZH-felkészültség': 'Exam readiness',
+
+      /* --- static chrome (index.html) --- */
+      'Ugrás a tartalomra': 'Skip to content',
+      'BME VIK · Mérnökinformatikus': 'BME VIK · Computer Engineering',
+      'ZH / vizsga szimulátor': 'Exam simulator',
+      'Téma, fogalom, képlet, feladat…': 'Topic, concept, formula, exercise…',
+      'Fő navigáció': 'Main navigation',
+      'MatekBázis kezdőlap': 'MatekBázis home',
+      'Összesített haladás': 'Overall progress',
+      'Keresés': 'Search',
+      'Napi sorozat': 'Daily streak',
+      'Világos / sötét téma': 'Light / dark theme',
+      'Tartalomjegyzék megnyitása': 'Open table of contents',
+      'Bezárás': 'Close',
+      'választás': 'select',
+      'megnyitás': 'open',
+      'zárás': 'close',
+      'Felkészítő a BME VIK mérnökinformatikus első félévének alapjaihoz, az első év tananyagainak felhasználásával: Fritz–Kónya–Pataki–Tasnádi': 'Preparation for the first-semester foundations of BME VIK computer engineering, drawing on first-year course material: Fritz–Kónya–Pataki–Tasnádi',
+      ', az Analízis 1–2 jegyzetek, a 2025–2026-os zárthelyik és vizsgák, valamint a saját felkészítő jegyzeteid.': ', the Analysis 1–2 lecture notes, the 2025–2026 midterms and exams, and your own preparation notes.',
+      'A tartalom tanulást segítő összefoglaló, nem hivatalos jegyzet. A számonkérés szintjét mindig az aktuális tárgyi követelmény és a tanszéki anyagok adják.': 'The content is a study summary, not an official set of notes. The level of assessment is always set by the current course requirements and departmental material.',
+
+      /* --- chapter frame --- */
+      'a miért, a hogyan és a mikor': 'the why, the how and the when',
+      'Videó': 'Video',
+      'nézd meg, majd olvasd újra': 'watch it, then read it again',
+      'lépésről lépésre': 'step by step',
+      'Fejezetnavigáció': 'Chapter navigation',
+      'Ezt a fejezetet már elolvasottnak jelölted.': 'You have already marked this chapter as read.',
+      'Ha végigmentél a fejezeten, jelöld elolvasottnak — ez számít bele a haladásba.': 'If you have worked through the chapter, mark it as read — it counts towards your progress.',
+      'Írd be az eredményt, majd kattints az ellenőrzésre. A megoldás csak útmutató.': 'Type the answer, then click Check. The solution is only a guide.',
+
+      /* --- practice bank --- */
+      'Gyakorlás': 'Practice',
+      'Mind': 'All',
+      'Könnyű': 'Easy',
+      'Közepes': 'Medium',
+      'Nehéz': 'Hard',
+      'Új feladatsor': 'New set',
+      'Kategóriák': 'Categories',
+      'Eredmény': 'Result',
+      'Eredmény…': 'Result…',
+      'Megvan': 'Got it',
+      'Megvan, kész': 'Got it, done',
+      'Nem ment': "Didn't work",
+      'Válasz': 'Answer',
+      'Nehézség': 'Difficulty',
+      'Írd be a választ…': 'Type your answer…',
+      'Írd be az eredményt…': 'Type the result…',
+      'Új feladatsor generálva.': 'New set generated.',
+
+      /* --- exam / results --- */
+      'Indítás': 'Start',
+      'Teszt': 'Test',
+      'Fejezet teszt': 'Chapter test',
+      'Számonkérés': 'Assessment',
+      'Számonkérés · szimulátor': 'Assessment · simulator',
+      'Kiértékelés': 'Review',
+      'Vizsga': 'Final exam',
+      'Gyors': 'Quick',
+      'kérdés': 'question',
+      'helyes': 'correct',
+      'könnyű': 'easy',
+      'közepes': 'medium',
+      'nehéz': 'hard',
+      'Helyes:': 'Correct:',
+      'A te válaszod:': 'Your answer:',
+      'Jegyhatárok (40 / 55 / 65 / 80%):': 'Grade thresholds (40 / 55 / 65 / 80%):',
+      'Válasz mentve.': 'Answer saved.',
+      'Pontszám': 'Score',
+      'Idő': 'Time',
+      'Befejezés': 'Finish',
+
+      /* --- formulas / videos / resources --- */
+      'Függelék A': 'Appendix A',
+      'Függelék B': 'Appendix B',
+      'Függelék C': 'Appendix C',
+      'Keresés a képletekben…': 'Search the formulas…',
+      'Több videó a témában →': 'More videos on this topic →',
+      'Ajánlott videó': 'Recommended video',
+      'Jegyzetek és példatárak': 'Notes and exercise books',
+      'Zárthelyik és vizsgák': 'Midterms and exams',
+      'Honnan jönnek ezek?': 'Where do these come from?',
+      'Eredeti feladatsor / megoldás': 'Original paper / solution',
+
+      /* --- search / empty states --- */
+      'képlet': 'formula',
+      'Nincs találat. Próbálj rövidebb kulcsszót (pl. „lánc”, „sorozat”, „Moivre”).': 'No results. Try a shorter keyword (e.g. “chain”, “series”, “Moivre”).',
+      'Nincs esedékes ismétlés': 'No reviews due',
+      'Nincs mentve': 'Nothing saved yet'
     }
   };
   MB.i18n = { en: MB.en.ui };
+
+  /* aria-label / title of the static chrome: app.js translates text nodes only,
+     so attribute-only labels carry data-i18n-aria-label / data-i18n-title. */
+  const ATTR_PAIRS = [['data-i18n-aria-label', 'aria-label'], ['data-i18n-title', 'title']];
+  function applyAttrLabels() {
+    const dict = MB.i18n && MB.i18n.en;
+    if (!dict) return;
+    document.querySelectorAll('[data-i18n-aria-label],[data-i18n-title]').forEach(function (el) {
+      ATTR_PAIRS.forEach(function (pair) {
+        const key = el.getAttribute(pair[0]);
+        if (!key) return;
+        const store = 'data-hu-' + pair[1];
+        if (el.getAttribute(store) == null) el.setAttribute(store, el.getAttribute(pair[1]) || '');
+        el.setAttribute(pair[1], MB.lang === 'en' && dict[key] ? dict[key] : el.getAttribute(store));
+      });
+    });
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', applyAttrLabels);
+  else applyAttrLabels();
+  document.addEventListener('click', function (e) {
+    const t = e.target;
+    if (t && t.closest && t.closest('#langBtn')) setTimeout(applyAttrLabels, 0);
+  }, true);
 })();

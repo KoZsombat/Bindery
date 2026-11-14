@@ -65,8 +65,8 @@
     return a;
   }
   function sec(id) { return MB.sections.find(function (s) { return s.id === id; }); }
-  function secTitle(id) { const s = sec(id); return s ? s.title : id; }
-  function catTitle(id) { const c = MB.genCats.find(function (x) { return x.id === id; }); return c ? c.title : id; }
+  function secTitle(id) { const s = sec(id); return s ? MB.sTitle(s) : id; }
+  function catTitle(id) { const c = MB.genCats.find(function (x) { return x.id === id; }); return c ? (MB.lang === 'en' && c.titleEn ? c.titleEn : c.title) : id; }
   function secOfCat(id) { return CAT2SEC[id] || 'alapok'; }
   function bar(pct, cls) {
     const v = pct == null || isNaN(pct) ? 0 : Math.max(0, Math.min(100, Math.round(pct)));
@@ -227,6 +227,7 @@
 
   /* ---------- generic exercise item ---------- */
   function itemHTML(it, o) {
+    it = MB.pickItem(it);
     o = o || {};
     const type = it.type || 'expr';
     const done = !!o.done;
@@ -368,34 +369,38 @@
   };
 
   /* ---------- error hunt ---------- */
-  const HUNTS = [
+  function hunts() { return [
     {
       id: 'log-sum', topic: 'alapok', title: T('Logaritmus összegre', 'Log of a sum'),
-      problem: String.raw`Egyszerűsítés: $\ln(a+b)$.`,
+      problem: T(String.raw`Egyszerűsítés: $\ln(a+b)$.`, String.raw`Simplify: $\ln(a+b)$.`),
       steps: [String.raw`$\ln(ab)=\ln a+\ln b$`, String.raw`$\ln(a+b)=\ln a+\ln b$`, String.raw`$\ln(a/b)=\ln a-\ln b$`], wrong: 1,
-      why: String.raw`A logaritmus csak szorzatra bont szét: $\ln(ab)=\ln a+\ln b$. Összeg logaritmusára nincs ilyen szabály. Ellenpélda: $\ln(2+2)=\ln4$, de $\ln2+\ln2=\ln4$ — ez még éppen egyezik; $\ln(1+1)=\ln2$, viszont $\ln1+\ln1=0$.`
+      why: T(String.raw`A logaritmus csak szorzatra bont szét: $\ln(ab)=\ln a+\ln b$. Összeg logaritmusára nincs ilyen szabály. Ellenpélda: $\ln(2+2)=\ln4$, de $\ln2+\ln2=\ln4$ — ez még éppen egyezik; $\ln(1+1)=\ln2$, viszont $\ln1+\ln1=0$.`,
+        String.raw`The logarithm splits products only: $\ln(ab)=\ln a+\ln b$. There is no such rule for the log of a sum. Counterexample: $\ln(2+2)=\ln4$, but $\ln2+\ln2=\ln4$ — that one happens to match; $\ln(1+1)=\ln2$, while $\ln1+\ln1=0$.`)
     },
     {
       id: 'sqrt-sum', topic: 'alapok', title: T('Gyök összegre', 'Square root of a sum'),
-      problem: String.raw`Egyszerűsítés: $\sqrt{a^2+b^2}$.`,
+      problem: T(String.raw`Egyszerűsítés: $\sqrt{a^2+b^2}$.`, String.raw`Simplify: $\sqrt{a^2+b^2}$.`),
       steps: [String.raw`$\sqrt{ab}=\sqrt a\sqrt b$`, String.raw`$\sqrt{a^2+b^2}=a+b$`, String.raw`$\sqrt{a^2}=|a|$`], wrong: 1,
-      why: String.raw`A gyök csak szorzatra bont: $\sqrt{ab}=\sqrt a\sqrt b$. Ellenpélda: $a=3$, $b=4$ esetén $\sqrt{9+16}=5$, nem $7$. Ez a hiba a Pitagorasz-tételnél a leggyakoribb.`
+      why: T(String.raw`A gyök csak szorzatra bont: $\sqrt{ab}=\sqrt a\sqrt b$. Ellenpélda: $a=3$, $b=4$ esetén $\sqrt{9+16}=5$, nem $7$. Ez a hiba a Pitagorasz-tételnél a leggyakoribb.`,
+        String.raw`The root splits products only: $\sqrt{ab}=\sqrt a\sqrt b$. Counterexample: for $a=3$, $b=4$, $\sqrt{9+16}=5$, not $7$. This is the most common mistake with the Pythagorean theorem.`)
     },
     {
       id: 'square-sum', topic: 'alapok', title: T('Nevezetes szorzat', 'Binomial square'),
-      problem: String.raw`$(a+b)^2$ kifejtése.`,
+      problem: T(String.raw`$(a+b)^2$ kifejtése.`, String.raw`Expand $(a+b)^2$.`),
       steps: [String.raw`$(a+b)^2=a^2+2ab+b^2$`, String.raw`$(a-b)^2=a^2-2ab+b^2$`, String.raw`$(a+b)^2=a^2+b^2$`], wrong: 2,
-      why: String.raw`Hiányzik a kereszttag: $(a+b)^2=a^2+2ab+b^2$. A harmadik állítás hamis; a helyes kifejtésben ott van a $2ab$.`
+      why: T(String.raw`Hiányzik a kereszttag: $(a+b)^2=a^2+2ab+b^2$. A harmadik állítás hamis; a helyes kifejtésben ott van a $2ab$.`,
+        String.raw`The cross term is missing: $(a+b)^2=a^2+2ab+b^2$. The third statement is false; the correct expansion contains $2ab$.`)
     },
     {
       id: 'quantifier', topic: 'logika', title: T('Kvantorok sorrendje', 'Quantifier order'),
-      problem: String.raw`Minden valós $x$-hez van olyan $y$, hogy $y>x$.`,
+      problem: T(String.raw`Minden valós $x$-hez van olyan $y$, hogy $y>x$.`, String.raw`For every real $x$ there is a $y$ such that $y>x$.`),
       steps: [String.raw`$\forall x\,\exists y:\ y>x$`, String.raw`$\exists y\,\forall x:\ y>x$`, String.raw`$\forall x\,\exists y:\ y\ge x$`], wrong: 1,
-      why: String.raw`A sorrend nem cserélhető. Az első igaz (mindig választható nagyobb $y$); a második azt állítaná, hogy van egyetlen $y$, amely minden valós $x$-nél nagyobb — ilyen nincs.`
+      why: T(String.raw`A sorrend nem cserélhető. Az első igaz (mindig választható nagyobb $y$); a második azt állítaná, hogy van egyetlen $y$, amely minden valós $x$-nél nagyobb — ilyen nincs.`,
+        String.raw`The order cannot be swapped. The first is true (a larger $y$ can always be chosen); the second would claim there is a single $y$ larger than every real $x$ — no such $y$ exists.`)
     },
     {
       id: 'induction', topic: 'logika', title: T('Teljes indukció', 'Mathematical induction'),
-      problem: String.raw`$1+2+\dots+n=\frac{n(n+1)}2$ bizonyítása teljes indukcióval.`,
+      problem: T(String.raw`$1+2+\dots+n=\frac{n(n+1)}2$ bizonyítása teljes indukcióval.`, String.raw`Prove $1+2+\dots+n=\frac{n(n+1)}2$ by induction.`),
       steps: [T('Bázis: $n=1$-re $1=\\frac{1\cdot2}2$, kész.', 'Base: for $n=1$, $1=\\frac{1\cdot2}2$, done.'), T('Indukciós lépés: feltesszük $n=k$-ra, és belátjuk $n=k+1$-re.', 'Inductive step: assume for $n=k$ and prove for $n=k+1$.'), T('A bázis elhagyható, mert az indukciós lépés úgyis minden $n$-re működik.', 'The base case can be omitted, because the inductive step works for every $n$.')], wrong: 2,
       why: T('Az indukciós lépés csak $P(k)\Rightarrow P(k+1)$-et adja. Bázis nélkül nem tudjuk, hogy bármelyik $P(k)$ igaz. A bázis nem formalitás: az indukció első dominója.', 'The inductive step only gives $P(k)\\Rightarrow P(k+1)$. Without a base, we do not know that any $P(k)$ is true. The base is not a formality: it is the first domino.')
     },
@@ -403,105 +408,122 @@
       id: 'complex-modulus', topic: 'komplex', title: T('Komplex modulus', 'Complex modulus'),
       problem: String.raw`$|3+4i|=?$`,
       steps: [String.raw`$|a+bi|=\sqrt{a^2+b^2}$`, String.raw`$|3+4i|=5$`, String.raw`$|3+4i|=7$`], wrong: 2,
-      why: String.raw`A modulus a síkban mért távolság: $|a+bi|=\sqrt{a^2+b^2}=\sqrt{9+16}=5$. A valós és képzetes rész nem összeadható.`
+      why: T(String.raw`A modulus a síkban mért távolság: $|a+bi|=\sqrt{a^2+b^2}=\sqrt{9+16}=5$. A valós és képzetes rész nem összeadható.`,
+        String.raw`The modulus is the distance measured in the plane: $|a+bi|=\sqrt{a^2+b^2}=\sqrt{9+16}=5$. The real and imaginary parts cannot simply be added.`)
     },
     {
       id: 'complex-i2', topic: 'komplex', title: T('Az imaginárius egység', 'The imaginary unit'),
       problem: String.raw`$i^2=?$`,
       steps: [String.raw`$i^2=-1$`, String.raw`$i^4=1$`, String.raw`$i^2=1$`], wrong: 2,
-      why: String.raw`Definíció szerint $i^2=-1$. Ebből jön, hogy a komplex számokkal ugyanúgy számolunk, mint a valósokkal, csak $i^2$ helyére $-1$-et írunk.`
+      why: T(String.raw`Definíció szerint $i^2=-1$. Ebből jön, hogy a komplex számokkal ugyanúgy számolunk, mint a valósokkal, csak $i^2$ helyére $-1$-et írunk.`,
+        String.raw`By definition $i^2=-1$. From this it follows that we compute with complex numbers just as with real ones, only writing $-1$ in place of $i^2$.`)
     },
     {
       id: 'complex-square', topic: 'komplex', title: T('Komplex négyzet', 'Squaring a complex number'),
       problem: String.raw`$(1+i)^2=?$`,
       steps: [String.raw`$(1+i)^2=2i$`, String.raw`$(1+i)^2=1^2+i^2=0$`, String.raw`$(1+i)(1-i)=2$`], wrong: 1,
-      why: String.raw`A négyzetes azonosság itt is érvényes: $(1+i)^2=1+2i+i^2=1+2i-1=2i$. A kereszttag nem hagyható el.`
+      why: T(String.raw`A négyzetes azonosság itt is érvényes: $(1+i)^2=1+2i+i^2=1+2i-1=2i$. A kereszttag nem hagyható el.`,
+        String.raw`The binomial square identity holds here too: $(1+i)^2=1+2i+i^2=1+2i-1=2i$. The cross term cannot be dropped.`)
     },
     {
       id: 'seq-e', topic: 'sorozatok', title: T('Az $e$ határérték', 'The limit defining $e$'),
       problem: String.raw`$\lim_{n\to\infty}\left(1+\frac1n\right)^n=?$`,
       steps: [String.raw`$\lim(1+1/n)^n=e$`, String.raw`$\lim(1+1/n)^n=1$`, String.raw`$\lim(1+1/n)=1$`], wrong: 1,
-      why: String.raw`$1^\infty$ nem határozott érték: a bázis is, a kitevő is változik. A határérték $e\approx2{,}718$. Ez az $e$ egyik lehetséges definíciója.`
+      why: T(String.raw`$1^\infty$ nem határozott érték: a bázis is, a kitevő is változik. A határérték $e\approx2{,}718$. Ez az $e$ egyik lehetséges definíciója.`,
+        String.raw`$1^\infty$ is not a determined value: both the base and the exponent change. The limit is $e\approx2{,}718$. This is one possible definition of $e$.`)
     },
     {
       id: 'seq-inf', topic: 'sorozatok', title: T('Végtelen per végtelen', 'Infinity over infinity'),
       problem: String.raw`$\lim_{n\to\infty}\frac{n+1}{n}=?$`,
       steps: [String.raw`$\lim\frac{n+1}{n}=1$`, String.raw`$\lim\frac{n+1}{n}=\infty$`, String.raw`$\lim\frac1n=0$`], wrong: 1,
-      why: String.raw`Nem „nincs”, csak még nem látszik. Ossz el $n$-nel: $\frac{1+1/n}{1}\to1$. A végtelen per végtelen alakot át kell alakítani.`
+      why: T(String.raw`Nem „nincs”, csak még nem látszik. Ossz el $n$-nel: $\frac{1+1/n}{1}\to1$. A végtelen per végtelen alakot át kell alakítani.`,
+        String.raw`It is not “none”, it is just not visible yet. Divide by $n$: $\frac{1+1/n}{1}\to1$. An infinity-over-infinity form has to be rewritten.`)
     },
     {
       id: 'lim-sin', topic: 'hatarertek', title: T('Nevezetes határérték', 'A standard limit'),
       problem: String.raw`$\lim_{x\to0}\frac{\sin x}{x}=?$`,
       steps: [String.raw`$\lim_{x\to0}\frac{\sin x}{x}=1$`, String.raw`$\lim_{x\to0}\frac{\sin x}{x}=0$`, String.raw`$\lim_{x\to0}\sin x=0$`], wrong: 1,
-      why: String.raw`A $\frac00$ határozatlan forma, nem nulla. A nevezetes határérték $1$; geometriailag az ív és a húr aránya tart $1$-hez.`
+      why: T(String.raw`A $\frac00$ határozatlan forma, nem nulla. A nevezetes határérték $1$; geometriailag az ív és a húr aránya tart $1$-hez.`,
+        String.raw`$\frac00$ is an indeterminate form, not zero. The standard limit is $1$; geometrically, the ratio of arc to chord tends to $1$.`)
     },
     {
       id: 'lim-cancel', topic: 'hatarertek', title: T('Kiejtés a határértéknél', 'Cancelling before the limit'),
       problem: String.raw`$\lim_{x\to1}\frac{x^2-1}{x-1}=?$`,
       steps: [String.raw`$\lim_{x\to1}\frac{x^2-1}{x-1}=2$`, String.raw`$\lim_{x\to1}\frac{x^2-1}{x-1}=0$`, String.raw`$\frac{x^2-1}{x-1}=x+1\ (x\ne1)$`], wrong: 1,
-      why: String.raw`Előbb alakíts: $\frac{(x-1)(x+1)}{x-1}=x+1$ (ha $x\ne1$), ezért a határérték $2$. A $\frac00$ csak jelzés, hogy számolni kell.`
+      why: T(String.raw`Előbb alakíts: $\frac{(x-1)(x+1)}{x-1}=x+1$ (ha $x\ne1$), ezért a határérték $2$. A $\frac00$ csak jelzés, hogy számolni kell.`,
+        String.raw`Rewrite first: $\frac{(x-1)(x+1)}{x-1}=x+1$ (for $x\ne1$), so the limit is $2$. $\frac00$ is only a signal that some algebra is needed.`)
     },
     {
       id: 'der-chain', topic: 'derivalas', title: T('Láncszabály', 'Chain rule'),
-      problem: String.raw`$f(x)=\sin(x^2)$ deriváltja.`,
+      problem: T(String.raw`$f(x)=\sin(x^2)$ deriváltja.`, String.raw`The derivative of $f(x)=\sin(x^2)$.`),
       steps: [String.raw`$(\sin x)'=\cos x$`, String.raw`$(\sin(x^2))'=\cos(x^2)$`, String.raw`$(\cos x)'=-\sin x$`], wrong: 1,
-      why: String.raw`A külső függvény deriváltja után a belső függvény deriváltjával is szorozni kell: $f'(x)=\cos(x^2)\cdot2x$. A láncszabály a legtöbb pontot vesztő hiba a ZH-n.`
+      why: T(String.raw`A külső függvény deriváltja után a belső függvény deriváltjával is szorozni kell: $f'(x)=\cos(x^2)\cdot2x$. A láncszabály a legtöbb pontot vesztő hiba a ZH-n.`,
+        String.raw`After differentiating the outer function you must also multiply by the derivative of the inner one: $f'(x)=\cos(x^2)\cdot2x$. The chain rule is the biggest point-loser on the exam.`)
     },
     {
       id: 'der-product', topic: 'derivalas', title: T('Szorzat deriváltja', 'Product rule'),
       problem: String.raw`$(x^2e^x)'=?$`,
       steps: [String.raw`$(x^2e^x)'=2xe^x+x^2e^x$`, String.raw`$(x^2e^x)'=2xe^x$`, String.raw`$(e^x)'=e^x$`], wrong: 1,
-      why: String.raw`Szorzatnál mindkét tényezőt deriválni kell: $(uv)'=u'v+uv'$, tehát $2xe^x+x^2e^x$. Az első tag önmagában csak az egyik fele.`
+      why: T(String.raw`Szorzatnál mindkét tényezőt deriválni kell: $(uv)'=u'v+uv'$, tehát $2xe^x+x^2e^x$. Az első tag önmagában csak az egyik fele.`,
+        String.raw`For a product both factors have to be differentiated: $(uv)'=u'v+uv'$, hence $2xe^x+x^2e^x$. The first term alone is only one half of it.`)
     },
     {
       id: 'der-ln-square', topic: 'derivalas', title: T('Összetett logaritmus', 'Composite logarithm'),
       problem: String.raw`$(\ln(x^2))'=?$`,
       steps: [String.raw`$(\ln(x^2))'=\frac2x$`, String.raw`$(\ln(x^2))'=\frac1{x^2}$`, String.raw`$(\ln x)'=\frac1x$`], wrong: 1,
-      why: String.raw`Láncszabállyal: $\frac1{x^2}\cdot2x=\frac2x$. Ugyanez jön abból is, hogy $\ln(x^2)=2\ln|x|$ (ahol értelmezett).`
+      why: T(String.raw`Láncszabállyal: $\frac1{x^2}\cdot2x=\frac2x$. Ugyanez jön abból is, hogy $\ln(x^2)=2\ln|x|$ (ahol értelmezett).`,
+        String.raw`By the chain rule: $\frac1{x^2}\cdot2x=\frac2x$. The same follows from $\ln(x^2)=2\ln|x|$ (where defined).`)
     },
     {
       id: 'int-one-over-x', topic: 'integralas', title: T('$1/x$ integrálja', 'The integral of $1/x$'),
       problem: String.raw`$\int\frac1x\,dx=?$`,
       steps: [String.raw`$\int x^2\,dx=\frac{x^3}{3}+C$`, String.raw`$\int\frac1x\,dx=\ln|x|+C$`, String.raw`$\int x^{-1}\,dx=\frac{x^0}{0}$`], wrong: 2,
-      why: String.raw`A hatványszabály $n=-1$-re nem működik (nullával osztanánk). Az antiderivált $\ln|x|+C$. Ez az egyetlen kivétel a hatványszabály alól.`
+      why: T(String.raw`A hatványszabály $n=-1$-re nem működik (nullával osztanánk). Az antiderivált $\ln|x|+C$. Ez az egyetlen kivétel a hatványszabály alól.`,
+        String.raw`The power rule does not work for $n=-1$ (we would divide by zero). The antiderivative is $\ln|x|+C$. This is the only exception to the power rule.`)
     },
     {
       id: 'int-substitution', topic: 'integralas', title: T('Helyettesítés', 'Substitution'),
       problem: String.raw`$\int2x\cos(x^2)\,dx=?$`,
       steps: [String.raw`$\int2x\cos(x^2)\,dx=\sin(x^2)+C$`, String.raw`$\int2x\cos(x^2)\,dx=\int\cos(x^2)\,dx$`, String.raw`$u=x^2\Rightarrow du=2x\,dx$`], wrong: 1,
-      why: String.raw`A $2x$ nem dísz: ez pont $du$, ha $u=x^2$. Így $\int\cos u\,du=\sin u+C=\sin(x^2)+C$. A közbülső sor hamis, még ha a végeredmény véletlenül jó is.`
+      why: T(String.raw`A $2x$ nem dísz: ez pont $du$, ha $u=x^2$. Így $\int\cos u\,du=\sin u+C=\sin(x^2)+C$. A közbülső sor hamis, még ha a végeredmény véletlenül jó is.`,
+        String.raw`The $2x$ is not decoration: it is exactly $du$ when $u=x^2$. Thus $\int\cos u\,du=\sin u+C=\sin(x^2)+C$. The middle line is false, even if the final result happens to be right.`)
     },
     {
       id: 'series-geometric', topic: 'sorok', title: T('Geometriai sor', 'Geometric series'),
       problem: String.raw`$1+\frac12+\frac14+\cdots=?$`,
-      steps: [String.raw`$1+\frac12+\frac14+\cdots=2$`, String.raw`$1+\frac12+\frac14+\cdots$ divergens`, String.raw`$\sum q^n=\frac1{1-q}\ (|q|<1)$`], wrong: 1,
-      why: String.raw`A végtelen sok tag nem jelent divergenciát. Itt $q=\frac12$, és $|q|<1$, ezért az összeg $\frac1{1-q}=2$.`
+      steps: [String.raw`$1+\frac12+\frac14+\cdots=2$`, T(String.raw`$1+\frac12+\frac14+\cdots$ divergens`, String.raw`$1+\frac12+\frac14+\cdots$ diverges`), String.raw`$\sum q^n=\frac1{1-q}\ (|q|<1)$`], wrong: 1,
+      why: T(String.raw`A végtelen sok tag nem jelent divergenciát. Itt $q=\frac12$, és $|q|<1$, ezért az összeg $\frac1{1-q}=2$.`,
+        String.raw`Infinitely many terms do not mean divergence. Here $q=\frac12$ and $|q|<1$, so the sum is $\frac1{1-q}=2$.`)
     },
     {
       id: 'series-harmonic', topic: 'sorok', title: T('Harmonikus sor', 'Harmonic series'),
-      problem: String.raw`$\sum_{n=1}^{\infty}\frac1n$ konvergens?`,
-      steps: [String.raw`$\sum\frac1n$ divergens`, String.raw`$\sum\frac1{n^2}$ konvergens`, String.raw`$\sum\frac1n$ konvergens, mert $\frac1n\to0$`], wrong: 2,
-      why: String.raw`A tagok nullához tartása szükséges, de nem elégséges feltétel. A harmonikus sor divergál; a részletösszegek lassan, de végtelenhez tartanak.`
+      problem: T(String.raw`$\sum_{n=1}^{\infty}\frac1n$ konvergens?`, String.raw`Is $\sum_{n=1}^{\infty}\frac1n$ convergent?`),
+      steps: [T(String.raw`$\sum\frac1n$ divergens`, String.raw`$\sum\frac1n$ diverges`), T(String.raw`$\sum\frac1{n^2}$ konvergens`, String.raw`$\sum\frac1{n^2}$ converges`), T(String.raw`$\sum\frac1n$ konvergens, mert $\frac1n\to0$`, String.raw`$\sum\frac1n$ converges, because $\frac1n\to0$`)], wrong: 2,
+      why: T(String.raw`A tagok nullához tartása szükséges, de nem elégséges feltétel. A harmonikus sor divergál; a részletösszegek lassan, de végtelenhez tartanak.`,
+        String.raw`Terms tending to zero is a necessary but not sufficient condition. The harmonic series diverges; the partial sums grow slowly but without bound.`)
     },
     {
       id: 'taylor-exp', topic: 'taylor', title: T('Taylor-polinom', 'Taylor polynomial'),
-      problem: String.raw`$e^x$ másodfokú Taylor-polinomja $0$ körül.`,
+      problem: T(String.raw`$e^x$ másodfokú Taylor-polinomja $0$ körül.`, String.raw`The second-degree Taylor polynomial of $e^x$ around $0$.`),
       steps: [String.raw`$e^x=1+x+\frac{x^2}{2}+\cdots$`, String.raw`$e^x=1+x+x^2+\cdots$`, String.raw`$\sin x=x-\frac{x^3}{6}+\cdots$`], wrong: 1,
-      why: String.raw`A Taylor-együttható $\frac{f^{(k)}(0)}{k!}$. Itt $f^{(2)}(0)=1$, ezért a tag $\frac{x^2}{2!}=\frac{x^2}2$, nem $x^2$.`
+      why: T(String.raw`A Taylor-együttható $\frac{f^{(k)}(0)}{k!}$. Itt $f^{(2)}(0)=1$, ezért a tag $\frac{x^2}{2!}=\frac{x^2}2$, nem $x^2$.`,
+        String.raw`The Taylor coefficient is $\frac{f^{(k)}(0)}{k!}$. Here $f^{(2)}(0)=1$, so the term is $\frac{x^2}{2!}=\frac{x^2}2$, not $x^2$.`)
     },
     {
       id: 'linalg-det', topic: 'linearis', title: T('Determináns', 'Determinant'),
       problem: String.raw`$\det\begin{pmatrix}a&b\\c&d\end{pmatrix}=?$`,
       steps: [String.raw`$\det\begin{pmatrix}a&b\\c&d\end{pmatrix}=ad-bc$`, String.raw`$\det\begin{pmatrix}a&b\\c&d\end{pmatrix}=ab-cd$`, String.raw`$\det I=1$`], wrong: 1,
-      why: String.raw`A $2\times2$ determináns átlós szorzatok különbsége: $ad-bc$. A képletet érdemes a mátrix elemein végigolvasni, nem betűpárokat memorizálni.`
+      why: T(String.raw`A $2\times2$ determináns átlós szorzatok különbsége: $ad-bc$. A képletet érdemes a mátrix elemein végigolvasni, nem betűpárokat memorizálni.`,
+        String.raw`The $2\times2$ determinant is the difference of the diagonal products: $ad-bc$. It is worth reading the formula along the matrix entries instead of memorising letter pairs.`)
     },
     {
       id: 'discrete-subsets', topic: 'diszkret', title: T('Részhalmazok száma', 'Number of subsets'),
-      problem: String.raw`Hány részhalmaza van egy $n$ elemű halmaznak?`,
-      steps: [T('Egy $n$ elemű halmaznak $2^n$ részhalmaza van.', 'An $n$-element set has $2^n$ subsets.'), T('Egy 3 elemű halmaznak 8 részhalmaza van.', 'A 3-element set has 8 subsets.'), T('Egy $n$ elemű halmaznak $2n$ részhalmaza van.', 'An $n$-element set has $2n$ subsets.')], wrong: 2,
-      why: String.raw`A gondolatmenet jó, a képlet nem: minden elemre $2$ döntés, tehát $2^n$. Például $n=3$-ra $8$ részhalmaz van, nem $6$.`
+      problem: T(String.raw`Hány részhalmaza van egy $n$ elemű halmaznak?`, String.raw`How many subsets does an $n$-element set have?`),
+      steps: [T('Egy $n$ elemű halmaznak $2^n$ részhalmaza van.', 'An $n$-element set has $2^n$ subsets.'), T('Egy 3 elemű halmaznak 8 részhalmaza van.', 'A set with 3 elements has 8 subsets.'), T('Egy $n$ elemű halmaznak $2n$ részhalmaza van.', 'An $n$-element set has $2n$ subsets.')], wrong: 2,
+      why: T(String.raw`A gondolatmenet jó, a képlet nem: minden elemre $2$ döntés, tehát $2^n$. Például $n=3$-ra $8$ részhalmaz van, nem $6$.`,
+        String.raw`The reasoning is right, the formula is not: two decisions per element, so $2^n$. For example, for $n=3$ there are $8$ subsets, not $6$.`)
     }
-  ];
+  ]; }
   const HUNT_TOPICS = ['alapok', 'logika', 'komplex', 'sorozatok', 'hatarertek', 'derivalas', 'integralas', 'sorok', 'taylor', 'linearis', 'diszkret'];
 
   MB.huntView = function (id) {
@@ -511,9 +533,9 @@
         T('Minden feladatban három állítás van, és pontosan egy hamis. Kattints a hamisra. Nem kell megoldanod — csak megtalálnod.',
           'Each problem has three statements, and exactly one is false. Click the false one. You do not have to solve it — only find it.'));
       const doneCount = Object.keys(funState().hunts).length;
-      h += '<div class="hunt-summary"><b>' + doneCount + ' / ' + HUNTS.length + '</b> ' + T('megoldva', 'solved') + '</div>';
+      h += '<div class="hunt-summary"><b>' + doneCount + ' / ' + hunts().length + '</b> ' + T('megoldva', 'solved') + '</div>';
       HUNT_TOPICS.forEach(function (topic) {
-        const list = HUNTS.filter(function (x) { return x.topic === topic; });
+        const list = hunts().filter(function (x) { return x.topic === topic; });
         if (!list.length) return;
         h += '<div class="hunt-group"><h3>' + esc(secTitle(topic)) + '</h3><div class="hunt-grid">';
         list.forEach(function (x) {
@@ -527,7 +549,7 @@
       });
       return h;
     }
-    const h0 = HUNTS.find(function (x) { return x.id === id; });
+    const h0 = hunts().find(function (x) { return x.id === id; });
     if (!h0) { location.hash = '#/hunt'; return ''; }
     document.title = h0.title + ' — MatekBázis';
     const solved = !!funState().hunts[h0.id];
@@ -550,7 +572,7 @@
   MB.teachHTML = function (c, s) {
     const f = funState(), key = s.id + '/' + c.id, saved = f.teach[key] || {};
     const checks = saved.checks || [false, false, false];
-    const formulas = MB.formulas.filter(function (x) { return x.ref && x.ref[0] === s.id && x.ref[1] === c.id; }).map(function (x) { return x.name; });
+    const formulas = MB.formulas.map(function (x, i) { return { x: x, i: i }; }).filter(function (o) { return o.x.ref && o.x.ref[0] === s.id && o.x.ref[1] === c.id; }).map(function (o) { return MB.pickFormula(o.x, o.i).name; });
     const why = c.why ? (Array.isArray(c.why) ? c.why[0] : c.why) : '';
     const model = '<p>' + c.lead + '</p>' + (why ? '<p>' + why + '</p>' : '') + (c.when ? '<p>' + c.when + '</p>' : '');
     const chips = formulas.length ? '<div class="teach-chips">' + formulas.map(function (x) { return '<span>' + esc(x) + '</span>'; }).join('') + '</div>' : '';
@@ -674,7 +696,7 @@
       if (x.acc != null) detail.push(T('pontosság', 'accuracy') + ' ' + Math.round(x.acc * 100) + '%');
       if (x.nb) detail.push(x.nb + ' ' + T('ismétlés', 'review'));
       if (x.test != null) detail.push(T('teszt', 'test') + ' ' + x.test + '%');
-      h += '<div class="ready-row"><div class="rr-name"><a href="#/section/' + x.s.id + '">' + x.s.num + '. ' + esc(x.s.title) + '</a>' +
+      h += '<div class="ready-row"><div class="rr-name"><a href="#/section/' + x.s.id + '">' + x.s.num + '. ' + esc(MB.sTitle(x.s)) + '</a>' +
         '<small>' + (detail.join(' · ') || T('még nincs adat', 'no data yet')) + '</small></div>' +
         '<div class="rr-bar">' + bar(x.readiness == null ? 0 : x.readiness * 100) + '</div>' +
         '<div class="rr-pct">' + pctText(x.readiness) + '</div>' +
@@ -717,7 +739,7 @@
     if (missing.length) {
       h += '<div class="teach-missing">';
       missing.slice(0, 6).forEach(function (m) {
-        h += '<a href="#/chapter/' + m.s.id + '/' + m.c.id + '"><span>' + esc(m.s.title) + '</span><b>' + esc(m.c.title) + '</b></a>';
+        h += '<a href="#/chapter/' + m.s.id + '/' + m.c.id + '"><span>' + esc(MB.sTitle(m.s)) + '</span><b>' + esc(MB.cTitle(m.c)) + '</b></a>';
       });
       h += '</div>';
     } else {
@@ -954,7 +976,7 @@
     if (step) {
       const box = step.closest('.hunt-box');
       if (!box || box.classList.contains('solved')) return;
-      const h = HUNTS.find(function (x) { return x.id === box.dataset.hunt; });
+      const h = hunts().find(function (x) { return x.id === box.dataset.hunt; });
       if (!h) return;
       const i = +step.dataset.huntStep;
       const fb = box.querySelector('[data-hunt-feedback]');

@@ -39,7 +39,7 @@ Feltételezem, hogy **középszintű érettségi** szinten tanultál matematiká
 - **Magyarázd el**: minden fejezet végén két-három mondatban elmondhatod a fő ötletet; a szöveg mentődik.
 - **Haladás**: ZH-felkészültség részenként és heti riport (válaszok, pontosság, ismétlések, gyenge témák).
 - **Képletgyűjtemény**: 94 képlet, kereshető.
-- **Nyelv**: a jobb felső `EN` / `HU` gombbal válthatsz. Az angol mód a felületet, a fejezetcímeket, a leírásokat és a fejezet-összefoglalókat fordítja; a részletes magyar elmélet és a feladatok magyarul maradnak, ezt a fejezet jelzi.
+- **Nyelv**: a jobb felső `EN` / `HU` gombbal válthatsz. Minden látható szöveg teljesen kétnyelvű: a felület, a fejezetcímek és -leírások, az elmélet, a kidolgozott példák, a hibák, a feladatok és megoldásaik, a generált feladatbank, a napi küldetés, a hibafüzet, a hibavadászat, a magyarázd el blokk, a képletgyűjtemény és a videótár is.
 - **Keresés**: `Ctrl + K` (vagy `/`), majd gépelj.
 - **Haladás**: a jobb felső sarokban látszik; a böngésző menti. Ha privát ablakot használsz, bezáráskor elvész.
 

@@ -8,7 +8,7 @@ It assumes **Hungarian középszintű érettségi** knowledge that has faded. Th
 
 No build step, no installation, no HTML knowledge needed. The only online part is the embedded YouTube videos.
 
-- Hungarian content, BME VIK navy/gold book design.
+- Bilingual Hungarian/English content, BME VIK navy/gold book design.
 - 7 core parts + 6 optional parts, 34 chapters, 266 in-chapter exercises.
 - Prerequisite-first order: basics first, each part explicitly builds on the previous ones.
 - 15 practice categories × 50 generated exercises (10 easy / 10 medium / 30 hard, 1 : 1 : 3), rerollable.
@@ -17,7 +17,7 @@ No build step, no installation, no HTML knowledge needed. The only online part i
 - Mixed run (interleaved practice) and 22 error hunts (find the false statement).
 - Teach-back box in every chapter, exam-readiness score and weekly recap.
 - 94-formula searchable reference, video library, original 2025–2026 exam PDFs.
-- **English / Hungarian** toggle: translated interface, section/chapter titles, leads and chapter overviews in English; detailed theory and exercises remain Hungarian with a visible notice.
+- **English / Hungarian** toggle: every user-visible string is bilingual — interface, section and chapter metadata, theory, worked examples, mistakes, exercises, hints, solutions, generated practice banks, daily quest, error notebook, error hunts, teach-back, formula sheet and video library.
 - Progress saved in the browser; `Ctrl+K` search; print-friendly.
 
 For the reusable method, see [`SKILL.md`](SKILL.md). For an agent-oriented map, see [`AGENTS.md`](AGENTS.md).

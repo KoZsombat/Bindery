@@ -1,6 +1,6 @@
 ---
 name: learning-book-site
-description: Build a self-contained, bilingual (EN/HU), book-style preparation or full-course learning website, with supplied files or from research. Covers source discovery, prerequisite-first curriculum mapping, content schema, KaTeX rendering, checkable exercises, rerollable 50-item practice banks (10 easy / 10 medium / 30 hard), chapter tests, timed exam simulators, daily quests with a solve-streak, a Leitner error notebook, interleaved mixed runs, error hunts, teach-back boxes, exam-readiness scoring, progress tracking, search, and verification. Works for a university semester or a single topic such as JavaScript classes.
+description: Build a self-contained, fully bilingual (EN/HU), book-style preparation or full-course learning website, with supplied files or from research. Every user-visible string — UI, theory, examples, mistakes, exercises, hints, solutions, choices, formulas, videos, generated banks, error hunts and feedback — exists in both languages. Covers source discovery, prerequisite-first curriculum mapping, content schema, KaTeX rendering, checkable exercises, rerollable 50-item practice banks (10 easy / 10 medium / 30 hard), chapter tests, timed exam simulators, daily quests with a solve-streak, a Leitner error notebook, interleaved mixed runs, error hunts, teach-back boxes, exam-readiness scoring, progress tracking, search, and verification. Works for a university semester or a single topic such as JavaScript classes.
 ---
 
 # Learning Book Site
@@ -180,6 +180,12 @@ Authoring rules:
 - 3–4 typical mistakes per chapter, stated as wrong-vs-right.
 - Math must be KaTeX-compatible: `\begin{aligned}`, not `\begin{align}`; avoid exotic packages.
 - Hungarian typography: decimal comma in prose, but answers may use `1/3` or `0,333`.
+
+**Every prose field above is bilingual.** Either store `{ hu, en }` values directly, or use an
+indexed English overlay keyed by `sectionId/chapterId` as described in §17. Titles, leads, summaries,
+`why`, `when`, theory text, examples, mistakes, exercise questions/hints/solutions/choices and video
+metadata all need both languages. Math, answer values and IDs stay shared. A schema that can hold only
+one language is incomplete.
 
 ## 6. Exercise systems
 
@@ -402,8 +408,12 @@ Do these before declaring done:
    - Teach-back text and checkboxes survive reload; clearing the text deletes the entry.
    - Readiness: missing components show `—`; with coverage alone the value equals coverage; test scores only appear when a test recorded its section.
    - Week recap counts only the last seven days.
-   - All new chrome (daily quest, notebook, mixed run, error hunt, progress, explain it) switches language with the toggle.
-4. Test mobile width (360 px) and print preview.
+   - English mode has no Hungarian chrome, theory, examples, mistakes, exercises, hints, solutions, choices, formula names/notes, video titles/notes, hunts or toasts.
+   - Chapter body switches: each chapter shows English theory, examples, mistakes and exercises; switching back restores Hungarian.
+   - Generated banks show 50 English items per category and the same answers; daily quest, mixed run, chapter test and exam display English questions and hints.
+   - Search returns English results for English queries and Hungarian results for Hungarian queries.
+   - A numeric, expression, text and choice answer still check correctly after switching language.
+4. Test mobile width (360 px) and print preview in both languages.
 5. Check console for errors on every route.
 6. Verify content accuracy against the source exam papers for at least 3 topics.
 
@@ -439,6 +449,10 @@ Keep the content schema and generator contract; delete unused pages from the nav
 - **Tracking logic spread across the renderer.** Put the data on the node and use one answer hook (§6.10), or every new view silently loses progress.
 - **Error hunts with a trivial or negative false statement.** The distractor must be a real misconception the learner is likely to hold.
 - **Teach-back that is graded.** It is a self-diagnostic; grading it turns reflection into performance.
+- **An English overview instead of a translation.** “The theory below is in Hungarian” is a defect, not a feature.
+- **A language toggle that only swaps chrome.** If chapter bodies, exercises, generated banks or hunts stay Hungarian, the site is not bilingual.
+- **Silent fallback to the source language.** Missing translations must fail validation; a learner must never hit an untranslated string.
+- **One translator editing a shared file.** Partition by file and give each file exactly one owner, or translations overwrite each other.
 
 ## 11. Kickoff prompt template
 
@@ -459,6 +473,12 @@ left table-of-contents sidebar, chapter opener with number, callouts for Why/Whe
 
 Architecture: static HTML/CSS/vanilla JS, hash router, content as JS data, vendored KaTeX,
 localStorage progress, no build step.
+
+Bilingual: full EN/HU parity for every user-visible string — UI, section/chapter metadata, theory,
+examples, mistakes, exercises (question/hint/solution/choices), generated bank templates, error
+hunts, teach-back, formula names/notes, video titles/channels/notes, search, toasts and empty
+states. No “content remains Hungarian” notice and no silent fallback. Math and answer values stay
+language-independent; text answers get accepted variants in both languages.
 
 Each chapter: lead, why, when, 6–8 theory blocks, 2–3 worked examples,
 3–4 typical mistakes, 6–8 checkable exercises (number/expr/text/choice/proof), one video.
@@ -519,7 +539,8 @@ output_dir/
   assets/js/generators.js    # deterministic 50-item banks
   assets/js/demos.js
   content/_helpers.js
-  content/01-*.js ... NN-*.js
+  content/01-*.js ... NN-*.js   # source-language content
+  content/_en/01-*.js ... NN-*.js  # full English overlays (or parallel fields in source files)
   content/_formulas.js
   content/_videos.js
   vendor/katex/              # local, no CDN
@@ -531,11 +552,11 @@ output_dir/
 1. **Inventory** — list files, extract text, read the latest exam papers.
 2. **Scope** — write `Part → Chapter → Prerequisites → Exam tag`; 20–35 chapters for a semester, 3–8 for a single topic.
 3. **Shell** — `index.html`, CSS design system, hash router, KaTeX, storage, search.
-4. **Content** — one JS file per part; each chapter follows the schema in §5.
-5. **Practice** — at least one generator category per part; 50 items (10/10/30) and reroll.
-6. **Tests** — chapter test + timed exam simulator with grade thresholds.
+4. **Content** — one JS file per part; each chapter follows the schema in §5, in both languages.
+5. **Practice** — at least one generator category per part; 50 items (10/10/30) and reroll, with every template bilingual.
+6. **Tests** — chapter test + timed exam simulator with grade thresholds, fully localized.
 7. **Retention** — daily quest, Leitner notebook, mixed run, error hunts, teach-back, readiness dashboard; wire the answer hook from §6.10.
-8. **Verify** — see §8 and the gates below.
+8. **Verify** — see §8 and §17 gates; scan every route in both languages.
 9. **Package** — README, launchers, ZIP; test the ZIP in a fresh folder.
 
 ### Tool fallbacks
@@ -563,6 +584,7 @@ output_dir/
 13. Readiness renormalises over present components and shows `—` with no data.
 14. Every error hunt has exactly one false statement and validates it by construction.
 15. `index.html` opens directly from `file://` without console errors.
+16. The bilingual coverage validator passes: every chapter overlay key exists, all arrays match length/order, formula/video counts match, every generator template has English fields, and no Hungarian prose leaks into English fields.
 
 ### Non-negotiables
 
@@ -754,72 +776,134 @@ Build the exam simulator from this shape, not from guesswork.
 - [ ] No invented citations, dates, logos, or video IDs.
 - [ ] Learner-facing README states what is official and what is inferred.
 
-## 17. Bilingual by default (English + Hungarian)
+## 17. Fully bilingual by default (English + Hungarian)
 
-Every generated site must ship with **English and Hungarian**. The language switch is part of the product, not an afterthought.
+Every generated site must ship with **complete English and Hungarian parity**. The language switch
+is part of the product, not an afterthought. English mode must contain **no Hungarian user-visible
+string**, and Hungarian mode must contain no English chrome.
 
-### Required pieces
+### Coverage contract
 
-1. **Language toggle** in the topbar/sidebar, persisted in `localStorage`.
-2. **`<html lang="...">`** updated on switch.
-3. **UI dictionary** (e.g. `content/_i18n.js`) for every chrome string: navigation, buttons, labels, callouts, empty states, errors.
-4. **Content metadata** for every section/chapter: `title`, `subtitle`, `lead`, `summary` in both languages.
-5. **Long-form content**: either fully parallel (`{ hu, en }` for every body/prose field) or an explicit **English overview + notice** that the detailed text is Hungarian. Never silently show Hungarian-only content in English mode.
-6. **Math is language-independent.** Never translate LaTeX, variable names, units or formula structure. Only translate the surrounding prose and labels.
-7. **Exercises**: translate the instructions and UI; if exercise texts remain Hungarian, show a visible English notice and keep the checker language-independent.
-8. **SEO/meta**: translated `<title>` and description per language where possible.
+Both languages must exist for every layer:
 
-### Recommended content model
+| Layer | What must be translated |
+|---|---|
+| UI chrome | Navigation, breadcrumbs, buttons, inputs, placeholders, tooltips, `aria-label`, toasts, empty states, errors, confirmations |
+| Metadata | Section title/subtitle/intro; chapter title/lead/summary; exam tags; difficulty and status labels |
+| Theory | `why` paragraphs, `when`, every definition/theorem/note/warning/formula title, list title and items |
+| Examples | Title, problem, every numbered step, answer prose |
+| Exercises | Question, hint, solution, choices (same order), text-answer variants |
+| Generated banks | Category titles/descriptions and every template's question/hint/solution/choices |
+| Retention | Daily quest, streak/freeze text, notebook/review states, mixed run, every error-hunt statement and explanation, teach-back prompt/model |
+| Reference | Formula categories/names/notes; video categories/titles/channels/notes; resource metadata; archive labels |
+| Search | Both language indexes, result kind labels, empty/no-result text |
+| Document meta | `<title>`, descriptions, print headings, image alt text |
+
+Not translated: LaTeX and variables, IDs, route segments, storage keys, URLs, file names, official
+exam codes (`ZH1`, `ZH2`, `vizsga`), institution names and people's names.
+
+### Content model
+
+Choose one and apply it to *every* human-readable field.
+
+**A. Parallel fields (best for new content)**
 
 ```js
-// content/_i18n.js
-MB.en = {
-  sections: {
-    fundamentals: { title: 'Foundations', subtitle: '...', intro: '...' }
-  },
-  chapters: {
-    'fundamentals/algebra': {
-      title: 'Powers, roots, logarithms',
-      lead: '...',
-      summary: '...'
-    }
-  },
-  ui: { 'Tartalomjegyzék': 'Contents', 'Ellenőrzés': 'Check' }
+{ title: { hu: 'Sorozatok', en: 'Sequences' },
+  lead:  { hu: '...', en: '...' },
+  why:   { hu: ['...'], en: ['...'] } }
+```
+
+Render with `field[MB.lang]` (or a `pick(field)` helper).
+
+**B. Indexed overlay (best for an existing Hungarian corpus)**
+
+Keep the Hungarian source untouched and add `content/_en/NN-*.js`. Each file assigns
+`MB.enContent[sectionId + '/' + chapterId]` with arrays in the same order as the source:
+
+```js
+MB.enContent['sorozatok/sorozat-konvergencia'] = {
+  title: '...', lead: '...', summary: '...',
+  why: ['...', '...'], when: '...',
+  theory: [{ title: '...', body: '...' }, { title: '...', note: '...' }],
+  examples: [{ title: '...', problem: '...', steps: ['...'], answer: '...' }],
+  mistakes: ['...'],
+  exercises: [{ q: '...', hint: '...', sol: '...', choices: ['...'], altEn: ['...'] }],
+  video: { title: '...', channel: '...', note: '...' }
 };
 ```
 
-For full parity, use a single field with both languages:
+Merge by index, preserving `t`, `latex`, `a`, `type`, `alt`, `level`, IDs and routes. An overlay is
+acceptable **only** when validation proves every field is covered; a missing translation is a build
+failure, not a runtime fallback.
+
+### Translation rules
+
+- **Math is language-independent.** Copy every `$...$`/`$$...$$` segment byte-for-byte; the only
+  allowed change is translating words inside `\text{...}`.
+- **Answers stay stable.** Numeric and symbolic answers are shared. Choice arrays keep the same
+  order so the stored index remains valid. For text answers containing prose (`x<2 vagy x>3`), add
+  English accepted variants (`x<2 or x>3`) through `altEn` or a shared `alt` list.
+- **Translate the frame, not the identifiers.** IDs, keys, routes, state fields and CSS classes never
+  change with language.
+- **No apologies, no notices.** Do not ship “the detailed content is in Hungarian” boxes, English
+  overview callouts or mixed-language warnings. Either the string is translated or it is a bug.
+- **Use natural target-language prose.** Do not translate word-for-word; keep mathematical terminology
+  consistent across chapters, hints, solutions and generated banks.
+- **Official Hungarian exam terms may stay in parentheses** (`ZH`, `vizsga`, `középszintű érettségi`)
+  when they name a real course artifact.
+
+### Translation workflow
+
+1. **Inventory** every user-visible string, including strings built dynamically and strings in
+   generator templates, hunt data, toasts and empty states.
+2. **Partition by file.** One translator or agent owns one source file at a time. Never let two
+   workers edit the same file.
+3. **Give a written contract**: exact keys, array lengths, forbidden fields, math preservation, answer
+   stability, output format and a `node --check` gate.
+4. **Translate in parallel**, then integrate centrally. Do not ask translators to edit renderers.
+5. **Validate structurally and linguistically** before merging: key coverage, array lengths, LaTeX
+   preservation, answer equality, no Hungarian prose in English fields.
+6. **Render every route in both languages**; run the full exercise, bank, test, exam, retention and
+   search flows once per language.
+
+### Validation (automated minimum)
 
 ```js
-{
-  title: { hu: 'Sorozatok', en: 'Sequences' },
-  lead:  { hu: '...', en: '...' },
-  body:  { hu: '...', en: '...' }
+// Structure
+for (const s of MB.sections) for (const c of s.chapters) {
+  const e = MB.enContent[c.sectionId + '/' + c.id];
+  if (!e) fail('missing chapter overlay: ' + c.id);
+  ['why','theory','examples','mistakes','exercises'].forEach(k => {
+    if (c[k] && (!e[k] || e[k].length !== c[k].length)) fail('length mismatch: ' + c.id + ' ' + k);
+  });
+  c.exercises.forEach((q, i) => {
+    if (q.a !== e.exercises[i].a && e.exercises[i].a !== undefined) fail('answer changed');
+    if (q.type !== e.exercises[i].type && e.exercises[i].type !== undefined) fail('type changed');
+  });
 }
 ```
 
-Then render with `field[lang]`. For a large existing Hungarian corpus, a separate `_en.js` metadata file plus an English overview is an acceptable staged approach — but the notice is mandatory.
+- **Hungarian detector**: flag English fields containing Hungarian function words
+  (` a `, ` az `, ` és `, ` hogy `, ` nem `, ` van `, ` ez `, ` egy `, ` meg `, ` vagy `, ` minden `,
+  ` létezik `) or the characters `ő`/`ű`. Allow proper names and quoted course terms.
+- **LaTeX preservation**: extract every `$...$` segment from source and translation and compare
+  counts per field; investigate every mismatch.
+- **DOM scan**: load each route in English mode, walk visible text, and fail on Hungarian words
+  outside the allowlist (exam names, people, institutions).
+- **State stability**: switch languages on a chapter, practice bank, test, notebook entry and search
+  result; progress, answers and route must survive.
 
-### Rules
+### Bilingual quality gates (all must pass)
 
-- The default language matches the audience; the toggle is always visible.
-- Switching language must not reload the page or lose progress.
-- Navigation, breadcrumbs, section titles, chapter titles and buttons must switch together. No mixed chrome.
-- Translate the retention chrome explicitly: *Napi küldetés / Daily quest*, *Hibafüzet / Error notebook*, *Vegyes menet / Mixed run*, *Hibavadászat / Error hunt*, *Haladás / Progress*, *Magyarázd el / Explain it*, plus streak, freeze, due, mastered and the readiness labels. These strings are new UI, so they are easy to forget in the dictionary.
-- Keep dates, day counts and percentages locale-neutral or format them per language; do not let a translated label break the stored keys (`sectionId/chapterId`).
-- Hungarian course terms may stay in parentheses in English mode: *középszintű érettségi*, *ZH*, *vizsga*.
-- Do not translate exam names, dates, official course codes or people’s names.
-- Keep answer hiding consistent in both languages: the correct answer appears only after “Show answer” / “Megoldás mutatása”.
-- Test both languages on every route; check that KaTeX and the answer checker are unaffected.
-
-### Bilingual quality gates
-
-- [ ] Toggle visible and persisted.
-- [ ] `document.documentElement.lang` changes.
-- [ ] Sidebar, breadcrumbs, buttons and callouts switch.
-- [ ] Section/chapter titles and leads switch.
-- [ ] English chapter overview exists (or full translation).
-- [ ] Notice shown where long-form content remains Hungarian.
-- [ ] Formulas and math unchanged.
-- [ ] One exercise checked in both languages; answer still hidden until “Show answer”.
-- [ ] No mixed-language chrome on any route.
+- [ ] Toggle visible, persisted; `<html lang>` changes; no page reload; progress preserved.
+- [ ] Every static and dynamic UI string switches, including toasts and empty states.
+- [ ] Section/chapter metadata, theory, examples, mistakes and exercises switch.
+- [ ] Every generated bank item (50 per category, all levels), daily quest, mixed run, chapter test and exam is fully English.
+- [ ] Every error hunt, teach-back prompt/model and readiness label switches.
+- [ ] Formula categories/names/notes and video categories/titles/channels/notes switch.
+- [ ] Both search indexes work; English queries find English content and show English kind labels.
+- [ ] One numeric, one expression, one text and one choice answer check correctly in both languages.
+- [ ] LaTeX renders identically in both languages; no raw `$$`.
+- [ ] No mixed-language chrome on any route; no “content is Hungarian” notice remains.
+- [ ] Mobile width and print preview verified in both languages.

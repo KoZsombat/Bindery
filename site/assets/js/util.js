@@ -48,6 +48,8 @@
   };
 
   MB.lang = 'hu';
+  MB.enContent = MB.enContent || {};
+  MB.T = function (hu, en) { return MB.lang === 'en' ? en : hu; };
   MB.t = function (s) {
     if (MB.lang === 'en' && MB.i18n && MB.i18n.en && MB.i18n.en[s] != null) return MB.i18n.en[s];
     return s;
@@ -68,17 +70,135 @@
     const e = MB.lang === 'en' && MB.en && MB.en.sections[s.id];
     return e ? e.intro : s.intro;
   };
+  MB.chapterTrans = function (c) {
+    if (MB.lang !== 'en' || !c) return null;
+    return (MB.enContent && MB.enContent[c.sectionId + '/' + c.id]) || null;
+  };
   MB.cTitle = function (c) {
+    const full = MB.chapterTrans(c);
+    if (full && full.title) return full.title;
     const e = MB.lang === 'en' && MB.en && MB.en.chapters[c.sectionId + '/' + c.id];
     return e ? e.title : c.title;
   };
   MB.cLead = function (c) {
+    const full = MB.chapterTrans(c);
+    if (full && full.lead) return full.lead;
     const e = MB.lang === 'en' && MB.en && MB.en.chapters[c.sectionId + '/' + c.id];
     return e ? e.lead : c.lead;
   };
   MB.cSummary = function (c) {
+    const full = MB.chapterTrans(c);
+    if (full && full.summary) return full.summary;
     const e = MB.lang === 'en' && MB.en && MB.en.chapters[c.sectionId + '/' + c.id];
     return e ? e.summary : '';
+  };
+
+  /* Merge one English chapter overlay onto the Hungarian source, preserving
+     IDs, answer values, answer types and LaTeX. Arrays merge by index. */
+  MB.pickChapter = function (c) {
+    const e = MB.chapterTrans(c);
+    if (!e) return c;
+    const out = Object.assign({}, c);
+    ['title', 'lead', 'summary', 'when'].forEach(function (k) {
+      if (e[k]) out[k] = e[k];
+    });
+    if (e.why) out.why = e.why;
+    if (e.mistakes) out.mistakes = e.mistakes;
+    if (c.theory) out.theory = c.theory.map(function (t, i) {
+      return e.theory && e.theory[i] ? Object.assign({}, t, e.theory[i]) : t;
+    });
+    if (c.examples) out.examples = c.examples.map(function (x, i) {
+      return e.examples && e.examples[i] ? Object.assign({}, x, e.examples[i]) : x;
+    });
+    if (c.exercises) out.exercises = c.exercises.map(function (q, i) {
+      const t = e.exercises && e.exercises[i];
+      if (!t) return q;
+      const merged = Object.assign({}, q, t);
+      if (t.altEn) merged.alt = [].concat(q.alt || [], t.altEn);
+      if (q.type === 'text' && /(^|\s)(vagy|és|minden|van|nem)(\s|$)/.test(String(q.a || ''))) {
+        const en = t.aEn || (t.altEn && t.altEn[0]);
+        if (en) { merged.alt = [].concat(q.a || [], merged.alt || []); merged.a = en; }
+      }
+      delete merged.altEn;
+      return merged;
+    });
+    if (c.video && e.video) out.video = Object.assign({}, c.video, e.video);
+    return MB.localizeDeep(out);
+  };
+
+  /* Generated exercises carry Hungarian plus *En fields from generators.js. */
+  MB.pickItem = function (it) {
+    if (MB.lang !== 'en' || !it) return it;
+    const o = Object.assign({}, it);
+    if (it.qEn) o.q = it.qEn;
+    if (it.hintEn) o.hint = it.hintEn;
+    if (it.solEn) o.sol = it.solEn;
+    if (it.choicesEn) o.choices = it.choicesEn;
+    return MB.localizeDeep(o);
+  };
+
+  MB.pickFormula = function (f, i) {
+    if (MB.lang !== 'en' || !MB.enFormulas || !MB.enFormulas[i]) return f;
+    const o = Object.assign({}, f, MB.enFormulas[i]);
+    if (o.latexEn) { o.latex = o.latexEn; delete o.latexEn; }
+    return MB.localizeDeep(o);
+  };
+  MB.pickVideo = function (v, i) {
+    if (MB.lang !== 'en' || !MB.enVideos || !MB.enVideos[i]) return v;
+    return MB.localizeDeep(Object.assign({}, v, MB.enVideos[i]));
+  };
+
+  /* LaTeX is language-independent except for words inside \text{...}. */
+  MB.mathText = {
+    'nem ért.': 'undefined',
+    'vagy': 'or',
+    'folytonos': 'continuous',
+    'folytonos ': 'continuous at ',
+    '-ban': '',
+    'deriválható': 'differentiable',
+    'nem deriválható': 'not differentiable',
+    'és': 'and',
+    'akkor': 'then',
+    'ahol ': 'where ',
+    'minden ': 'for all ',
+    'sorozatra': 'sequences',
+    'konvergens': 'convergent',
+    'nő': 'increasing',
+    'csökken': 'decreasing',
+    'konvex': 'convex',
+    'konkáv': 'concave',
+    'lokális minimum': 'local minimum',
+    'lokális maximum': 'local maximum',
+    'nyeregpont': 'saddle point',
+    'a teszt nem dönt.': 'the test is inconclusive.',
+    'Feltétel: ': 'Condition: ',
+    'henger: ': 'cylinder: ',
+    'gömb: ': 'sphere: ',
+    'páratlan': 'odd',
+    'rang': 'rank',
+    'vezető elemek száma': 'number of leading entries',
+    '(permutáció)': '(permutation)',
+    '(ismétlés nélküli variáció)': '(variation without repetition)',
+    '(kombináció)': '(combination)',
+    'ism': 'with rep.',
+    '(ismétléses variáció)': '(variation with repetition)',
+    'csúcsú fa': '-vertex tree'
+  };
+  MB.localizeMath = function (s) {
+    if (MB.lang !== 'en' || typeof s !== 'string' || s.indexOf('\\text{') < 0) return s;
+    return s.replace(/\\text\{([^{}]*)\}/g, function (m, t) {
+      return MB.mathText[t] != null ? '\\text{' + MB.mathText[t] + '}' : m;
+    });
+  };
+  MB.localizeDeep = function (x) {
+    if (typeof x === 'string') return MB.localizeMath(x);
+    if (Array.isArray(x)) return x.map(MB.localizeDeep);
+    if (x && typeof x === 'object') {
+      const o = {};
+      for (const k in x) o[k] = MB.localizeDeep(x[k]);
+      return o;
+    }
+    return x;
   };
 
   MB.esc = function (s) {
