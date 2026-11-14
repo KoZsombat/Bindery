@@ -18,10 +18,14 @@ async function serveGenerated(req, res, slug, sub) {
   if (!clean) {
     const index = path.join(path.dirname(siteJsonPath(slug)), 'index.html');
     if (fs.existsSync(index)) {
-      res.setHeader('Cache-Control', 'private, no-cache');
-      return res.sendFile(index);
+      const html = await fsp.readFile(index, 'utf8');
+      if (html.includes('class="brand-mark"') && html.includes('styles.css?v=2')) {
+        res.setHeader('Cache-Control', 'private, no-cache');
+        return res.sendFile(index);
+      }
     }
     const data = JSON.parse(await fsp.readFile(siteJsonPath(slug), 'utf8'));
+    res.setHeader('Cache-Control', 'private, no-cache');
     return res.render('generated', { site: data, slug, json: JSON.stringify(data).replace(/</g, '\\u003c') });
   }
   if (clean === 'site.json') {
