@@ -71,17 +71,36 @@ traefik.http.routers.builder-sites.rule=HostRegexp(`^[a-z0-9-]+[.]sites[.]exampl
 Set `COOKIE_DOMAIN=.example.com` (and `COOKIE_SECURE=1`) so the session is shared with the
 subdomain. The server reads the `Host` header and serves the matching site at `/`.
 
-## Local run
+## Development (no tokens required)
+
+`NODE_ENV` unset means development. With no `.env` and no environment variables:
+
+- first start creates `admin@example.com` with password `admin`
+- no model key is required; generation uses the deterministic mock
+- the server listens on `http://127.0.0.1:8080`
+- SQLite and uploads live in `./data`
 
 ```bash
-cp .env.example .env
-# edit ADMIN_EMAIL / ADMIN_PASSWORD / ENCRYPTION_KEY
-# set LLM_MOCK=1 in .env for a sample site without a model
 node server.js
 ```
 
+To use a real model in dev, set `LLM_API_KEY`/`LLM_BASE_URL` (or add a user key), or set
+`LLM_MOCK=0` to require a key. `MAX_CONCURRENT_JOBS=3` controls how many generations run at
+once; `LLM_MOCK_DELAY=500` is useful for exercising the queue.
+
+## Local run with .env
+
+```bash
+cp .env.example .env
+# edit ADMIN_EMAIL / ADMIN_PASSWORD / ENCRYPTION_KEY / model settings
+node server.js
+```
+
+`.env` is loaded by `server.js` directly and is ignored by Git and Docker. The Docker image sets
+`NODE_ENV=production`; compose forces it too, so production never uses the dev defaults.
+
 Open <http://127.0.0.1:8080>. `LLM_MOCK=1` returns a deterministic sample instead of calling a
-model, which is useful for a smoke test. For a real run set `LLM_API_KEY` or add a user key.
+model. For a real run set `LLM_API_KEY` or add a user key.
 
 ## API
 

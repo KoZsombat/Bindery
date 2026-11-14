@@ -10,6 +10,7 @@ services:
     env_file:
       - .env
     environment:
+      NODE_ENV: production
       PORT: "8080"
       DATA_DIR: /data
       BASE_DOMAIN: ${BASE_DOMAIN}

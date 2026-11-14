@@ -50,11 +50,14 @@ const COOKIE_DOMAIN = process.env.COOKIE_DOMAIN || '';
 const COOKIE_SECURE = process.env.COOKIE_SECURE === '1';
 const DEFAULT_DAILY_LIMIT = Number(process.env.DEFAULT_DAILY_LIMIT || 3);
 const ADMIN_DAILY_LIMIT = Number(process.env.ADMIN_DAILY_LIMIT || 100);
+const DEV = process.env.NODE_ENV !== 'production';
+const MAX_CONCURRENT_JOBS = Math.max(1, Math.min(20, Number(process.env.MAX_CONCURRENT_JOBS || 3)));
 const MAX_UPLOAD = 8 * 1024 * 1024;
 const MAX_FILES = 6;
 const MAX_SOURCE = 80000;
 const SESSION_MS = 7 * 24 * 3600 * 1000;
 const LLM_MOCK = process.env.LLM_MOCK === '1';
+const DEV_MOCK = DEV && process.env.LLM_MOCK !== '0';
 const LLM_BASE_URL = (process.env.LLM_BASE_URL || process.env.COMMAND_CODE_BASE_URL || 'https://api.commandcode.ai/v1').replace(/\/+$/, '');
 const LLM_API_KEY = process.env.LLM_API_KEY || process.env.COMMAND_CODE_API_KEY || '';
 const LLM_MODEL = process.env.LLM_MODEL || process.env.COMMAND_CODE_MODEL || 'deepseek-v4.1';
@@ -317,15 +320,15 @@ function publicSite(s, req) {
 function seed() {
   const count = db.prepare('SELECT COUNT(*) AS n FROM users').get().n;
   if (!count) {
-    const email = process.env.ADMIN_EMAIL;
-    const pass = process.env.ADMIN_PASSWORD;
+    const email = process.env.ADMIN_EMAIL || (DEV ? 'admin@example.com' : '');
+    const pass = process.env.ADMIN_PASSWORD || (DEV ? 'admin' : '');
     if (!email || !pass) {
       console.error('No users yet. Set ADMIN_EMAIL and ADMIN_PASSWORD to create the admin.');
       process.exit(1);
     }
     db.prepare(`INSERT INTO users (email,name,pass,is_admin,daily_limit,created_at)
       VALUES (?,?,?,?,?,?)`).run(email.toLowerCase(), 'Administrator', hashPassword(pass), 1, ADMIN_DAILY_LIMIT, now());
-    console.log('Created admin:', email);
+    console.log('Created admin:', email, DEV && !process.env.ADMIN_PASSWORD ? '(development default password: admin)' : '');
   }
   const admin = db.prepare('SELECT * FROM users WHERE is_admin=1 ORDER BY id LIMIT 1').get()
     || db.prepare('SELECT * FROM users ORDER BY id LIMIT 1').get();
@@ -347,6 +350,7 @@ function llmConfig(user) {
   const model = user.api_model || LLM_MODEL;
   return { base, key, model };
 }
+function useMock(cfg) { return LLM_MOCK || (DEV_MOCK && !cfg.key); }
 function skillText() {
   try { return fs.readFileSync(SKILL_PATH, 'utf8'); } catch { return ''; }
 }
@@ -442,7 +446,11 @@ function mockSite(req) {
   };
 }
 async function callLLM(cfg, messages) {
-  if (LLM_MOCK) return JSON.stringify(mockSite(messages.request || {}));
+  if (useMock(cfg)) {
+    const delay = Number(process.env.LLM_MOCK_DELAY || 0);
+    if (delay > 0) await new Promise(r => setTimeout(r, Math.min(10000, delay)));
+    return JSON.stringify(mockSite(messages.request || {}));
+  }
   const payload = { model: cfg.model, messages, temperature: 0.35, max_tokens: 12000 };
   if (process.env.LLM_JSON_MODE !== '0') payload.response_format = { type: 'json_object' };
   const doFetch = async body => {
@@ -471,28 +479,42 @@ function extractJSON(text) {
 }
 
 /* ------------------------------------------------------------------ worker */
-let working = false;
+const activeJobs = new Set();
 let kickTimer = null;
 function kick(delay) {
-  if (kickTimer) return;
-  kickTimer = setTimeout(function () { kickTimer = null; processJobs(); }, delay || 0);
+  if (kickTimer || activeJobs.size >= MAX_CONCURRENT_JOBS) return;
+  kickTimer = setTimeout(function () { kickTimer = null; drain(); }, delay || 0);
 }
-async function processJobs() {
-  if (working) return;
-  working = true;
+function claimJob() {
+  const job = db.prepare("SELECT * FROM jobs WHERE status='queued' ORDER BY id LIMIT 1").get();
+  if (!job) return null;
+  const t = now();
+  const changed = db.prepare("UPDATE jobs SET status='running',log='Contacting the model…',updated_at=? WHERE id=? AND status='queued'").run(t, job.id);
+  if (!changed.changes) return null;
+  db.prepare("UPDATE sites SET status='running',updated_at=? WHERE id=?").run(t, job.site_id);
+  return job;
+}
+function drain() {
+  while (activeJobs.size < MAX_CONCURRENT_JOBS) {
+    const job = claimJob();
+    if (!job) break;
+    activeJobs.add(job.id);
+    runJob(job).catch(e => console.error('Job failed:', e)).finally(function () {
+      activeJobs.delete(job.id);
+      kick(0);
+    });
+  }
+}
+async function runJob(job) {
+  const site = siteRow(job.site_id);
+  if (!site || site.status === 'ready') {
+    db.prepare("UPDATE jobs SET status='failed',log='Site missing or already ready',updated_at=? WHERE id=?").run(now(), job.id);
+    return;
+  }
   try {
-    const job = db.prepare("SELECT * FROM jobs WHERE status='queued' ORDER BY id LIMIT 1").get();
-    if (!job) return;
-    const site = siteRow(job.site_id);
-    if (!site || site.status === 'ready') {
-      db.prepare("UPDATE jobs SET status='failed',log='Site missing or already ready',updated_at=? WHERE id=?").run(now(), job.id);
-      return;
-    }
-    db.prepare("UPDATE jobs SET status='running',log='Contacting the model…',updated_at=? WHERE id=?").run(now(), job.id);
-    db.prepare("UPDATE sites SET status='running',updated_at=? WHERE id=?").run(now(), site.id);
     const user = db.prepare('SELECT * FROM users WHERE id=?').get(site.owner_id);
     const cfg = llmConfig(user);
-    if (!LLM_MOCK && !cfg.key) throw new Error('No API key. Add one in Settings or ask the admin to configure the server.');
+    if (!useMock(cfg) && !cfg.key) throw new Error('No API key. Add one in Settings or ask the admin to configure the server.');
     const req = { title: site.title, description: site.description, topic: site.topic, audience: site.audience, language: site.language, long_text: site.source_text };
     const skill = skillText().slice(0, 60000);
     const schema = `Return ONE JSON object, no markdown, with this exact shape:
@@ -510,20 +532,12 @@ Rules: every prose field is a {hu,en} object; math stays inside $...$; 1-8 secti
     db.prepare("UPDATE sites SET status='ready',error='',updated_at=? WHERE id=?").run(now(), site.id);
     db.prepare("UPDATE jobs SET status='done',log=?,updated_at=? WHERE id=?").run('Generated and routed at ' + siteUrl(site.slug), now(), job.id);
   } catch (e) {
-    try {
-      const job = db.prepare("SELECT * FROM jobs WHERE status='running' ORDER BY id DESC LIMIT 1").get();
-      if (job) {
-        db.prepare("UPDATE sites SET status='failed',error=?,updated_at=? WHERE id=?").run(String(e.message || e).slice(0, 2000), now(), job.site_id);
-        db.prepare("UPDATE jobs SET status='failed',log=?,updated_at=? WHERE id=?").run(String(e.stack || e).slice(0, 4000), now(), job.id);
-      }
-    } catch {}
+    db.prepare("UPDATE sites SET status='failed',error=?,updated_at=? WHERE id=?").run(String(e.message || e).slice(0, 2000), now(), site.id);
+    db.prepare("UPDATE jobs SET status='failed',log=?,updated_at=? WHERE id=?").run(String(e.stack || e).slice(0, 4000), now(), job.id);
     console.error('Job failed:', e);
-  } finally {
-    working = false;
-    if (db.prepare("SELECT 1 FROM jobs WHERE status='queued' LIMIT 1").get()) kick(0);
   }
 }
-if (db.prepare("SELECT 1 FROM jobs WHERE status='queued' LIMIT 1").get()) kick(0);
+kick(0);
 
 /* ------------------------------------------------------------------ pages */
 function shell(title, body, extra = '') {
@@ -564,6 +578,7 @@ ${next ? `<input type="hidden" name="next" value="${esc(next)}">` : ''}
 <label for="password">Password</label><input id="password" name="password" type="password" required autocomplete="current-password">
 <button type="submit">Sign in</button>
 <small>No public sign-up. Ask the administrator for an account.</small>
+${DEV && !process.env.ADMIN_PASSWORD ? '<small>Development login: admin@example.com / admin</small>' : ''}
 </form></body></html>`;
 }
 
@@ -613,7 +628,7 @@ async function handleApi(req, res, url) {
     if (!topic && !source.trim()) return json(res, 400, { error: 'Add a topic, long text, or at least one file.' });
     const title = String(b.title || topic || 'Untitled learning book').trim().slice(0, 160);
     const cfg = llmConfig(user);
-    if (!LLM_MOCK && !cfg.key) return json(res, 400, { error: 'No API key. Add your key in Settings, or ask the admin to configure LLM_API_KEY.' });
+    if (!useMock(cfg) && !cfg.key) return json(res, 400, { error: 'No API key. Add your key in Settings, or ask the admin to configure LLM_API_KEY.' });
     if (!b.force) {
       const needle = '%' + (topic || title || '').slice(0, 60).replace(/[%_]/g, '') + '%';
       const near = db.prepare(`SELECT * FROM sites WHERE status='ready' AND published=1
@@ -846,5 +861,6 @@ const server = http.createServer(async (req, res) => {
 
 server.listen(PORT, '0.0.0.0', () => {
   console.log(`Learning Book Builder on :${PORT} (base ${BASE_DOMAIN}, sites ${SITE_DOMAIN})`);
-  if (!LLM_MOCK && !LLM_API_KEY) console.log('No global LLM_API_KEY; users must add their own key.');
+  if (!LLM_MOCK && DEV && !LLM_API_KEY) console.log('Development mode: no API key, using deterministic mock generation.');
+  else if (!LLM_MOCK && !LLM_API_KEY) console.log('No global LLM_API_KEY; users must add their own key.');
 });
