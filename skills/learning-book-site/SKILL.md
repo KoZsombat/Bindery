@@ -1079,6 +1079,9 @@ downloads. The creator stores one JSON book per project and serves it at a route
   example: navy/gold topbar, paper background, serif reading column, fixed contents sidebar, chapter
   opener, callouts and card rhythm. Do not ship a generic sans-serif template or a second visual
   language. Keep the renderer CSS and the example tokens in sync when either changes.
+- **Ship a favicon.** Serve an SVG favicon with a stable route and a matching `<link rel="icon">` in
+  every shell (builder, example, generated site). Use the book’s navy/gold mark, not a broken
+  `/favicon.ico` request.
 - **Routed, not downloadable.** Serve at `/s/<slug>/` and optionally at `<slug>.<SITE_DOMAIN>`.
   Never expose a ZIP, archive, attachment or download button. The learner opens the URL.
 - **Auth and quota belong to the creator.** Only authenticated users may open the builder, the

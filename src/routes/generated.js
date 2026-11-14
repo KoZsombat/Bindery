@@ -19,7 +19,7 @@ async function serveGenerated(req, res, slug, sub) {
     const index = path.join(path.dirname(siteJsonPath(slug)), 'index.html');
     if (fs.existsSync(index)) {
       const html = await fsp.readFile(index, 'utf8');
-      if (html.includes('class="brand-mark"') && html.includes('styles.css?v=2')) {
+      if (html.includes('class="brand-mark"') && html.includes('styles.css?v=2') && html.includes('favicon.svg')) {
         res.setHeader('Cache-Control', 'private, no-cache');
         return res.sendFile(index);
       }
@@ -32,7 +32,7 @@ async function serveGenerated(req, res, slug, sub) {
     res.setHeader('Cache-Control', 'no-store');
     return res.sendFile(siteJsonPath(slug));
   }
-  if (clean === 'app.js' || clean === 'styles.css') {
+  if (clean === 'app.js' || clean === 'styles.css' || clean === 'favicon.svg') {
     return res.sendFile(path.join(TEMPLATE_DIR, clean), { headers: { 'Cache-Control': 'private, no-cache' } });
   }
   res.status(404).send('Not found.');
