@@ -10,7 +10,9 @@ const fs = require('fs');
 const fsp = fs.promises;
 const path = require('path');
 const crypto = require('crypto');
-const { execFileSync } = require('child_process');
+const { execFile } = require('child_process');
+const { promisify } = require('util');
+const execFileAsync = promisify(execFile);
 const { DatabaseSync } = require('node:sqlite');
 
 const ROOT = __dirname;
@@ -273,14 +275,15 @@ function parseMultipart(buf, contentType) {
   }
   return files;
 }
-function pdfText(buf, name) {
+async function pdfText(buf, name) {
   const tmp = path.join(UPLOADS_DIR, 'tmp-' + crypto.randomBytes(8).toString('hex') + '.pdf');
-  fs.writeFileSync(tmp, buf);
+  await fsp.writeFile(tmp, buf);
   try {
-    return execFileSync('pdftotext', ['-layout', tmp, '-'], { encoding: 'utf8', maxBuffer: 4 * 1024 * 1024 });
+    const { stdout } = await execFileAsync('pdftotext', ['-layout', tmp, '-'], { encoding: 'utf8', maxBuffer: 4 * 1024 * 1024 });
+    return stdout;
   } catch {
     throw new Error(`Could not extract text from ${name}. Install poppler-utils or upload a text file.`);
-  } finally { try { fs.unlinkSync(tmp); } catch {} }
+  } finally { try { await fsp.unlink(tmp); } catch {} }
 }
 function quotaUsed(userId) {
   const day = new Date().toISOString().slice(0, 10);
@@ -469,6 +472,11 @@ function extractJSON(text) {
 
 /* ------------------------------------------------------------------ worker */
 let working = false;
+let kickTimer = null;
+function kick(delay) {
+  if (kickTimer) return;
+  kickTimer = setTimeout(function () { kickTimer = null; processJobs(); }, delay || 0);
+}
 async function processJobs() {
   if (working) return;
   working = true;
@@ -510,9 +518,12 @@ Rules: every prose field is a {hu,en} object; math stays inside $...$; 1-8 secti
       }
     } catch {}
     console.error('Job failed:', e);
-  } finally { working = false; }
+  } finally {
+    working = false;
+    if (db.prepare("SELECT 1 FROM jobs WHERE status='queued' LIMIT 1").get()) kick(0);
+  }
 }
-setInterval(processJobs, 2500);
+if (db.prepare("SELECT 1 FROM jobs WHERE status='queued' LIMIT 1").get()) kick(0);
 
 /* ------------------------------------------------------------------ pages */
 function shell(title, body, extra = '') {
@@ -617,7 +628,7 @@ async function handleApi(req, res, url) {
       b.published === false ? 0 : 1, source.slice(0, MAX_SOURCE), t, t);
     const id = Number(r.lastInsertRowid);
     db.prepare('INSERT INTO jobs (site_id,status,log,created_at,updated_at) VALUES (?,?,?,?,?)').run(id, 'queued', 'Queued.', t, t);
-    setTimeout(processJobs, 50);
+    setTimeout(function () { kick(0); }, 50);
     return json(res, 201, { site: publicSite(siteRow(id), req) });
   }
   let m = /^\/api\/sites\/(\d+)$/.exec(p);
@@ -696,7 +707,7 @@ async function handleApi(req, res, url) {
       if (f.data.length > MAX_UPLOAD) return json(res, 413, { error: f.name + ' is larger than 8 MB.' });
       const ext = path.extname(f.name).toLowerCase();
       let text = '';
-      if (ext === '.pdf') text = pdfText(f.data, f.name);
+      if (ext === '.pdf') text = await pdfText(f.data, f.name);
       else if (['.txt', '.md', '.markdown', '.csv', '.json', '.tex', '.js', '.html', '.css'].includes(ext)) text = f.data.toString('utf8');
       else return json(res, 415, { error: 'Unsupported file type: ' + ext + '. Use PDF, TXT, MD, CSV, JSON, TEX, JS, HTML or CSS.' });
       text = text.slice(0, 150000);
@@ -792,6 +803,7 @@ const server = http.createServer(async (req, res) => {
       const body = parseForm(await readBody(req, 64 * 1024));
       const u = db.prepare('SELECT * FROM users WHERE email=? AND disabled=0').get(String(body.email || '').toLowerCase());
       if (!u || !verifyPassword(body.password, u.pass)) return html(res, 401, loginPage(String(body.next || '/app')).replace('</form>', '<div class="err">Wrong email or password.</div></form>'));
+      db.prepare('DELETE FROM sessions WHERE expires<=?').run(now());
       const s = makeSession(u.id);
       const next = String(body.next || '/app');
       return redirect(res, next.startsWith('/') ? next : '/app', { 'Set-Cookie': cookieHeader(s.token, Math.floor(SESSION_MS / 1000)) });
