@@ -907,3 +907,27 @@ for (const s of MB.sections) for (const c of s.chapters) {
 - [ ] LaTeX renders identically in both languages; no raw `$$`.
 - [ ] No mixed-language chrome on any route; no “content is Hungarian” notice remains.
 - [ ] Mobile width and print preview verified in both languages.
+
+## 18. Hosted creator output (routed, not downloaded)
+
+When the skill runs inside a creator platform, the deliverable is not a repository the learner
+downloads. The creator stores one JSON book per project and serves it at a route.
+
+- **One JSON document per site.** Store `title`, bilingual `subtitle`/`summary`, and
+  `sections[].chapters[]` with the same prose fields as §5. Prose is `{hu,en}`; LaTeX and answer
+  values are shared. Keep the schema small enough for a model to emit reliably, then normalize and
+  validate structurally on the server.
+- **One static renderer.** A small `index.html` + `app.js` + `styles.css` reads `site.json`.
+  Do not generate a separate app per site and do not run a container per site.
+- **Routed, not downloadable.** Serve at `/s/<slug>/` and optionally at `<slug>.<SITE_DOMAIN>`.
+  Never expose a ZIP, archive, attachment or download button. The learner opens the URL.
+- **Auth and quota belong to the creator.** Only authenticated users may open the builder, the
+  catalog or a generated site. One admin creates users; each user has a daily site limit.
+- **Reuse before generation.** Search already-created books by title/topic/source text and offer
+  open/clone. Only call the model after the user explicitly chooses a new site.
+- **Uploads are context.** Extract text from PDFs/notes, append it to the skill prompt, and cap the
+  combined source length. The skill still governs structure, prerequisites and exercise quality.
+- **Generation is asynchronous.** Queue a job, show status/log, validate the JSON, write
+  `site.json`, then flip the site to `ready`. Failures keep the previous site intact.
+- **Least compute.** Prefer a single process, SQLite, static files and an external model API over
+  per-site builds, containers or servers.

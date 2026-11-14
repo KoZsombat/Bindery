@@ -9,8 +9,13 @@ Thumbs.db
 *.log
 *.tmp
 
-# dependencies (the site has none, but keep the rule)
+# dependencies (the builder has none, but keep the rule)
 node_modules/
+
+# builder state
+platform/data/
+platform/test-data/
+platform/.env
 
 # local screenshots / scratch
 screenshots/

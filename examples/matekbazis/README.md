@@ -70,3 +70,7 @@ README.md             ← ez a fájl
 A tananyag a BME VIK mérnökinformatikus első évének anyagára épül: Fritz–Kónya–Pataki–Tasnádi *Matematika 1*, az Analízis 1–2 jegyzetek, a 2025–2026-os zárthelyik és vizsgák, valamint a saját felkészítő jegyzeteid. A `resources/` mappában az eredeti PDF-ek is megtalálhatók.
 
 Ez tanulást segítő összefoglaló, nem hivatalos tanszéki jegyzet. A számonkérés szintjét mindig az aktuális követelményrendszer és a tanszéki anyagok adják.
+
+---
+
+**Ez egy már elkészült projekt.** A Learning Book Builder katalógusában példaként szerepel; a szerkesztő és az új site-ok generálása a repository gyökér `platform/` mappájában található.

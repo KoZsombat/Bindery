@@ -1,0 +1,42 @@
+name: learning-book-builder
+
+services:
+  builder:
+    build:
+      context: ..
+      dockerfile: platform/Dockerfile
+    image: learning-book-builder:latest
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      PORT: "8080"
+      DATA_DIR: /data
+      BASE_DOMAIN: ${BASE_DOMAIN}
+      SITE_DOMAIN: ${SITE_DOMAIN}
+      SKILL_PATH: /app/skills/learning-book-site/SKILL.md
+      EXAMPLE_DIR: /app/examples/matekbazis
+    volumes:
+      - ./data:/data
+    expose:
+      - "8080"
+    networks:
+      - web
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8080/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    # Launchpad adds these labels when it scans this compose project.
+    # They are also here so `docker compose up` behind an existing Traefik works.
+    labels:
+      traefik.enable: "true"
+      traefik.docker.network: web
+      traefik.http.routers.builder.rule: Host(`builder.${BASE_DOMAIN}`)
+      traefik.http.routers.builder.entrypoints: web
+      traefik.http.services.builder.loadbalancer.server.port: "8080"
+
+networks:
+  web:
+    external: true
