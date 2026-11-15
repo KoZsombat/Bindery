@@ -9,65 +9,142 @@ JSON book, and publishes it at its own URL. The original MatekBázis book is inc
   `<slug>.<SITE_DOMAIN>`). There is no ZIP endpoint and no download button.
 - **Users only.** Sign-up is disabled. One seeded administrator creates accounts.
 - **Daily quota.** Each user has a configurable sites-per-day limit; the admin can change it.
-- **Bring your own model.** Use the server-wide `LLM_API_KEY` or save an OpenAI-compatible
-  endpoint/key/model per user (encrypted at rest).
+- **Bring your own model.** Every user saves their own OpenAI-compatible endpoint, model and key
+  in Settings (encrypted at rest). There is no server-wide model key.
 - **Reuse first.** The create form searches the catalog; the API also returns up to five
   matching published sites before queueing. The user can open/reuse one, or choose
   **Generate a new site anyway** (`force: true`) without spending a generation on a duplicate.
-- **Least compute.** Small dependency set, no build step, no per-site containers. One Node 24
-  process + SQLite + static files. The generated sites are JSON + a small static renderer.
-- **Launchpad UI.** A bilingual (HU/EN) dashboard with a navy/gold MatekBázis-style shell,
-  quota and catalog shortcuts, plus archive, regenerate and cancel actions.
+- **React builder, SSR books.** The builder (dashboard, create, catalog, settings, admin) is a
+  React 19 + TypeScript SPA. Generated sites remain server-rendered EJS + a small static renderer;
+  they never load the React bundle.
+- **Bilingual (HU/EN) dashboard** with a navy/gold MatekBázis-style shell, quota and catalog
+  shortcuts, plus archive, regenerate and cancel actions.
 - **Light and dark themes.** The builder, login, example and generated shells all ship both
   themes; the choice is persisted and applied before CSS loads.
 - **Durable queue.** Leased jobs survive restarts, retry once with backoff, and validate the
   model output against a strict bilingual schema (with one repair attempt).
-- **Operations.** `/healthz` and `/readyz`, a SQLite + sites backup script, and a CI workflow
-  that runs tests and builds the image.
+- **Operations.** `/healthz` and `/readyz`, a SQLite + sites backup script, and CI that runs tests,
+  builds the client, and builds the image.
 
 ## Stack
 
 | Piece | Choice | Why |
 |---|---|---|
-| Runtime | Node 24 + Express 5 + EJS | Conventional SSR app, no frontend build |
+| Runtime | Node 24 + Express 5 | Conventional API/SSR server, no server build step |
+| Builder frontend | React 19 + TypeScript + Vite 8 + Tailwind 4 | Component reuse, typed API layer, fast builds |
 | Auth | Better Auth (email/password, admin plugin) | Session cookies, password hashing, user management |
 | Storage | `better-sqlite3` at `/data/builder.db` + `/data/sites/<slug>/site.json` | One file each; auth/quota/catalog |
-| Generated site | static HTML/CSS/JS + `site.json` | No per-site process; routed by the same server |
+| Generated site | server-rendered EJS + static CSS/JS + `site.json` | No per-site process and no React payload |
 | PDF text | `pdftotext` from Alpine `poppler-utils` | Only needed when a PDF is uploaded |
 | Reverse proxy | Traefik + Cloudflare Tunnel via Launchpad | Wildcard DNS already exists |
+
+### Why SQLite instead of PostgreSQL
+
+This builder runs as **one process on one host**: one worker drains the generation queue, and all
+writes are short metadata updates. SQLite in WAL mode handles that load, removes a second stateful
+service from the deployment, and makes backups a single file. PostgreSQL would add a container,
+connection pooling, and an async rewrite of every query without buying anything until there are
+multiple replicas or several writers on different hosts. If the project grows that way, the schema
+is plain SQL and the `db/index.js` surface is small; switching later is a contained change.
 
 ## Repository layout
 
 ```
-src/index.js           entrypoint: migrations, admin seed, worker, HTTP listen
-src/app.js             Express wiring and middleware order
-src/routes/            pages, admin, generated-site routes
-src/services/          generation worker and upload extraction
-src/db/                SQLite schema, profiles, quota, site helpers
-src/views/             EJS server-rendered pages
-src/template/          static renderer used by every generated site
-public/                app.css only
+apps/client/           React SPA (builder only)
+  src/components/ui/   shared primitives (Button, Card, Field, Badge, Alert…)
+  src/components/      layout and site cards
+  src/pages/           login, dashboard, create, site, catalog, settings, admin
+  src/context/         auth, i18n, theme, toasts
+  src/lib/             API client, types, i18n dictionary, formatters
+apps/server/
+  src/routes/api.js    JSON API used by the SPA
+  src/routes/generated.js  SSR generated-site routes and subdomain handler
+  src/services/        generation worker and upload extraction
+  src/db/              SQLite schema, profiles, quota, site helpers
+  src/views/generated.ejs  the only EJS view (SSR learning book shell)
+  src/template/        static renderer used by every generated site
+  test/                generation schema tests
 shared/katex/          shared math assets
-Dockerfile             Node 24 + poppler-utils image
-docker-compose.yml     Launchpad-ready service with Traefik labels
-.env.example           required and optional settings
+skills/learning-book-site/SKILL.md   required generation context
 examples/matekbazis/   an already-created project, seeded in the catalog
-skills/learning-book-site/SKILL.md   required generation context (tracked, not ignored)
+Dockerfile             Node 24 + poppler-utils single production image
+docker-compose.yml     Launchpad-ready compose project with Traefik labels
+.env.example           required and optional settings
 ```
 
-## Run on Launchpad
+## Development (no tokens required)
 
-1. Push this repository.
-2. In Launchpad, create a **Compose project** pointing at the repository, branch `main`, compose
+`NODE_ENV` unset means development. With no `.env` and no environment variables:
+
+- first start creates `admin@example.com` with password `admin1234`
+- generation requires a user API key (add one in Settings), unless `LLM_MOCK=1`
+- the API listens on `http://localhost:8080`
+- SQLite and uploads live in `./data`
+
+```bash
+npm install
+
+# terminal 1 — API on :8080
+npm run dev:server
+
+# terminal 2 — Vite on :5173 (proxies /api, /s, /shared, /example)
+npm run dev:client
+```
+
+Open <http://localhost:5173>. Build the production SPA with `npm run build`; then
+`npm start` serves it from `:8080` together with the API and generated sites.
+
+In development any non-local `BETTER_AUTH_URL` in `.env` is ignored so login works on localhost.
+
+Back up the database, generated sites and example with `npm run backup` (writes to
+`backups/<timestamp>/`). The builder remembers its HU/EN choice in `localStorage`; use the HU/EN
+switch in the header.
+
+Add a user key in **Settings** to call a real model; `LLM_BASE_URL` and `LLM_MODEL` are only
+defaults. Set `LLM_MOCK=1` for a deterministic sample without a key. `MAX_CONCURRENT_JOBS=3`
+controls how many generations run at once; `LLM_MOCK_DELAY=500` is useful when mocking.
+
+## Deploy on Launchpad
+
+There are two supported paths.
+
+### A. Single container from GHCR (recommended)
+
+1. Push this repository to GitHub.
+2. In Launchpad, create an app with source **Docker image**
+   `ghcr.io/<owner>/<repository>:latest`, internal port `8080`, health path `/readyz`, and a
+   persistent volume mounted at `/data` (SQLite + generated sites).
+3. Enable **CI/CD with GitHub Actions** and copy the app id + webhook secret.
+4. Add repository variables and secrets:
+
+   | Kind | Name | Value |
+   |---|---|---|
+   | Variable | `LAUNCHPAD_PANEL_URL` | `https://panel.example.com` |
+   | Variable | `LAUNCHPAD_APP_ID` | the app id from Launchpad |
+   | Secret | `LAUNCHPAD_WEBHOOK_SECRET` | the app's webhook secret |
+   | Secret | `CF_ACCESS_CLIENT_ID` | Cloudflare Access service token id |
+   | Secret | `CF_ACCESS_CLIENT_SECRET` | Cloudflare Access service token secret |
+
+5. Add the environment variables from [`.env.example`](.env.example) in the Launchpad app.
+   At minimum: `BASE_DOMAIN`, `ADMIN_EMAIL`, `ADMIN_PASSWORD`, `BETTER_AUTH_SECRET`,
+   `ENCRYPTION_KEY`. `ENCRYPTION_KEY` must stay stable, otherwise saved user API keys cannot be
+   decrypted.
+6. Push to `main`. The deploy workflow builds and pushes `ghcr.io/<owner>/<repo>:<sha>` plus
+   `:latest`, then calls the Launchpad deploy webhook with that image tag.
+
+Keep the GHCR package public, or store a `read:packages` token under **Settings → GHCR** in
+Launchpad for private packages.
+
+### B. Compose project
+
+1. In Launchpad, create a **Compose project** pointing at the repository, branch `main`, compose
    path `docker-compose.yml`.
-3. Scan the compose file. Publish the `builder` service on subdomain `builder` (or your preferred
+2. Scan the compose file. Publish the `builder` service on subdomain `builder` (or your preferred
    name), internal port `8080`, readiness path `/readyz`.
-4. Add the environment variables from [`.env.example`](.env.example). At minimum set
-   `ADMIN_EMAIL`, `ADMIN_PASSWORD`, `ENCRYPTION_KEY`, `BASE_DOMAIN`, `SITE_DOMAIN`.
-   `ENCRYPTION_KEY` must stay stable, otherwise saved user API keys cannot be decrypted.
-5. Deploy. Open `https://builder.<BASE_DOMAIN>` and sign in as the seeded admin.
-6. Create a user in **Admin**. The user can then sign in, add an API key in **Settings**, and
-   create a site.
+3. Fill the scanned variables (the same values as `.env.example`).
+4. Deploy. Launchpad prefixes the `builder-data` volume, so it survives redeploys. The old data
+   directory from a bind mount can be copied in with
+   `docker run --rm -v old:/from -v launchpad-<app>-builder-data:/to alpine cp -a /from/. /to/`.
 
 The compose file already carries Traefik labels for a direct `docker compose up` behind the same
 `web` network. Launchpad may add its own labels when scanning; keep the service port at `8080`.
@@ -85,64 +162,37 @@ traefik.http.routers.builder-sites.rule=HostRegexp(`^[a-z0-9-]+[.]sites[.]exampl
 Set `COOKIE_DOMAIN=.example.com` (and `COOKIE_SECURE=1`) so the session is shared with the
 subdomain. The server reads the `Host` header and serves the matching site at `/`.
 
-## Development (no tokens required)
-
-`NODE_ENV` unset means development. With no `.env` and no environment variables:
-
-- first start creates `admin@example.com` with password `admin1234`
-- no model key is required; generation uses the deterministic mock
-- the server listens on `http://localhost:8080`
-- SQLite and uploads live in `./data`
-
-```bash
-npm install
-npm test
-npm start
-```
-
-Back up the database, generated sites and example with `npm run backup` (writes to `backups/<timestamp>/`).
-The builder UI follows the browser's `lang=hu|en` cookie; use the HU/EN switch in the header.
-
-To use a real model in dev, set `LLM_API_KEY`/`LLM_BASE_URL` (or add a user key), or set
-`LLM_MOCK=0` to require a key. `MAX_CONCURRENT_JOBS=3` controls how many generations run at
-once; `LLM_MOCK_DELAY=500` is useful for exercising the queue.
-
-## Local run with .env
-
-```bash
-cp .env.example .env
-# edit ADMIN_EMAIL / ADMIN_PASSWORD / ENCRYPTION_KEY / model settings
-npm install
-npm start
-```
-
-`.env` is loaded by `src/index.js` directly and is ignored by Git and Docker. The Docker image sets
-`NODE_ENV=production`; compose forces it too, so production never uses the dev defaults.
-
-Open <http://localhost:8080>. `LLM_MOCK=1` returns a deterministic sample instead of calling a
-model. For a real run set `LLM_API_KEY` or add a user key.
-
 ## API
 
-All routes require the session cookie; JSON writes also require same-origin `Origin`.
+All routes require the session cookie; mutating requests also require a same-origin `Origin` (or
+`Sec-Fetch-Site: same-origin`).
 
 | Method | Path | Purpose |
 |---|---|---|
-| `POST` | `/login` | Form login |
-| `GET` | `/api/me` | User, quota, remaining |
+| `GET` | `/healthz` | Liveness |
+| `GET` | `/readyz` | DB + generation worker readiness and queue counts |
+| `GET` | `/api/me` | User, quota, remaining, key state |
 | `GET` | `/api/sites` | Own sites + example |
 | `POST` | `/api/sites` | Queue a generation; returns catalog suggestions unless `force: true` |
 | `GET` | `/api/sites/:id` | Status + job log |
 | `POST` | `/api/sites/:id/clone` | Reuse an existing site |
+| `POST` | `/api/sites/:id/cancel` | Cancel a queued/running job |
+| `POST` | `/api/sites/:id/regenerate` | Queue the site again |
+| `DELETE` | `/api/sites/:id` | Archive and remove a site |
 | `GET` | `/api/catalog?q=` | Search published sites |
-| `POST` | `/api/uploads` | Multipart notes/files |
+| `POST` | `/api/uploads` | Multipart notes/files; returns extracted upload ids |
 | `GET/PUT` | `/api/settings` | Per-user API config |
 | `GET/POST` | `/api/admin/users` | Admin only |
-| `PATCH` | `/api/admin/users/:id` | Limit, password, disable |
+| `PATCH` | `/api/admin/users/:id` | Limit, disable, or reset password |
+| `POST` | `/api/auth/*` | Better Auth endpoints (sign-in, session, sign-out) |
+| `POST` | `/api/logout` | Clears the session and the server session cache |
+
+The admin API never returns password hashes. Public site payloads never contain source text or
+owner ids.
 
 ## Generated-site contract
 
-The model returns one JSON object; `src/services/generation.js` normalizes and validates it:
+The model returns one JSON object; `apps/server/src/services/generation.js` normalizes and validates it:
 
 ```json
 {
@@ -167,14 +217,47 @@ The model returns one JSON object; `src/services/generation.js` normalizes and v
 
 Prose is bilingual; LaTeX is shared. The renderer supports definitions, theorems, notes, warnings,
 formulas, lists, worked examples, mistakes, choice/number/expr/text/proof exercises, local progress,
-language switching, search and print. It never exposes a download.
+language switching, search and print. It never exposes a download. Only `site.json` is stored at
+generation time; `generated.ejs` is rendered per request so template and CSP changes apply
+immediately.
 
-## Security notes
+## Security
 
-- Only the seeded admin can create users; there is no public sign-up.
-- Sessions are random tokens stored server-side; passwords use scrypt.
+- Only the seeded admin can create users; the public sign-up route is blocked and Better Auth's
+  own sign-up is disabled for the client path.
+- Sessions are random tokens stored server-side; passwords use Better Auth's hash. Logout,
+  disable, and admin password resets clear the in-process session cache and (for other users)
+  revoke existing sessions.
 - Per-user API keys are encrypted with AES-256-GCM under `ENCRYPTION_KEY`.
-- `Origin` is checked on API writes; cookies are HttpOnly/SameSite=Lax.
+- API writes require same-origin `Origin` and a same-site `Sec-Fetch-Site` where the browser sends
+  one; the JSON API sets `Cache-Control: no-store`.
+- Helmet ships a CSP with a per-request nonce, HSTS in production, `no-referrer`, `frame-ancestors
+  'none'`, and a restrictive permissions policy. The static example page gets a separate CSP
+  because its inline bootstrap is trusted and auth-gated.
+- Rate limits apply to Better Auth routes (`/sign-in/email` 10 / 15 min) and the builder API;
+  `TRUST_PROXY=1` resolves the real client IP behind Traefik/Cloudflare.
+- Uploads are capped at 6 files × 8 MB. PDFs are checked for a `%PDF-` header, text files are
+  rejected when binary, extracted text is capped, raw files are deleted after extraction, and
+  orphaned extraction rows are cleaned after 7 days.
 - Generated sites are private unless published to the catalog; published sites are visible to
   signed-in users only.
-- The builder does not mount the Docker socket. Generated sites are static files, not containers.
+- The container runs as `node` (non-root), with `tini` as PID 1, no Docker socket, no host ports;
+  generated sites are static files, not containers.
+- `GET /readyz` returns 503 when the DB or worker heartbeat is stale; `SIGTERM` stops the queue,
+  closes the HTTP server, and closes SQLite within 10 seconds.
+
+## Frontend rules
+
+All builder UI follows a shared navy/gold token system, a 4px spacing scale, a fixed type scale,
+shared primitives, and no nested interactive elements. Generated books keep their own SSR book
+theme and are exempt.
+
+## Tests
+
+```bash
+npm test          # generation schema + normalization
+npm run build     # TypeScript check and production bundle
+```
+
+`npm ci` in CI installs both workspaces; the Docker image builds the client in a separate stage and
+ships only production server dependencies.

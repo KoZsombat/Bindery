@@ -1,0 +1,63 @@
+export type Lang = 'hu' | 'en';
+
+export type SiteStatus = 'queued' | 'running' | 'ready' | 'failed' | 'cancelled' | 'deleted';
+
+export interface Site {
+  id: number;
+  slug: string;
+  title: string;
+  description: string;
+  topic: string;
+  audience: string;
+  language: 'hu' | 'en' | 'both';
+  status: SiteStatus;
+  published: boolean;
+  example: boolean;
+  createdAt: string;
+  updatedAt: string;
+  error: string;
+  url: string;
+  archived: boolean;
+  reusable: boolean;
+}
+
+export interface Job {
+  status: string;
+  log: string;
+  attempts: number;
+  lastError: string;
+  updatedAt: string;
+}
+
+export interface Profile {
+  dailyLimit: number;
+  usedToday: number;
+  remaining: number;
+  apiBase: string;
+  apiModel: string;
+  hasKey: boolean;
+}
+
+export interface Me {
+  user: { id: string; email: string; name: string; role: string };
+  admin: boolean;
+  mock: boolean;
+  profile: Profile;
+}
+
+export interface UploadedFile {
+  id: number;
+  name: string;
+  chars: number;
+}
+
+export interface AdminUser {
+  id: string;
+  email: string;
+  name: string;
+  role: string;
+  createdAt: string;
+  dailyLimit: number;
+  disabled: boolean;
+  usedToday: number;
+}

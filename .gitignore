@@ -9,7 +9,7 @@ Thumbs.db
 *.log
 *.tmp
 
-# dependencies (the builder has none, but keep the rule)
+# dependencies
 node_modules/
 
 # builder state
@@ -20,3 +20,6 @@ test-data/
 # local screenshots / scratch
 screenshots/
 backups/
+
+# build metadata
+*.tsbuildinfo

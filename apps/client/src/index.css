@@ -1,0 +1,155 @@
+@import 'tailwindcss';
+
+@custom-variant dark (&:where([data-theme='dark'], [data-theme='dark'] *));
+
+/* Design tokens. Every colour in the app resolves through these. */
+:root {
+  --background: #fcfbf7;
+  --foreground: #18222e;
+  --card: #ffffff;
+  --card-foreground: #18222e;
+  --popover: #ffffff;
+  --popover-foreground: #18222e;
+  --primary: #052a4b;
+  --primary-foreground: #ffffff;
+  --secondary: #f1ede3;
+  --secondary-foreground: #18222e;
+  --muted: #f0ece2;
+  --muted-foreground: #6b7787;
+  --accent: #b8912f;
+  --accent-foreground: #241b05;
+  --destructive: #a32b3a;
+  --destructive-foreground: #ffffff;
+  --border: #e3ded2;
+  --input: #d7d0c2;
+  --ring: #b8912f;
+  --success: #1f7a4d;
+  --warning: #8a5a00;
+
+  --brand: #052a4b;
+  --brand-foreground: #f4f7fb;
+  --brand-muted: #c7d6e6;
+
+  --ui-font: 'Segoe UI Variable Text', 'Segoe UI', Inter, system-ui, -apple-system, sans-serif;
+  --display-font: Georgia, 'Iowan Old Style', 'Palatino Linotype', 'Times New Roman', serif;
+  --mono-font: 'Cascadia Mono', 'Cascadia Code', Consolas, ui-monospace, monospace;
+}
+
+[data-theme='dark'] {
+  --background: #071a2d;
+  --foreground: #e8eef6;
+  --card: #0b253f;
+  --card-foreground: #e8eef6;
+  --popover: #0b253f;
+  --popover-foreground: #e8eef6;
+  --primary: #d8b45a;
+  --primary-foreground: #241b05;
+  --secondary: #0e2c49;
+  --secondary-foreground: #e8eef6;
+  --muted: #102f4b;
+  --muted-foreground: #8fa3b8;
+  --accent: #d8b45a;
+  --accent-foreground: #241b05;
+  --destructive: #f08a96;
+  --destructive-foreground: #2a0b10;
+  --border: #1d3c59;
+  --input: #1d3c59;
+  --ring: #d8b45a;
+  --success: #5fd39a;
+  --warning: #e8c06a;
+
+  --brand: #041f38;
+  --brand-foreground: #eef5ff;
+  --brand-muted: #a9bed4;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-brand: var(--brand);
+  --color-brand-foreground: var(--brand-foreground);
+  --color-brand-muted: var(--brand-muted);
+  --font-sans: var(--ui-font);
+  --font-display: var(--display-font);
+  --font-mono: var(--mono-font);
+  --radius-md: 8px;
+  --radius-lg: 12px;
+}
+
+@layer base {
+  html {
+    color-scheme: light;
+    -webkit-text-size-adjust: 100%;
+  }
+  [data-theme='dark'] {
+    color-scheme: dark;
+  }
+  body {
+    margin: 0;
+    background: var(--background);
+    color: var(--foreground);
+    font-family: var(--ui-font);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+  h1,
+  h2,
+  h3 {
+    font-family: var(--display-font);
+    letter-spacing: -0.01em;
+  }
+  ::selection {
+    background: var(--accent);
+    color: var(--accent-foreground);
+  }
+  :focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
+}
+
+@layer components {
+  .skip-link {
+    position: absolute;
+    left: -9999px;
+    top: 8px;
+    z-index: 100;
+    border-radius: 8px;
+    background: var(--card);
+    padding: 8px 12px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--foreground);
+  }
+  .skip-link:focus {
+    left: 16px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}
