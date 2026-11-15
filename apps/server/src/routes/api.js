@@ -14,7 +14,8 @@ import {
 import {
   sqlite, quotaUsed, uniqueSlug, siteRow, siteJsonPath, publicSite, now, slugify, ensureProfile,
 } from '../db/index.js';
-import { kick, llmConfig, useMock } from '../services/generation.js';
+import { kick, llmConfig, useMock, effectiveProfile, keySource } from '../services/generation.js';
+import { assertSafeLlmBase } from '../services/url-safety.js';
 import { extractUpload } from '../services/uploads.js';
 import { encrypt } from '../crypto.js';
 import { requireAuthApi, requireAdminApi, tokenFrom, clearSessionCache } from '../middleware/session.js';
@@ -41,10 +42,14 @@ function escapeLike(value) {
   return String(value || '').replace(/[\\%_]/g, '');
 }
 function settingsOf(profile) {
+  const source = keySource(profile);
   return {
     apiBase: profile.api_base || '',
     apiModel: profile.api_model || '',
     hasKey: !!profile.api_key,
+    keySource: source.kind,
+    sharedBy: source.owner,
+    canGenerate: LLM_MOCK || source.kind !== 'none',
   };
 }
 function userJson(row, profile) {
@@ -140,7 +145,7 @@ router.post('/sites', requireAuthApi, rateLimit({ windowMs: 60 * 1000, max: 8, k
     return fail(res, 400, 'missing_source', 'Add a topic, long text, or at least one file.');
   }
 
-  const cfg = llmConfig(req.profile);
+  const cfg = llmConfig(effectiveProfile(req.profile));
   if (!useMock() && !cfg.key) {
     return fail(res, 400, 'no_api_key', 'No API key. Add one in Settings.');
   }
@@ -163,6 +168,9 @@ router.post('/sites', requireAuthApi, rateLimit({ windowMs: 60 * 1000, max: 8, k
     const slug = uniqueSlug(title);
     try {
       id = sqlite.transaction(() => {
+        if (quotaUsed(req.user.id) >= req.profile.daily_limit) {
+          throw Object.assign(new Error('Daily limit reached (' + req.profile.daily_limit + ' sites/day).'), { code: 'QUOTA' });
+        }
         const result = sqlite.prepare(
           `INSERT INTO sites (owner_id,slug,title,description,topic,audience,language,status,published,source_text,created_at,updated_at)
            VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`
@@ -179,6 +187,7 @@ router.post('/sites', requireAuthApi, rateLimit({ windowMs: 60 * 1000, max: 8, k
       })();
     } catch (e) {
       if (e.code === 'SQLITE_CONSTRAINT_UNIQUE' && attempt < 4) continue;
+      if (e.code === 'QUOTA') return fail(res, 429, 'quota_exceeded', e.message);
       console.error('Create site failed:', e);
       return fail(res, 500, 'server_error', 'Could not create the site.');
     }
@@ -198,9 +207,12 @@ function accessibleSite(req) {
 router.get('/sites/:id', requireAuthApi, (req, res) => {
   const site = accessibleSite(req);
   if (!site) return fail(res, 404, 'not_found', 'Site not found.');
-  const job = sqlite.prepare('SELECT * FROM jobs WHERE site_id=? ORDER BY id DESC LIMIT 1').get(site.id);
+  const owner = site.owner_id === req.user.id || req.user.role === 'admin';
+  const job = owner ? sqlite.prepare('SELECT * FROM jobs WHERE site_id=? ORDER BY id DESC LIMIT 1').get(site.id) : null;
+  const siteJson = publicSite(site);
+  if (!owner) siteJson.error = '';
   res.json({
-    site: publicSite(site),
+    site: siteJson,
     job: job ? {
       status: job.status,
       log: job.log,
@@ -217,9 +229,6 @@ router.post('/sites/:id/clone', requireAuthApi, (req, res) => {
   if (!fs.existsSync(siteJsonPath(source.slug))) {
     return fail(res, 409, 'no_content', 'This site has no generated content.');
   }
-  if (quotaUsed(req.user.id) >= req.profile.daily_limit) {
-    return fail(res, 429, 'quota_exceeded', 'Daily limit reached.');
-  }
   const t = now();
   let id = 0;
   for (let attempt = 0; attempt < 5 && !id; attempt++) {
@@ -230,7 +239,8 @@ router.post('/sites/:id/clone', requireAuthApi, (req, res) => {
           `INSERT INTO sites (owner_id,slug,title,description,topic,audience,language,status,published,source_text,created_at,updated_at)
            VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`
         ).run(req.user.id, slug, 'Copy of ' + source.title, source.description, source.topic, source.audience,
-          source.language, 'ready', source.published, source.source_text, t, t);
+          source.language, 'ready', source.published,
+          source.owner_id === req.user.id ? source.source_text : '', t, t);
         const siteId = Number(result.lastInsertRowid);
         const dir = path.dirname(siteJsonPath(slug));
         fs.mkdirSync(dir, { recursive: true });
@@ -256,15 +266,23 @@ router.post('/sites/:id/cancel', requireAuthApi, (req, res) => {
   res.json({ site: publicSite(siteRow(site.id)) });
 });
 
-router.post('/sites/:id/regenerate', requireAuthApi, (req, res) => {
+router.post('/sites/:id/regenerate', requireAuthApi, rateLimit({ windowMs: 60 * 1000, max: 8, key: req => req.user.id }), (req, res) => {
   const site = siteRow(parseId(req.params.id));
   if (!site || site.owner_id !== req.user.id || site.archived) return fail(res, 404, 'not_found', 'Site not found.');
   const t = now();
-  sqlite.transaction(() => {
-    sqlite.prepare("UPDATE sites SET status='queued',error='',updated_at=? WHERE id=?").run(t, site.id);
-    sqlite.prepare("UPDATE jobs SET cancel_requested=0,locked_at=NULL,next_attempt_at=NULL,last_error='',updated_at=? WHERE site_id=? AND status IN ('queued','running')").run(t, site.id);
-    sqlite.prepare('INSERT INTO jobs (site_id,status,log,created_at,updated_at) VALUES (?,?,?,?,?)').run(site.id, 'queued', 'Queued for regeneration.', t, t);
-  })();
+  try {
+    sqlite.transaction(() => {
+      if (quotaUsed(req.user.id) >= req.profile.daily_limit) {
+        throw Object.assign(new Error('Daily limit reached (' + req.profile.daily_limit + ' sites/day).'), { code: 'QUOTA' });
+      }
+      sqlite.prepare("UPDATE sites SET status='queued',error='',updated_at=? WHERE id=?").run(t, site.id);
+      sqlite.prepare("UPDATE jobs SET cancel_requested=1,status='cancelled',locked_at=NULL,next_attempt_at=NULL,updated_at=? WHERE site_id=? AND status IN ('queued','running')").run(t, site.id);
+      sqlite.prepare('INSERT INTO jobs (site_id,status,log,created_at,updated_at) VALUES (?,?,?,?,?)').run(site.id, 'queued', 'Queued for regeneration.', t, t);
+    })();
+  } catch (e) {
+    if (e.code === 'QUOTA') return fail(res, 429, 'quota_exceeded', e.message);
+    throw e;
+  }
   kick(0);
   res.json({ site: publicSite(siteRow(site.id)) });
 });
@@ -289,7 +307,7 @@ router.get('/catalog', requireAuthApi, (req, res) => {
   const q = String(req.query.q || '').trim().slice(0, 200);
   const like = '%' + escapeLike(q) + '%';
   const sites = (q
-    ? sqlite.prepare("SELECT * FROM sites WHERE status='ready' AND archived=0 AND (published=1 OR owner_id=?) AND (title LIKE ? OR description LIKE ? OR topic LIKE ? OR source_text LIKE ?) ORDER BY created_at DESC LIMIT 30").all(req.user.id, like, like, like, like)
+    ? sqlite.prepare("SELECT * FROM sites WHERE status='ready' AND archived=0 AND (published=1 OR owner_id=?) AND (title LIKE ? OR description LIKE ? OR topic LIKE ?) ORDER BY created_at DESC LIMIT 30").all(req.user.id, like, like, like)
     : sqlite.prepare("SELECT * FROM sites WHERE status='ready' AND archived=0 AND (published=1 OR owner_id=?) ORDER BY created_at DESC LIMIT 30").all(req.user.id)
   ).map(publicSite);
   res.json({ sites, q });
@@ -347,10 +365,17 @@ router.get('/settings', requireAuthApi, (req, res) => {
   res.json({ settings: settingsOf(req.profile) });
 });
 
-router.put('/settings', requireAuthApi, (req, res) => {
+router.put('/settings', requireAuthApi, async (req, res) => {
   const parsed = SettingsSchema.safeParse(req.body || {});
   if (!parsed.success) return badRequest(res, parsed.error);
   const body = parsed.data;
+  if (body.apiBase) {
+    try {
+      await assertSafeLlmBase(body.apiBase);
+    } catch (e) {
+      return fail(res, 400, 'invalid_input', String(e.message || e));
+    }
+  }
   let apiKey = req.profile.api_key;
   if (body.clearKey) apiKey = '';
   else if (body.apiKey.trim()) apiKey = encrypt(body.apiKey.trim());
@@ -358,6 +383,64 @@ router.put('/settings', requireAuthApi, (req, res) => {
     .run(body.apiBase, body.apiModel, apiKey, req.user.id);
   clearSessionCache();
   res.json({ settings: settingsOf({ ...req.profile, api_base: body.apiBase, api_model: body.apiModel, api_key: apiKey }) });
+});
+
+/*
+ * Key sharing. A grant lets `grantee_id` generate with the owner's key while
+ * the key itself never leaves the server. Either side may revoke; an own key
+ * always wins over a shared one.
+ */
+function shareList(userId) {
+  const incoming = sqlite.prepare(`
+    SELECT s.id, s.created_at AS createdAt, u.email, u.name,
+      CASE WHEN p.api_key <> '' AND p.disabled = 0 THEN 1 ELSE 0 END AS active
+    FROM key_shares s
+    JOIN user u ON u.id = s.owner_id
+    LEFT JOIN profiles p ON p.user_id = s.owner_id
+    WHERE s.grantee_id = ?
+    ORDER BY s.created_at DESC, s.id DESC
+  `).all(userId).map(r => ({ id: r.id, createdAt: r.createdAt, active: !!r.active, owner: { email: r.email, name: r.name } }));
+  const outgoing = sqlite.prepare(`
+    SELECT s.id, s.created_at AS createdAt, u.email, u.name
+    FROM key_shares s
+    JOIN user u ON u.id = s.grantee_id
+    WHERE s.owner_id = ?
+    ORDER BY s.created_at DESC, s.id DESC
+  `).all(userId).map(r => ({ id: r.id, createdAt: r.createdAt, grantee: { email: r.email, name: r.name } }));
+  return { incoming, outgoing };
+}
+
+const ShareSchema = z.object({
+  email: z.string().trim().toLowerCase().max(200)
+    .refine(value => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(value), 'Invalid email address'),
+});
+
+router.get('/settings/shares', requireAuthApi, (req, res) => {
+  res.json({ shares: shareList(req.user.id) });
+});
+
+router.post('/settings/shares', requireAuthApi, rateLimit({ windowMs: 60 * 1000, max: 20, key: req => req.user.id }), (req, res) => {
+  const parsed = ShareSchema.safeParse(req.body || {});
+  if (!parsed.success) return badRequest(res, parsed.error);
+  if (!req.profile.api_key) return fail(res, 400, 'no_api_key', 'Add your own API key before sharing it.');
+  const target = sqlite.prepare('SELECT id,email,name FROM user WHERE lower(email)=?').get(parsed.data.email);
+  if (!target) return fail(res, 404, 'user_not_found', 'No user with that email.');
+  if (target.id === req.user.id) return fail(res, 400, 'invalid_input', 'You cannot share a key with yourself.');
+  const targetProfile = ensureProfile(target.id);
+  if (targetProfile.disabled) return fail(res, 400, 'user_disabled', 'That account is disabled.');
+  sqlite.prepare('INSERT OR IGNORE INTO key_shares (owner_id,grantee_id,created_at) VALUES (?,?,?)')
+    .run(req.user.id, target.id, now());
+  res.status(201).json({ shares: shareList(req.user.id) });
+});
+
+router.delete('/settings/shares/:id', requireAuthApi, (req, res) => {
+  const id = parseId(req.params.id);
+  const share = id ? sqlite.prepare('SELECT id,owner_id,grantee_id FROM key_shares WHERE id=?').get(id) : null;
+  if (!share || (share.owner_id !== req.user.id && share.grantee_id !== req.user.id)) {
+    return fail(res, 404, 'not_found', 'Share not found.');
+  }
+  sqlite.prepare('DELETE FROM key_shares WHERE id=?').run(id);
+  res.json({ shares: shareList(req.user.id) });
 });
 
 /* ------------------------------------------------------------------ admin */

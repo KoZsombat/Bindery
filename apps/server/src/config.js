@@ -74,8 +74,12 @@ export const SESSION_CACHE_MS = Math.max(0, Number(process.env.SESSION_CACHE_MS 
 export const MAX_SOURCE = 80000;
 export const MAX_LONG_TEXT = 40000;
 export const LLM_MOCK = process.env.LLM_MOCK === '1';
-export const LLM_BASE_URL = String(process.env.LLM_BASE_URL || process.env.COMMAND_CODE_BASE_URL || 'https://api.commandcode.ai/v1').trim().replace(/\/+$/, '');
-export const LLM_MODEL = String(process.env.LLM_MODEL || process.env.COMMAND_CODE_MODEL || 'deepseek-v4.1').trim();
+export const LLM_BASE_URL = String(process.env.LLM_BASE_URL || process.env.COMMAND_CODE_BASE_URL || 'https://api.commandcode.ai/provider/v1').trim().replace(/\/+$/, '');
+export const LLM_MODEL = String(process.env.LLM_MODEL || process.env.COMMAND_CODE_MODEL || 'deepseek/deepseek-v4.1-flash').trim();
+/** Output cap per generation. Lower it when a provider rejects large max_tokens. */
+export const LLM_MAX_TOKENS = Math.max(1024, Number(process.env.LLM_MAX_TOKENS) || 32000);
+/** Allow http and private/loopback provider endpoints (local Ollama, vLLM). */
+export const LLM_ALLOW_PRIVATE_HOSTS = process.env.LLM_ALLOW_PRIVATE_HOSTS === '1';
 export const ADMIN_EMAIL = String(process.env.ADMIN_EMAIL || (DEV ? 'admin@example.com' : '')).trim();
 export const ADMIN_PASSWORD = String(process.env.ADMIN_PASSWORD || (DEV ? 'admin1234' : '')).trim();
 if (IS_PROD && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(ADMIN_EMAIL)) {

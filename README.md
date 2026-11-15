@@ -182,13 +182,18 @@ All routes require the session cookie; mutating requests also require a same-ori
 | `GET` | `/api/catalog?q=` | Search published sites |
 | `POST` | `/api/uploads` | Multipart notes/files; returns extracted upload ids |
 | `GET/PUT` | `/api/settings` | Per-user API config |
+| `GET` | `/api/settings/shares` | Incoming and outgoing key grants |
+| `POST` | `/api/settings/shares` | Share your key with a user by email |
+| `DELETE` | `/api/settings/shares/:id` | Revoke a grant (owner or grantee) |
 | `GET/POST` | `/api/admin/users` | Admin only |
 | `PATCH` | `/api/admin/users/:id` | Limit, disable, or reset password |
 | `POST` | `/api/auth/*` | Better Auth endpoints (sign-in, session, sign-out) |
 | `POST` | `/api/logout` | Clears the session and the server session cache |
 
 The admin API never returns password hashes. Public site payloads never contain source text or
-owner ids.
+owner ids. Key grants only ever expose the owner's name and email: the key itself is decrypted
+server-side for generation, an own key always wins over a shared one, and either side can revoke a
+grant at any time.
 
 ## Generated-site contract
 
@@ -229,6 +234,17 @@ immediately.
   disable, and admin password resets clear the in-process session cache and (for other users)
   revoke existing sessions.
 - Per-user API keys are encrypted with AES-256-GCM under `ENCRYPTION_KEY`.
+- Keys can be granted to other users without revealing them: grants expose only the owner's name,
+  email and provider host, an own key always wins over a shared one, and either side can revoke.
+  Grants are scoped per user and require the owner to have a key.
+- Provider base URLs must use `https` and resolve to a public address; loopback, private,
+  link-local, CGNAT and metadata addresses are rejected on save and before every call, and
+  provider redirects are refused. `LLM_ALLOW_PRIVATE_HOSTS=1` is the explicit opt-in for local
+  models (Ollama, vLLM).
+- Daily quotas count started generation jobs, so cancelling, archiving or regenerating cannot
+  bypass the limit.
+- Catalog search never reads private source text, and cloning another user's site copies only the
+  generated book, not the source material.
 - API writes require same-origin `Origin` and a same-site `Sec-Fetch-Site` where the browser sends
   one; the JSON API sets `Cache-Control: no-store`.
 - Helmet ships a CSP with a per-request nonce, HSTS in production, `no-referrer`, `frame-ancestors

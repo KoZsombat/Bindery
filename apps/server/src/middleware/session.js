@@ -6,7 +6,12 @@ const cache = new Map();
 
 export function tokenFrom(req) {
   const m = /(?:^|;\s*)(?:__Secure-)?better-auth\.session_token=([^;]+)/.exec(req.headers.cookie || '');
-  return m ? decodeURIComponent(m[1]) : '';
+  if (!m) return '';
+  try {
+    return decodeURIComponent(m[1]);
+  } catch {
+    return '';
+  }
 }
 
 export function clearSessionCache(token) {

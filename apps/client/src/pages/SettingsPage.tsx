@@ -10,11 +10,36 @@ import { useI18n } from '../context/I18nContext';
 import { useToast } from '../context/ToastContext';
 import { api, describeError } from '../lib/api';
 
+interface SharedBy {
+  email: string;
+  name: string;
+  apiBase: string;
+  apiModel: string;
+}
+
 interface SettingsData {
   apiBase: string;
   apiModel: string;
   hasKey: boolean;
+  keySource: 'own' | 'shared' | 'none';
+  sharedBy: SharedBy | null;
+  canGenerate: boolean;
 }
+
+interface ShareEntry {
+  id: number;
+  createdAt: string;
+  active?: boolean;
+  owner?: SharedBy;
+  grantee?: SharedBy;
+}
+
+interface SharesData {
+  incoming: ShareEntry[];
+  outgoing: ShareEntry[];
+}
+
+const EMPTY_SHARES: SharesData = { incoming: [], outgoing: [] };
 
 export function SettingsPage() {
   const { refresh } = useAuth();
@@ -22,20 +47,28 @@ export function SettingsPage() {
   const { push } = useToast();
 
   const [settings, setSettings] = useState<SettingsData | null>(null);
+  const [shares, setShares] = useState<SharesData>(EMPTY_SHARES);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [sharing, setSharing] = useState(false);
+  const [revoking, setRevoking] = useState<number | null>(null);
   const [error, setError] = useState('');
   const [apiBase, setApiBase] = useState('');
   const [apiModel, setApiModel] = useState('');
   const [apiKey, setApiKey] = useState('');
   const [clearKey, setClearKey] = useState(false);
+  const [shareEmail, setShareEmail] = useState('');
 
   useEffect(() => {
-    api.get<{ settings: SettingsData }>('/api/settings')
-      .then(data => {
-        setSettings(data.settings);
-        setApiBase(data.settings.apiBase);
-        setApiModel(data.settings.apiModel);
+    Promise.all([
+      api.get<{ settings: SettingsData }>('/api/settings'),
+      api.get<{ shares: SharesData }>('/api/settings/shares'),
+    ])
+      .then(([settingsData, sharesData]) => {
+        setSettings(settingsData.settings);
+        setApiBase(settingsData.settings.apiBase);
+        setApiModel(settingsData.settings.apiModel);
+        setShares(sharesData.shares);
       })
       .catch(e => setError(describeError(t, e)))
       .finally(() => setLoading(false));
@@ -64,7 +97,52 @@ export function SettingsPage() {
     }
   }
 
+  async function shareKey(event: FormEvent) {
+    event.preventDefault();
+    if (!shareEmail.trim()) return;
+    setSharing(true);
+    setError('');
+    try {
+      const data = await api.post<{ shares: SharesData }>('/api/settings/shares', { email: shareEmail.trim() });
+      setShares(data.shares);
+      setShareEmail('');
+      push('success', t('Key sharing updated.'));
+      await refresh();
+    } catch (e) {
+      setError(describeError(t, e));
+    } finally {
+      setSharing(false);
+    }
+  }
+
+  async function reloadSettings() {
+    const data = await api.get<{ settings: SettingsData }>('/api/settings');
+    setSettings(data.settings);
+  }
+
+  async function revokeShare(id: number) {
+    setRevoking(id);
+    setError('');
+    try {
+      const data = await api.delete<{ shares: SharesData }>('/api/settings/shares/' + id);
+      setShares(data.shares);
+      await reloadSettings();
+      push('success', t('Key sharing updated.'));
+      await refresh();
+    } catch (e) {
+      setError(describeError(t, e));
+    } finally {
+      setRevoking(null);
+    }
+  }
+
   if (loading) return <PageSpinner />;
+
+  const sharedBy = settings?.keySource === 'shared' ? settings.sharedBy : null;
+  const sharedByName = sharedBy?.name || sharedBy?.email || '';
+  const sharedHost = sharedBy?.apiBase
+    ? (() => { try { return new URL(sharedBy.apiBase).host; } catch { return sharedBy.apiBase; } })()
+    : '';
 
   return (
     <div className="space-y-6">
@@ -78,12 +156,12 @@ export function SettingsPage() {
 
       <Card className="max-w-2xl">
         <form className="space-y-4" onSubmit={save}>
-          <Field label={t('API base URL')} htmlFor="apiBase" hint="https://api.commandcode.ai/v1">
+          <Field label={t('API base URL')} htmlFor="apiBase" hint="https://api.commandcode.ai/provider/v1">
             <Input
               id="apiBase"
               value={apiBase}
               onChange={event => setApiBase(event.target.value)}
-              placeholder="https://api.commandcode.ai/v1"
+              placeholder="https://api.commandcode.ai/provider/v1"
               inputMode="url"
             />
           </Field>
@@ -93,7 +171,7 @@ export function SettingsPage() {
               id="apiModel"
               value={apiModel}
               onChange={event => setApiModel(event.target.value)}
-              placeholder="deepseek-v4.1"
+              placeholder="deepseek/deepseek-v4.1-flash"
             />
           </Field>
 
@@ -122,10 +200,103 @@ export function SettingsPage() {
           <div className="flex flex-wrap items-center gap-3">
             <Button type="submit" loading={saving}>{t('Save')}</Button>
             <span className="text-xs text-muted-foreground">
-              {settings?.hasKey ? t('Your key is used for your jobs.') : t('Set your key to run generations.')}
+              {settings?.hasKey
+                ? t('Your key is used for your jobs.')
+                : sharedBy
+                  ? t(sharedHost ? 'Using a key shared by {who} via {host}.' : 'Using a key shared by {who}.', { who: sharedByName, host: sharedHost })
+                  : t('Set your key to run generations.')}
             </span>
           </div>
         </form>
+      </Card>
+
+      <Card className="max-w-2xl">
+        <div className="space-y-5">
+          <div>
+            <h2 className="text-sm font-semibold">{t('Key sharing')}</h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              {t('Share your key with specific people. They can use it for their own generations but never see it. Your own key always takes precedence over a shared one.')}
+            </p>
+          </div>
+
+          {settings?.hasKey ? (
+            <p className="text-xs text-muted-foreground">{t('Your own key is used first.')}</p>
+          ) : sharedBy ? (
+            <p className="text-xs text-muted-foreground">
+              {t(sharedHost ? 'Using a key shared by {who} via {host}.' : 'Using a key shared by {who}.', { who: sharedByName, host: sharedHost })}
+            </p>
+          ) : null}
+
+          <div>
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{t('Shared with me')}</h3>
+            {shares.incoming.length === 0 ? (
+              <p className="mt-2 text-sm text-muted-foreground">{t('No one has shared a key with you.')}</p>
+            ) : (
+              <ul className="mt-2 divide-y divide-border">
+                {shares.incoming.map(share => (
+                  <li key={share.id} className="flex flex-wrap items-center justify-between gap-3 py-2">
+                    <span className="text-sm">
+                      {t('Shared by {who}', { who: share.owner?.name || share.owner?.email || '' })}
+                      {!share.active ? <Badge tone="warning" className="ml-2">{t('inactive')}</Badge> : null}
+                    </span>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      loading={revoking === share.id}
+                      onClick={() => revokeShare(share.id)}
+                    >
+                      {t('Stop using')}
+                    </Button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+
+          <div>
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{t('Shared by me')}</h3>
+            {shares.outgoing.length === 0 ? (
+              <p className="mt-2 text-sm text-muted-foreground">{t('You have not shared your key with anyone.')}</p>
+            ) : (
+              <ul className="mt-2 divide-y divide-border">
+                {shares.outgoing.map(share => (
+                  <li key={share.id} className="flex flex-wrap items-center justify-between gap-3 py-2">
+                    <span className="text-sm">
+                      {t('Shared with {who}', { who: share.grantee?.name || share.grantee?.email || '' })}
+                    </span>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      loading={revoking === share.id}
+                      onClick={() => revokeShare(share.id)}
+                    >
+                      {t('Revoke')}
+                    </Button>
+                  </li>
+                ))}
+              </ul>
+            )}
+
+            <form className="mt-4 flex flex-wrap items-end gap-3" onSubmit={shareKey}>
+              <Field label={t('Email address')} htmlFor="shareEmail">
+                <Input
+                  id="shareEmail"
+                  type="email"
+                  autoComplete="off"
+                  value={shareEmail}
+                  onChange={event => setShareEmail(event.target.value)}
+                  placeholder="name@example.com"
+                />
+              </Field>
+              <Button type="submit" loading={sharing} disabled={!settings?.hasKey}>
+                {t('Share')}
+              </Button>
+            </form>
+            {!settings?.hasKey ? (
+              <p className="mt-2 text-xs text-muted-foreground">{t('Add your own key before sharing it.')}</p>
+            ) : null}
+          </div>
+        </div>
       </Card>
     </div>
   );

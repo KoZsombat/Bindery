@@ -1,0 +1,12 @@
+# Local-only overrides, picked up automatically by `docker compose up`.
+# Launchpad runs the base docker-compose.yml with an explicit -f, so this is ignored there.
+services:
+  builder:
+    ports:
+      - "8080:8080"
+
+# The base file expects a pre-existing Traefik network named `web`.
+# Locally we create an ordinary project-scoped bridge network instead.
+networks:
+  web:
+    external: false

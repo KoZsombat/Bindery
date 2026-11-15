@@ -98,7 +98,7 @@
 
   function theoryHTML(t) {
     const type = t.type || 'p';
-    if (type === 'formula') return '<div class="callout formula"><div class="ct">' + T('Képlet', 'Formula') + (biv(t.title) ? ' · ' + esc(biv(t.title)) : '') + '</div><div class="fx">$$' + String(t.latex || '') + '$$</div>' + (biv(t.note) ? '<p class="muted">' + esc(biv(t.note)) + '</p>' : '') + '</div>';
+    if (type === 'formula') return '<div class="callout formula"><div class="ct">' + T('Képlet', 'Formula') + (biv(t.title) ? ' · ' + esc(biv(t.title)) : '') + '</div><div class="fx">$$' + esc(String(t.latex || '')) + '$$</div>' + (biv(t.note) ? '<p class="muted">' + esc(biv(t.note)) + '</p>' : '') + '</div>';
     if (type === 'list') return '<div class="callout note"><div class="ct">' + esc(biv(t.title, T('Lista', 'List'))) + '</div><ul>' + bivArr(t.items).map(x => '<li>' + esc(x) + '</li>').join('') + '</ul></div>';
     const labels = { def: T('Definíció', 'Definition'), thm: T('Tétel', 'Theorem'), note: T('Megjegyzés', 'Note'), warn: T('Vigyázat', 'Warning'), p: T('Szöveg', 'Note') };
     const cls = type === 'warn' ? 'warn' : type === 'def' ? 'def' : type === 'thm' ? 'thm' : 'note';

@@ -54,11 +54,19 @@ CREATE TABLE IF NOT EXISTS jobs (
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS key_shares (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  owner_id TEXT NOT NULL,
+  grantee_id TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  UNIQUE(owner_id, grantee_id)
+);
 CREATE INDEX IF NOT EXISTS idx_sites_owner ON sites(owner_id);
 CREATE INDEX IF NOT EXISTS idx_sites_status_published ON sites(status, published);
 CREATE INDEX IF NOT EXISTS idx_sites_created ON sites(created_at);
 CREATE INDEX IF NOT EXISTS idx_uploads_user ON uploads(user_id);
 CREATE INDEX IF NOT EXISTS idx_jobs_status ON jobs(status);
+CREATE INDEX IF NOT EXISTS idx_key_shares_grantee ON key_shares(grantee_id);
 `);
 
 function hasColumn(table, column) {
@@ -146,8 +154,28 @@ export function ensureProfile(userId, limit = DEFAULT_DAILY_LIMIT) {
 export function quotaUsed(userId) {
   const day = new Date().toISOString().slice(0, 10);
   return sqlite.prepare(
-    "SELECT COUNT(*) AS n FROM sites WHERE owner_id=? AND substr(created_at,1,10)=? AND example=0 AND archived=0 AND status IN ('queued','running','ready')"
+    `SELECT COUNT(*) AS n FROM jobs j
+     JOIN sites s ON s.id = j.site_id
+     WHERE s.owner_id=? AND substr(j.created_at,1,10)=? AND s.example=0`
   ).get(userId, day).n;
+}
+
+/**
+ * First active key shared with `userId`, as the owner's profile plus owner
+ * email/name. Never returns anyone's key to callers that render JSON; only
+ * llmConfig() decrypts it server-side. Disabled owners and owners without a
+ * key do not count as a source.
+ */
+export function sharedKeySource(userId) {
+  return sqlite.prepare(`
+    SELECT p.*, u.email AS owner_email, u.name AS owner_name
+    FROM key_shares s
+    JOIN profiles p ON p.user_id = s.owner_id
+    JOIN user u ON u.id = s.owner_id
+    WHERE s.grantee_id = ? AND p.api_key <> '' AND p.disabled = 0
+    ORDER BY s.created_at, s.id
+    LIMIT 1
+  `).get(userId);
 }
 
 export function uniqueSlug(base) {

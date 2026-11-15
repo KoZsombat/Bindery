@@ -52,7 +52,7 @@ export function NewSitePage() {
   const [reusingId, setReusingId] = useState<number | null>(null);
 
   const remaining = me ? Math.max(0, me.profile.dailyLimit - me.profile.usedToday) : 0;
-  const needsKey = !!me && !me.profile.hasKey && !me.mock;
+  const needsKey = !!me && !me.profile.canGenerate;
 
   function set<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm(current => ({ ...current, [key]: value }));

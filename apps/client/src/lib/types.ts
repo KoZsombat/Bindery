@@ -29,6 +29,13 @@ export interface Job {
   updatedAt: string;
 }
 
+export interface SharedBy {
+  email: string;
+  name: string;
+  apiBase: string;
+  apiModel: string;
+}
+
 export interface Profile {
   dailyLimit: number;
   usedToday: number;
@@ -36,6 +43,9 @@ export interface Profile {
   apiBase: string;
   apiModel: string;
   hasKey: boolean;
+  keySource: 'own' | 'shared' | 'none';
+  sharedBy: SharedBy | null;
+  canGenerate: boolean;
 }
 
 export interface Me {

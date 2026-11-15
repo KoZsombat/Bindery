@@ -3,11 +3,12 @@ import fsp from 'node:fs/promises';
 import path from 'node:path';
 import { z } from 'zod';
 import {
-  LLM_BASE_URL, LLM_MODEL, LLM_MOCK,
+  LLM_BASE_URL, LLM_MODEL, LLM_MOCK, LLM_MAX_TOKENS,
   MAX_CONCURRENT_JOBS, MAX_JOB_ATTEMPTS, JOB_LEASE_MS, SKILL_PATH
 } from '../config.js';
 import { decrypt } from '../crypto.js';
-import { sqlite, ensureProfile, now, slugify, siteRow, siteJsonPath, siteUrl } from '../db/index.js';
+import { assertSafeLlmBase } from './url-safety.js';
+import { sqlite, ensureProfile, now, slugify, siteRow, siteJsonPath, siteUrl, sharedKeySource } from '../db/index.js';
 
 /* ------------------------------------------------------------------ model */
 function biv(v) {
@@ -117,6 +118,19 @@ export function llmConfig(profile) {
     model: profile.api_model || LLM_MODEL
   };
 }
+/** Own key wins; otherwise the first active key shared with this user. */
+export function effectiveProfile(profile) {
+  if (profile.api_key) return profile;
+  return sharedKeySource(profile.user_id) || profile;
+}
+/** 'own' | 'shared' | 'none', plus the owner's identity when shared. Never the key. */
+export function keySource(profile) {
+  if (profile.api_key) return { kind: 'own', owner: null };
+  const owner = sharedKeySource(profile.user_id);
+  return owner
+    ? { kind: 'shared', owner: { email: owner.owner_email, name: owner.owner_name, apiBase: owner.api_base, apiModel: owner.api_model } }
+    : { kind: 'none', owner: null };
+}
 export function useMock() { return LLM_MOCK; }
 async function callLLM(cfg, messages) {
   if (useMock()) {
@@ -124,15 +138,18 @@ async function callLLM(cfg, messages) {
     if (delay > 0) await new Promise(r => setTimeout(r, Math.min(10000, delay)));
     return JSON.stringify(mockSite(messages.request || {}));
   }
-  const payload = { model: cfg.model, messages, temperature: 0.35, max_tokens: 12000 };
+  const payload = { model: cfg.model, messages, temperature: 0.35, max_tokens: LLM_MAX_TOKENS };
   if (process.env.LLM_JSON_MODE !== '0') payload.response_format = { type: 'json_object' };
+  await assertSafeLlmBase(cfg.base);
   const doFetch = async body => {
     const r = await fetch(cfg.base + '/chat/completions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + cfg.key },
       body: JSON.stringify(body),
+      redirect: 'manual',
       signal: AbortSignal.timeout(300000)
     });
+    if (r.status >= 300 && r.status < 400) throw new Error('LLM API redirected; point the base URL at the final endpoint.');
     const text = await r.text();
     if (!r.ok) { const e = new Error('LLM API ' + r.status + ': ' + text.slice(0, 500)); e.status = r.status; throw e; }
     return JSON.parse(text).choices?.[0]?.message?.content || '';
@@ -188,8 +205,12 @@ export function validateSite(site) {
 const activeJobs = new Set();
 let kickTimer = null;
 export function kick(delay = 0) {
-  if (kickTimer || activeJobs.size >= MAX_CONCURRENT_JOBS) return;
-  kickTimer = setTimeout(function () { kickTimer = null; drain(); }, delay);
+  if (activeJobs.size >= MAX_CONCURRENT_JOBS) return;
+  if (kickTimer) {
+    if (delay > 0) return;
+    clearTimeout(kickTimer);
+  }
+  kickTimer = setTimeout(function () { kickTimer = null; drain(); }, Math.max(0, delay));
 }
 function claimJob() {
   const t = now();
@@ -198,12 +219,19 @@ function claimJob() {
   const changed = sqlite.prepare("UPDATE jobs SET status='running',attempts=attempts+1,locked_at=?,next_attempt_at=NULL,log='Contacting the model…',updated_at=? WHERE id=? AND status='queued'").run(t, t, job.id);
   if (!changed.changes) return null;
   sqlite.prepare("UPDATE sites SET status='running',updated_at=? WHERE id=?").run(t, job.site_id);
-  return job;
+  return { ...job, attempts: (job.attempts || 0) + 1 };
 }
-export function recoverJobs() {
-  const stale = new Date(Date.now() - JOB_LEASE_MS).toISOString();
+/** Milliseconds until the earliest queued job becomes eligible (0 when one is ready now). */
+function nextWakeDelay() {
+  if (sqlite.prepare("SELECT 1 FROM jobs WHERE status='queued' AND (next_attempt_at IS NULL OR next_attempt_at<=?) LIMIT 1").get(now())) return 0;
+  const row = sqlite.prepare("SELECT MIN(next_attempt_at) AS t FROM jobs WHERE status='queued'").get();
+  return row?.t ? Math.max(0, new Date(row.t).getTime() - Date.now()) : 0;
+}
+export function recoverJobs(leaseMs = JOB_LEASE_MS) {
+  const stale = new Date(Date.now() - leaseMs).toISOString();
   const rows = sqlite.prepare("SELECT * FROM jobs WHERE status='running' AND (locked_at IS NULL OR locked_at<?)").all(stale);
   for (const row of rows) {
+    if (activeJobs.has(row.id)) continue;
     if ((row.attempts || 0) >= MAX_JOB_ATTEMPTS) {
       sqlite.prepare("UPDATE jobs SET status='failed',last_error='Worker lease expired',locked_at=NULL,updated_at=? WHERE id=?").run(now(), row.id);
       sqlite.prepare("UPDATE sites SET status='failed',error='Generation worker stopped before completion. Try again.',updated_at=? WHERE id=?").run(now(), row.site_id);
@@ -221,7 +249,7 @@ function drain() {
     activeJobs.add(job.id);
     runJob(job).catch(e => console.error('Job failed:', e)).finally(function () {
       activeJobs.delete(job.id);
-      kick(0);
+      kick(nextWakeDelay());
     });
   }
 }
@@ -238,12 +266,12 @@ async function runJob(job) {
   }
   try {
     const profile = ensureProfile(site.owner_id);
-    const cfg = llmConfig(profile);
+    const cfg = llmConfig(effectiveProfile(profile));
     if (!useMock() && !cfg.key) throw new Error('No API key. Add one in Settings.');
     const req = { title: site.title, description: site.description, topic: site.topic, audience: site.audience, language: site.language, long_text: site.source_text };
     const schema = `Return ONE JSON object, no markdown, with this exact shape:
 {"title":"...","subtitle":{"hu":"...","en":"..."},"summary":{"hu":"...","en":"..."},"sections":[{"id":"slug","num":"01","title":{"hu":"...","en":"..."},"subtitle":{"hu":"...","en":"..."},"intro":{"hu":"...","en":"..."},"chapters":[{"id":"slug","num":"1.1","title":{"hu":"...","en":"..."},"lead":{"hu":"...","en":"..."},"why":{"hu":["..."],"en":["..."]},"when":{"hu":"...","en":"..."},"minutes":25,"theory":[{"type":"def|thm|note|warn|formula|p|list","title":{"hu":"...","en":"..."},"body":{"hu":"...","en":"..."},"latex":"...","note":{"hu":"...","en":"..."},"items":{"hu":["..."],"en":["..."]}}],"examples":[{"title":{"hu":"...","en":"..."},"problem":{"hu":"...","en":"..."},"steps":{"hu":["..."],"en":["..."]},"answer":{"hu":"...","en":"..."}}],"mistakes":{"hu":["..."],"en":["..."]},"exercises":[{"q":{"hu":"...","en":"..."},"a":"answer","type":"number|expr|text|choice|proof","hint":{"hu":"...","en":"..."},"sol":{"hu":"...","en":"..."},"choices":{"hu":["..."],"en":["..."]}}]}]}]}
-Rules: every prose field is a {hu,en} object; math stays inside $...$; 1-8 sections; 1-30 chapters total; 3-6 exercises and 1-3 examples per chapter; exercises must be checkable or proof; no links, no HTML, no download buttons.`;
+Rules: every prose field is a {hu,en} object; math stays inside $...$; 1-4 sections; 1-10 chapters total; 3-6 exercises and 1-3 examples per chapter; exercises must be checkable or proof; no links, no HTML, no download buttons. The response must be complete valid JSON: if space is tight, use fewer chapters rather than cutting the JSON short.`;
     const messages = [
       { role: 'system', content: 'You are a careful curriculum writer and the site generator for a learning-book platform. Follow the supplied skill, teach from the supplied sources, and return only valid JSON.' },
       { role: 'user', content: `SKILL:\n${skillText().slice(0, 60000)}\n\nREQUEST:\nTitle: ${req.title}\nDescription: ${req.description}\nTopic: ${req.topic}\nAudience: ${req.audience}\nLanguage preference: ${req.language}\n\nSOURCE MATERIAL:\n${req.long_text || '(none)'}\n\n${schema}` }
@@ -252,10 +280,29 @@ Rules: every prose field is a {hu,en} object; math stays inside $...$; 1-8 secti
     let parsed = null;
     let validation = { ok: false, error: 'No output.' };
     for (let repair = 0; repair < 2; repair++) {
-      parsed = normalizeSite(extractJSON(await callLLM(cfg, messages)), req);
-      validation = validateSite(parsed);
+      const text = await callLLM(cfg, messages);
+      let parsedJson = null;
+      try {
+        parsedJson = extractJSON(text);
+      } catch (e) {
+        validation = { ok: false, error: 'The response was not valid JSON: ' + String(e.message || e).slice(0, 300) };
+      }
+      if (parsedJson) {
+        try {
+          parsed = normalizeSite(parsedJson, req);
+          validation = validateSite(parsed);
+        } catch (e) {
+          validation = { ok: false, error: String(e.message || e).slice(0, 300) };
+        }
+      }
       if (validation.ok) break;
-      messages.push({ role: 'user', content: 'The JSON failed validation. Fix every issue and return the complete corrected JSON only: ' + validation.error });
+      const truncated = validation.error.startsWith('The response was not valid JSON');
+      messages.push({
+        role: 'user',
+        content: truncated
+          ? 'Your previous reply was incomplete or invalid JSON, most likely cut off by the output limit. Return the complete JSON now, but smaller: at most 2 sections and 4 chapters total. No markdown, no commentary.'
+          : 'The JSON failed validation. Fix every issue and return the complete corrected JSON only: ' + validation.error,
+      });
     }
     if (!validation.ok) throw new Error('Generated content failed validation: ' + validation.error);
     if (sqlite.prepare('SELECT cancel_requested FROM jobs WHERE id=?').get(job.id)?.cancel_requested) {
@@ -297,10 +344,22 @@ export function workerSnapshot() {
 }
 
 export function startWorker() {
-  recoverJobs();
+  // Single-instance deployment: any job still marked running at startup is
+  // orphaned by the previous process, so do not wait for the full lease.
+  recoverJobs(0);
   heartbeat = Date.now();
   if (!heartbeatTimer) {
-    heartbeatTimer = setInterval(() => { heartbeat = Date.now(); }, 10000);
+    heartbeatTimer = setInterval(() => {
+      heartbeat = Date.now();
+      if (!activeJobs.size) return;
+      try {
+        const t = now();
+        const renew = sqlite.prepare("UPDATE jobs SET locked_at=? WHERE id=? AND status='running'");
+        for (const id of activeJobs) renew.run(t, id);
+      } catch (e) {
+        console.error('Job lease renewal failed:', e);
+      }
+    }, 10000);
     heartbeatTimer.unref();
   }
   if (!maintenanceTimer) {
@@ -309,7 +368,7 @@ export function startWorker() {
     }, 60000);
     maintenanceTimer.unref();
   }
-  kick(0);
+  kick(nextWakeDelay());
 }
 
 export function stopWorker() {
@@ -319,4 +378,11 @@ export function stopWorker() {
   heartbeatTimer = null;
   maintenanceTimer = null;
   kickTimer = null;
+  // Hand still-running jobs back to the queue before the DB closes so the next
+  // process resumes them instead of leaving them stuck in `running`.
+  try {
+    const t = now();
+    const requeue = sqlite.prepare("UPDATE jobs SET status='queued',locked_at=NULL,updated_at=? WHERE id=? AND status='running'");
+    for (const id of activeJobs) requeue.run(t, id);
+  } catch {}
 }

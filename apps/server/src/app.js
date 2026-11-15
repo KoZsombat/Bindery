@@ -172,7 +172,11 @@ app.get('*splat', (req, res) => {
 app.use((req, res) => res.status(404).send('Not found.'));
 
 app.use((err, req, res, next) => {
-  console.error(err);
+  if (err?.type === 'entity.parse.failed') {
+    console.error('Invalid JSON body:', req.method, req.originalUrl);
+  } else {
+    console.error(err);
+  }
   if (res.headersSent) return next(err);
   if (req.path.startsWith('/api/')) {
     const status = err?.type === 'entity.parse.failed' || err?.status === 400 ? 400 : 500;
