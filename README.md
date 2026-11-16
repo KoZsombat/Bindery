@@ -296,3 +296,17 @@ npm run build     # TypeScript check and production bundle
 
 `npm ci` in CI installs both workspaces; the Docker image builds the client in a separate stage and
 ships only production server dependencies.
+
+## License
+
+[GNU Affero General Public License v3.0](LICENSE) (`AGPL-3.0-only`), plus the attribution term in [NOTICE](NOTICE). Copyright (C) 2026 KoZsombat.
+
+What that means in practice:
+
+- **Use it however you like**, including commercially. Self-hosting, modifying and redistributing are allowed.
+- **Distributing it or a modified version?** Pass on the source under AGPL and keep the notices; state what you changed.
+- **Running a modified version for users over a network?** Those users must be offered the corresponding source (AGPL §13).
+- **Credit:** whenever you distribute or publish this program, or a work containing it — modified or not — keep `Based on Bindery by KoZsombat — https://github.com/KoZsombat/learn-helper` in its visible legal notices (About page, footer, or equivalent). This is an additional term explicitly permitted by AGPL §7, so the project remains recognized as AGPL-3.0.
+- **No warranty.**
+
+Two honest limits: a private, unmodified self-host is not "conveying", so AGPL does not force an in-app credit for it (only a custom license could); and no trademark rights are granted, so forks must not imply endorsement.

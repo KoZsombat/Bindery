@@ -2,6 +2,7 @@
   "name": "bindery",
   "version": "0.2.0",
   "private": true,
+  "license": "AGPL-3.0-only",
   "type": "module",
   "description": "Bindery: self-hosted builder for routed, bilingual learning-book sites",
   "workspaces": [
