@@ -1,15 +1,34 @@
 'use strict';
 (function () {
   const $ = s => document.querySelector(s);
-  const $$ = s => Array.from(document.querySelectorAll(s));
+  const $$ = (s, root = document) => Array.from(root.querySelectorAll(s));
   const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const scope = location.host + location.pathname;
   let site = null;
   let lang = localStorage.getItem('lbs.lang') || 'hu';
   let theme = localStorage.getItem('lbs.theme') === 'dark' ? 'dark' : 'light';
   let current = null;
-  const progressKey = 'lbs.progress:' + location.host + location.pathname;
-  let progress = {};
-  try { progress = JSON.parse(localStorage.getItem(progressKey) || '{}'); } catch { progress = {}; }
+  let runTimer = null;
+  let runState = null;
+  let examState = null;
+  const progressKey = 'lbs.progress:' + scope;
+  const wrongKey = 'lbs.wrong:' + scope;
+  const statsKey = 'lbs.stats:' + scope;
+  const dailyKey = 'lbs.daily:' + scope;
+  let progress = load(progressKey, {});
+  let wrong = load(wrongKey, {});
+  let stats = load(statsKey, { attempts: 0, correct: 0, byKey: {}, streak: 0, lastDay: '' });
+  let daily = load(dailyKey, { day: '', keys: [], done: {} });
+
+  function load(key, fallback) {
+    try { const v = JSON.parse(localStorage.getItem(key) || 'null'); return v && typeof v === 'object' ? v : fallback; }
+    catch { return fallback; }
+  }
+  function save(key, value) {
+    try { localStorage.setItem(key, JSON.stringify(value)); } catch {}
+  }
+  const today = () => new Date().toISOString().slice(0, 10);
+  const yesterday = () => new Date(Date.now() - 86400000).toISOString().slice(0, 10);
 
   const T = (hu, en) => lang === 'en' ? en : hu;
   function applyTheme() {
@@ -30,14 +49,100 @@
     if (v && typeof v === 'object' && !Array.isArray(v)) return (v[lang] || v.hu || v.en || []);
     return Array.isArray(v) ? v : (v == null ? [] : [v]);
   }
+  // Escape HTML, then render fenced blocks and `inline code`. Never trusts model output.
+  function rich(v) {
+    const blocks = [];
+    let s = String(v == null ? '' : v).replace(/```[a-zA-Z0-9+#.-]*\n?([\s\S]*?)```/g, (_, code) => {
+      blocks.push(code.replace(/\n$/, ''));
+      return '\u0000' + (blocks.length - 1) + '\u0000';
+    });
+    s = esc(s).replace(/`([^`\n]+)`/g, '<code>$1</code>');
+    return s.replace(/\u0000(\d+)\u0000/g, (_, i) => '<pre><code>' + esc(blocks[Number(i)]) + '</code></pre>');
+  }
   const chapters = () => (site ? site.sections.flatMap(s => s.chapters.map(c => ({ s, c }))) : []);
   const total = () => chapters().length;
   const readCount = () => chapters().filter(x => progress[x.s.id + '/' + x.c.id]).length;
+  const pct = (a, b) => b ? Math.round(a / b * 100) : 0;
+
+  function normalize(s) {
+    return String(s == null ? '' : s).toLowerCase().replace(/\u2212/g, '-').replace(/[{}]/g, '').replace(/\\left|\\right|\\cdot|\\times/g, '').replace(/[·×]/g, '*').replace(/\s+/g, '').replace(/,/g, '.').replace(/^\+/, '');
+  }
+  function safeEval(input) {
+    let s = String(input).replace(/\s+/g, '').replace(/\u2212/g, '-').replace(/,/g, '.');
+    s = s.replace(/\\frac\{([^{}]*)\}\{([^{}]*)\}/g, '(($1)/($2))')
+      .replace(/\\sqrt\{([^{}]*)\}/g, 'sqrt($1)')
+      .replace(/\\pi/g, 'pi').replace(/\\cdot|\\times/g, '*')
+      .replace(/[·×]/g, '*');
+    const tokens = s.match(/\d+(?:\.\d+)?|pi|e|sqrt|sin|cos|tan|ln|log|abs|[()+\-*/^]/g) || [];
+    if (!tokens.length || tokens.join('') !== s) return NaN;
+    let i = 0;
+    const peek = () => tokens[i], next = () => tokens[i++];
+    function primary() {
+      const t = next();
+      if (t === undefined) throw new Error('end');
+      if (t === '(') { const v = parseExpr(); if (next() !== ')') throw new Error('paren'); return v; }
+      if (t === 'pi') return Math.PI;
+      if (t === 'e') return Math.E;
+      if (/^\d/.test(t)) return Number(t);
+      if (['sqrt', 'sin', 'cos', 'tan', 'ln', 'log', 'abs'].includes(t)) {
+        if (next() !== '(') throw new Error('call');
+        const v = parseExpr();
+        if (next() !== ')') throw new Error('paren');
+        if (t === 'sqrt') return Math.sqrt(v);
+        if (t === 'sin') return Math.sin(v);
+        if (t === 'cos') return Math.cos(v);
+        if (t === 'tan') return Math.tan(v);
+        if (t === 'ln') return Math.log(v);
+        if (t === 'log') return Math.log10(v);
+        return Math.abs(v);
+      }
+      throw new Error('token');
+    }
+    function power() {
+      const base = primary();
+      if (peek() === '^') { next(); return Math.pow(base, power()); }
+      return base;
+    }
+    function unary() {
+      if (peek() === '+') { next(); return unary(); }
+      if (peek() === '-') { next(); return -unary(); }
+      return power();
+    }
+    function term() {
+      let v = unary();
+      while (peek() === '*' || peek() === '/') {
+        const op = next(), r = unary();
+        v = op === '*' ? v * r : v / r;
+      }
+      return v;
+    }
+    function parseExpr() {
+      let v = term();
+      while (peek() === '+' || peek() === '-') {
+        const op = next(), r = term();
+        v = op === '+' ? v + r : v - r;
+      }
+      return v;
+    }
+    try {
+      const v = parseExpr();
+      return i === tokens.length && Number.isFinite(v) ? v : NaN;
+    } catch { return NaN; }
+  }
+  function check(user, expected, type) {
+    if (!user || !String(user).trim()) return false;
+    if (type === 'number') {
+      const a = safeEval(user), b = safeEval(expected);
+      return !isNaN(a) && !isNaN(b) && Math.abs(a - b) <= Math.max(1e-7, Math.abs(b) * 1e-6);
+    }
+    if (normalize(user) === normalize(expected)) return true;
+    const a = safeEval(user), b = safeEval(expected);
+    return !isNaN(a) && !isNaN(b) && Math.abs(a - b) <= Math.max(1e-7, Math.abs(b) * 1e-6);
+  }
 
   function saveProgress() {
-    try { localStorage.setItem(progressKey, JSON.stringify(progress)); } catch {}
-    const pct = total() ? Math.round(readCount() / total() * 100) : 0;
-    const bar = $('#progressBar'); if (bar) bar.style.width = pct + '%';
+    save(progressKey, progress);
+    const bar = $('#progressBar'); if (bar) bar.style.width = pct(readCount(), total()) + '%';
   }
 
   function renderMath() {
@@ -53,6 +158,60 @@
     } catch {}
   }
 
+  /* ---------------------------------------------------------------- icons */
+  const ICON = {
+    target: '<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/>',
+    play: '<path d="M8 5l11 7-11 7z"/>',
+    map: '<path d="M12 3l9 5-9 5-9-5z"/><path d="M3 12l9 5 9-5"/><path d="M3 17l9 5 9-5"/>',
+    compass: '<circle cx="12" cy="12" r="9"/><path d="M15.5 8.5l-2 5-5 2 2-5z"/>',
+    notebook: '<path d="M6 3h12v18H6z"/><path d="M9 7h6M9 11h6M9 15h4"/>',
+    shuffle: '<path d="M3 7h4l10 10h4M3 17h4l10-10h4"/>',
+    search: '<circle cx="11" cy="11" r="6"/><path d="M16 16l4 4"/>',
+    chart: '<path d="M4 20V4M4 20h16"/><path d="M8 16v-5M12 16V8M16 16v-3"/>',
+    sigma: '<path d="M18 4H6l6 8-6 8h12"/>',
+    video: '<rect x="3" y="6" width="12" height="12" rx="2"/><path d="M15 10l6-3v10l-6-3z"/>',
+    bank: '<path d="M4 6h16M4 12h10M4 18h16"/>',
+    clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+    doc: '<path d="M6 3h8l4 4v14H6z"/><path d="M14 3v5h5"/>'
+  };
+  function icon(name) {
+    return '<svg class="mi" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round">' + ICON[name] + '</svg>';
+  }
+
+  /* ---------------------------------------------------------------- modes */
+  const MODES = [
+    ['focus', 'Focus / Launchpad', 'Focus / Launchpad', 'target'],
+    ['learn', 'Learn and review', 'Tanulás és ismétlés', 'play'],
+    ['map', 'Knowledge map', 'Tudástérkép', 'map'],
+    ['daily', 'Daily quest', 'Napi küldetés', 'compass'],
+    ['errors', 'Error notebook', 'Hibafüzet', 'notebook'],
+    ['mixed', 'Mixed run', 'Vegyes kör', 'shuffle'],
+    ['hunt', 'Error hunt', 'Hibavadászat', 'search'],
+    ['progress', 'Progress', 'Haladás', 'chart'],
+    ['formulas', 'Formula sheet', 'Képletgyűjtemény', 'sigma'],
+    ['videos', 'Videos', 'Videók', 'video'],
+    ['bank', 'Practice bank', 'Feladatbank', 'bank'],
+    ['exam', 'Exam simulator', 'Vizsgaszimulátor', 'clock'],
+    ['resources', 'Resources', 'Források', 'doc']
+  ];
+  function renderModes() {
+    const active = location.hash.replace(/^#\/?/, '').split('/')[0];
+    const groups = [
+      ['Focus', MODES.slice(0, 3)],
+      ['Daily practice', MODES.slice(3, 8)],
+      ['Library', MODES.slice(8)]
+    ];
+    const nav = $('#modes');
+    if (!nav) return;
+    nav.innerHTML = groups.map(([label, items]) =>
+      '<div class="mode-group"><div class="mode-label">' + esc(T(label, label)) + '</div>' +
+      items.map(([id, en, hu, ic]) =>
+        '<a class="mode' + (active === id ? ' active' : '') + '" href="#/' + id + '"' + (active === id ? ' aria-current="page"' : '') + '>' +
+        icon(ic) + '<span>' + esc(T(hu, en)) + '</span></a>').join('') + '</div>'
+    ).join('');
+  }
+
+  /* ----------------------------------------------------------- book chrome */
   function renderTOC() {
     const nav = $('#toc');
     const count = $('#sideCount');
@@ -67,16 +226,174 @@
     }).join('');
   }
 
+  /* ------------------------------------------------------------ questions */
+  function allExercises() {
+    const out = [];
+    for (const s of site.sections) for (const c of s.chapters) (c.exercises || []).forEach((q, i) => {
+      out.push({ s, c, q, i, key: s.id + '/' + c.id + '/' + i });
+    });
+    return out;
+  }
+  function findItem(key) { return allExercises().find(x => x.key === key); }
+  function theoryHTML(t) {
+    const type = t.type || 'p';
+    if (type === 'formula') return '<div class="callout formula"><div class="ct">' + T('Képlet', 'Formula') + (biv(t.title) ? ' · ' + esc(biv(t.title)) : '') + '</div><div class="fx">$$' + esc(String(t.latex || '')) + '$$</div>' + (biv(t.note) ? '<p class="muted">' + rich(biv(t.note)) + '</p>' : '') + '</div>';
+    if (type === 'code') return '<div class="callout code"><div class="ct">' + T('Kód', 'Code') + (biv(t.title) ? ' · ' + esc(biv(t.title)) : '') + '</div><pre><code>' + esc(String(t.code || '')) + '</code></pre></div>';
+    if (type === 'list') return '<div class="callout note"><div class="ct">' + esc(biv(t.title, T('Lista', 'List'))) + '</div><ul>' + bivArr(t.items).map(x => '<li>' + rich(x) + '</li>').join('') + '</ul></div>';
+    const labels = { def: T('Definíció', 'Definition'), thm: T('Tétel', 'Theorem'), note: T('Megjegyzés', 'Note'), warn: T('Vigyázat', 'Warning'), p: T('Szöveg', 'Note') };
+    const cls = type === 'warn' ? 'warn' : type === 'def' ? 'def' : type === 'thm' ? 'thm' : 'note';
+    const label = labels[type] || labels.p, heading = biv(t.title);
+    return '<div class="callout ' + cls + '"><div class="ct">' + label + (heading && heading !== label ? ' · ' + esc(heading) : '') + '</div><p>' + rich(biv(t.body)) + '</p></div>';
+  }
+
+  function qCard(item, n, opts) {
+    const q = item.q, type = q.type || 'expr';
+    const meta = opts && opts.meta ? '<div class="qmeta">' + esc(item.c.num) + ' · ' + esc(biv(item.c.title)) + '</div>' : '';
+    let controls;
+    if (type === 'choice') {
+      controls = '<div class="choice-list">' + bivArr(q.choices).map((c, j) =>
+        '<button class="btn choice" type="button" data-qchoice="' + j + '">' + esc(c) + '</button>').join('') + '</div>';
+    } else if (type === 'proof') {
+      controls = '<div class="self"><button class="btn" type="button" data-qproof="1">' + T('Kész', 'Solved') + '</button></div>';
+    } else {
+      controls = '<div class="answer-row"><input class="answer" data-qinput type="text" placeholder="' + T('Válasz…', 'Answer…') + '" aria-label="' + T('Válasz', 'Answer') + '">' +
+        '<button class="btn primary" type="button" data-qcheck>' + T('Ellenőrzés', 'Check') + '</button>' +
+        (biv(q.hint) ? '<button class="btn" type="button" data-qhint>' + T('Segítség', 'Hint') + '</button>' : '') + '</div>';
+    }
+    return '<div class="ex" data-qkey="' + esc(item.key) + '">' + meta +
+      '<div class="ex-head"><span class="num">' + String(n || (item.i + 1)).padStart(2, '0') + '</span><div class="ex-q">' + rich(biv(q.q)) + '</div></div>' +
+      controls + '<div class="feedback"></div>' +
+      (biv(q.hint) ? '<div class="hint">' + rich(biv(q.hint)) + '</div>' : '') +
+      (biv(q.sol) ? '<div class="sol-wrap"><button class="btn sm" type="button" data-qsol>' + T('Megoldás', 'Show solution') + '</button><div class="sol"><b>' + T('Megoldás.', 'Solution.') + '</b> ' + rich(biv(q.sol)) + '</div></div>' : '') + '</div>';
+  }
+  function record(key, ok) {
+    stats.attempts = (stats.attempts || 0) + 1;
+    if (ok) stats.correct = (stats.correct || 0) + 1;
+    const b = stats.byKey[key] || { a: 0, c: 0 };
+    b.a++; if (ok) b.c++;
+    stats.byKey[key] = b;
+    if (ok) delete wrong[key]; else wrong[key] = Date.now();
+    if (daily.day === today() && (daily.keys || []).includes(key) && ok) daily.done[key] = true;
+    if (stats.lastDay !== today()) {
+      stats.streak = stats.lastDay === yesterday() ? (stats.streak || 0) + 1 : 1;
+      stats.lastDay = today();
+    }
+    save(statsKey, stats);
+    save(wrongKey, wrong);
+    save(dailyKey, daily);
+    if (runState) { runState.attempts++; if (ok) runState.correct++; updateRunScore(); }
+    if (examState && examState.active) { examState.attempts++; if (ok) examState.correct++; updateExamScore(); }
+  }
+  function markFeedback(ex, ok, q, locked) {
+    const fb = ex.querySelector('.feedback');
+    if (fb) {
+      fb.className = 'feedback ' + (ok ? 'ok' : 'bad');
+      fb.textContent = ok ? T('Helyes.', 'Correct.') : T('Nem stimmel. Kérj segítséget, vagy nézd meg a megoldást.', 'Not quite. Ask for a hint or show the solution.');
+    }
+    ex.classList.toggle('solved', ok);
+    if (locked) {
+      ex.dataset.answered = '1';
+      $$('button[data-qchoice], button[data-qcheck], button[data-qproof]', ex).forEach(b => { b.disabled = true; });
+      const input = ex.querySelector('input[data-qinput]');
+      if (input) input.disabled = true;
+      const sol = ex.querySelector('.sol');
+      if (sol) sol.classList.add('show');
+    }
+  }
+  function bindQuestions(root) {
+    $$('[data-qkey]', root).forEach(ex => {
+      const item = findItem(ex.dataset.qkey);
+      if (!item) return;
+      const q = item.q;
+      const locked = !!(examState && (examState.active || examState.finished));
+      const answer = ok => {
+        record(item.key, ok);
+        markFeedback(ex, ok, q, locked);
+        if (!ok && runState) runState.wrong.push(item.key);
+        if (ok && location.hash.startsWith('#/errors')) setTimeout(() => { if (location.hash.startsWith('#/errors')) renderErrors(); }, 700);
+        if (location.hash.startsWith('#/daily')) setTimeout(updateDailyCount, 100);
+      };
+      $$('[data-qchoice]', ex).forEach(btn => btn.addEventListener('click', () => {
+        answer(String(btn.dataset.qchoice) === String(q.a));
+      }));
+      $$('[data-qcheck]', ex).forEach(btn => btn.addEventListener('click', () => {
+        const input = ex.querySelector('[data-qinput]');
+        answer(check(input ? input.value : '', q.a, q.type));
+      }));
+      $$('[data-qproof]', ex).forEach(btn => btn.addEventListener('click', () => answer(true)));
+      $$('[data-qhint]', ex).forEach(btn => btn.addEventListener('click', () => {
+        const h = ex.querySelector('.hint'); if (h) h.classList.toggle('show');
+      }));
+      $$('[data-qsol]', ex).forEach(btn => btn.addEventListener('click', () => {
+        const s = ex.querySelector('.sol'); if (s) s.classList.toggle('show');
+      }));
+    });
+  }
+
+  /* --------------------------------------------------------------- daily */
+  function hashStr(s) {
+    let h = 2166136261;
+    for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); }
+    return h >>> 0;
+  }
+  function seededShuffle(arr, seed) {
+    const a = arr.slice();
+    let x = seed || 1;
+    for (let i = a.length - 1; i > 0; i--) {
+      x = (Math.imul(x, 1664525) + 1013904223) >>> 0;
+      const j = x % (i + 1);
+      const t = a[i]; a[i] = a[j]; a[j] = t;
+    }
+    return a;
+  }
+  function ensureDaily() {
+    const day = today();
+    if (daily.day !== day) {
+      const pool = allExercises();
+      const keys = seededShuffle(pool, hashStr(scope + day)).slice(0, Math.min(5, pool.length)).map(x => x.key);
+      daily = { day, keys, done: {} };
+      save(dailyKey, daily);
+    }
+    return daily;
+  }
+  function updateDailyCount() {
+    const el = $('#dailyDone');
+    if (!el) return;
+    const n = (ensureDaily().keys || []).filter(k => daily.done[k]).length;
+    el.textContent = n + ' / ' + (daily.keys || []).length;
+  }
+
+  /* -------------------------------------------------------------- helpers */
+  function emptyState(title, text) {
+    return '<div class="empty"><div class="empty-ic">' + icon('doc') + '</div><h2>' + esc(title) + '</h2><p>' + esc(text) + '</p></div>';
+  }
+  function sectionBars() {
+    return '<div class="bars">' + site.sections.map(s => {
+      const done = s.chapters.filter(c => progress[s.id + '/' + c.id]).length;
+      return '<div class="bar-row"><div class="bar-head"><a href="#/section/' + encodeURIComponent(s.id) + '">' + esc(s.num) + '. ' + esc(biv(s.title)) + '</a><span>' + done + '/' + s.chapters.length + '</span></div>' +
+        '<div class="bar"><i style="width:' + pct(done, s.chapters.length) + '%"></i></div></div>';
+    }).join('') + '</div>';
+  }
+  function updateRunScore() {
+    const el = $('#runScore');
+    if (el && runState) el.textContent = runState.correct + ' / ' + runState.attempts;
+  }
+  function updateExamScore() {
+    const el = $('#examScore');
+    if (el && examState) el.textContent = examState.correct + ' / ' + examState.attempts;
+  }
+
+  /* ---------------------------------------------------------------- pages */
   function renderHome() {
     current = null;
     $('#main').innerHTML =
       '<section class="hero"><div class="kicker">' + esc(biv(site.subtitle)) + '</div><h1>' + esc(biv(site.title)) + '</h1>' +
-      '<p class="lead">' + esc(biv(site.summary)) + '</p>' +
+      '<p class="lead">' + rich(biv(site.summary)) + '</p>' +
       '<div class="hero-meta"><span><b>' + site.sections.length + '</b> ' + T('rész', 'parts') + '</span><span><b>' + total() + '</b> ' + T('fejezet', 'chapters') + '</span><span><b>' + readCount() + '/' + total() + '</b> ' + T('elolvasva', 'read') + '</span></div></section>' +
       '<div class="grid">' + site.sections.map(s => '<a class="card-link" href="#/section/' + encodeURIComponent(s.id) + '">' +
         '<div class="card-top"><span class="pill">' + esc(s.num) + '. ' + T('rész', 'part') + '</span></div>' +
-        '<h2>' + esc(biv(s.title)) + '</h2><p>' + esc(biv(s.subtitle)) + '</p>' +
-        '<div class="mini"><span>' + s.chapters.length + ' ' + T('fejezet', 'chapters') + '</span><i style="width:' + Math.round(s.chapters.filter(c => progress[s.id + '/' + c.id]).length / s.chapters.length * 100) + '%"></i></div></a>').join('') + '</div>';
+        '<h2>' + esc(biv(s.title)) + '</h2><p>' + rich(biv(s.subtitle)) + '</p>' +
+        '<div class="mini"><span>' + s.chapters.length + ' ' + T('fejezet', 'chapters') + '</span><i style="width:' + pct(s.chapters.filter(c => progress[s.id + '/' + c.id]).length, s.chapters.length) + '%"></i></div></a>').join('') + '</div>';
     saveProgress();
     renderMath();
   }
@@ -88,35 +405,12 @@
     const done = s.chapters.filter(c => progress[s.id + '/' + c.id]).length;
     const mins = s.chapters.reduce((n, c) => n + (Number(c.minutes) || 20), 0);
     $('#main').innerHTML = '<div class="kicker">' + esc(s.num) + '. ' + T('rész', 'PART') + '</div><h1>' + esc(biv(s.title)) + '</h1>' +
-      '<p class="lead">' + esc(biv(s.subtitle)) + '</p><p>' + esc(biv(s.intro)) + '</p>' +
+      '<p class="lead">' + rich(biv(s.subtitle)) + '</p><p>' + rich(biv(s.intro)) + '</p>' +
       '<div class="section-meta"><span><b>' + s.chapters.length + '</b> ' + T('fejezet', 'chapters') + '</span><span><b>' + done + '</b> ' + T('elolvasva', 'read') + '</span><span><b>' + mins + '</b> ' + T('perc', 'min') + '</span></div>' +
       '<div class="chapter-list">' + s.chapters.map(c => '<a class="chapter-row" href="#/chapter/' + encodeURIComponent(s.id) + '/' + encodeURIComponent(c.id) + '">' +
         '<span class="n">' + esc(c.num) + '</span><div><h3>' + esc(biv(c.title)) + '</h3><p>' + esc(biv(c.lead)).slice(0, 150) + '…</p></div><span>' + (progress[s.id + '/' + c.id] ? '✓' : '→') + '</span></a>').join('') + '</div>';
     saveProgress();
     renderMath();
-  }
-
-  function theoryHTML(t) {
-    const type = t.type || 'p';
-    if (type === 'formula') return '<div class="callout formula"><div class="ct">' + T('Képlet', 'Formula') + (biv(t.title) ? ' · ' + esc(biv(t.title)) : '') + '</div><div class="fx">$$' + esc(String(t.latex || '')) + '$$</div>' + (biv(t.note) ? '<p class="muted">' + esc(biv(t.note)) + '</p>' : '') + '</div>';
-    if (type === 'list') return '<div class="callout note"><div class="ct">' + esc(biv(t.title, T('Lista', 'List'))) + '</div><ul>' + bivArr(t.items).map(x => '<li>' + esc(x) + '</li>').join('') + '</ul></div>';
-    const labels = { def: T('Definíció', 'Definition'), thm: T('Tétel', 'Theorem'), note: T('Megjegyzés', 'Note'), warn: T('Vigyázat', 'Warning'), p: T('Szöveg', 'Note') };
-    const cls = type === 'warn' ? 'warn' : type === 'def' ? 'def' : type === 'thm' ? 'thm' : 'note';
-    const label = labels[type] || labels.p, heading = biv(t.title);
-    return '<div class="callout ' + cls + '"><div class="ct">' + label + (heading && heading !== label ? ' · ' + esc(heading) : '') + '</div><p>' + esc(biv(t.body)) + '</p></div>';
-  }
-
-  function exerciseHTML(q, i) {
-    const type = q.type || 'expr';
-    let controls;
-    if (type === 'choice') controls = (bivArr(q.choices) || []).map((c, j) => '<button class="btn choice" data-ex="' + i + '" data-choice="' + j + '">' + esc(c) + '</button>').join('');
-    else if (type === 'proof') controls = '<div class="self"><button class="btn" data-proof="1" data-ex="' + i + '">' + T('Kész', 'Solved') + '</button></div>';
-    else controls = '<div class="answer-row"><input class="answer" data-ex="' + i + '" type="text" placeholder="' + T('Válasz…', 'Answer…') + '" aria-label="' + T('Válasz', 'Answer') + '">' +
-      '<button class="btn primary" data-check="' + i + '">' + T('Ellenőrzés', 'Check') + '</button>' +
-      (biv(q.hint) ? '<button class="btn" data-hint="' + i + '">' + T('Segítség', 'Hint') + '</button>' : '') + '</div>';
-    return '<div class="ex" data-ex="' + i + '"><div class="ex-head"><span class="num">' + String(i + 1).padStart(2, '0') + '</span><div class="ex-q">' + esc(biv(q.q)) + '</div></div>' +
-      controls + '<div class="feedback"></div>' + (biv(q.hint) ? '<div class="hint" data-hintbox="' + i + '">' + esc(biv(q.hint)) + '</div>' : '') +
-      (biv(q.sol) ? '<div class="sol-wrap"><button class="btn sm" data-sol="' + i + '">' + T('Megoldás', 'Show solution') + '</button><div class="sol" data-solbox="' + i + '"><b>' + T('Megoldás.', 'Solution.') + '</b> ' + esc(biv(q.sol)) + '</div></div>' : '') + '</div>';
   }
 
   function renderChapter(sid, cid) {
@@ -128,91 +422,326 @@
     const prev = list[idx - 1], next = list[idx + 1];
     const exs = c.exercises || [];
     $('#main').innerHTML = '<article class="book"><div class="running"><span>' + esc(s.num) + '. ' + esc(biv(s.title)) + '</span><span>' + esc(c.num) + '. ' + T('fejezet', 'chapter') + '</span></div>' +
-      '<header class="ch-head"><div class="ch-num">' + esc(c.num) + '</div><div><h1>' + esc(biv(c.title)) + '</h1><p class="lead">' + esc(biv(c.lead)) + '</p></div></header>' +
+      '<header class="ch-head"><div class="ch-num">' + esc(c.num) + '</div><div><h1>' + esc(biv(c.title)) + '</h1><p class="lead">' + rich(biv(c.lead)) + '</p></div></header>' +
       '<div class="pills"><span>' + (c.minutes || 20) + ' ' + T('perc', 'min') + '</span><span>' + exs.length + ' ' + T('feladat', 'exercises') + '</span></div>' +
-      (bivArr(c.why).length ? '<div class="callout why"><div class="ct">' + T('Miért?', 'Why?') + '</div>' + bivArr(c.why).map(p => '<p>' + esc(p) + '</p>').join('') + '</div>' : '') +
-      (biv(c.when) ? '<div class="callout when"><div class="ct">' + T('Mikor használd?', 'When to use it') + '</div><p>' + esc(biv(c.when)) + '</p></div>' : '') +
+      (bivArr(c.why).length ? '<div class="callout why"><div class="ct">' + T('Miért?', 'Why?') + '</div>' + bivArr(c.why).map(p => '<p>' + rich(p) + '</p>').join('') + '</div>' : '') +
+      (biv(c.when) ? '<div class="callout when"><div class="ct">' + T('Mikor használd?', 'When to use it') + '</div><p>' + rich(biv(c.when)) + '</p></div>' : '') +
       (c.theory || []).map(theoryHTML).join('') +
-      ((c.examples || []).length ? '<section><h2 class="sec-label">' + T('Kidolgozott példák', 'Worked examples') + '</h2>' + c.examples.map((e, i) => '<div class="example"><div class="ex-title"><span class="pill">' + T('PÉLDA ', 'EXAMPLE ') + (i + 1) + '</span><h3>' + esc(biv(e.title)) + '</h3></div><p>' + esc(biv(e.problem)) + '</p><ol>' + bivArr(e.steps).map(x => '<li>' + esc(x) + '</li>').join('') + '</ol><p class="answer-line"><b>' + T('Eredmény:', 'Answer:') + '</b> ' + esc(biv(e.answer)) + '</p></div>').join('') + '</section>' : '') +
-      (bivArr(c.mistakes).length ? '<div class="callout warn"><div class="ct">' + T('Tipikus hibák', 'Common mistakes') + '</div><ul>' + bivArr(c.mistakes).map(x => '<li>' + esc(x) + '</li>').join('') + '</ul></div>' : '') +
-      '<section><h2 class="sec-label">' + T('Gyakorló feladatok', 'Practice exercises') + '</h2><div class="ex-list">' + exs.map(exerciseHTML).join('') + '</div></section>' +
+      ((c.examples || []).length ? '<section><h2 class="sec-label">' + T('Kidolgozott példák', 'Worked examples') + '</h2>' + c.examples.map((e, i) => '<div class="example"><div class="ex-title"><span class="pill">' + T('PÉLDA ', 'EXAMPLE ') + (i + 1) + '</span><h3>' + esc(biv(e.title)) + '</h3></div><p>' + rich(biv(e.problem)) + '</p><ol>' + bivArr(e.steps).map(x => '<li>' + rich(x) + '</li>').join('') + '</ol><p class="answer-line"><b>' + T('Eredmény:', 'Answer:') + '</b> ' + rich(biv(e.answer)) + '</p></div>').join('') + '</section>' : '') +
+      (bivArr(c.mistakes).length ? '<div class="callout warn"><div class="ct">' + T('Tipikus hibák', 'Common mistakes') + '</div><ul>' + bivArr(c.mistakes).map(x => '<li>' + rich(x) + '</li>').join('') + '</ul></div>' : '') +
+      '<section><h2 class="sec-label">' + T('Gyakorló feladatok', 'Practice exercises') + '</h2><div class="ex-list">' + exs.map((q, i) => qCard({ s, c, q, i, key: s.id + '/' + c.id + '/' + i })).join('') + '</div></section>' +
       (prev || next ? '<nav class="chapter-nav">' + (prev ? '<a href="#/chapter/' + encodeURIComponent(prev.s.id) + '/' + encodeURIComponent(prev.c.id) + '"><small>' + T('Előző', 'Previous') + '</small><b>' + esc(prev.c.num) + '. ' + esc(biv(prev.c.title)) + '</b></a>' : '<span></span>') +
         (next ? '<a class="next" href="#/chapter/' + encodeURIComponent(next.s.id) + '/' + encodeURIComponent(next.c.id) + '"><small>' + T('Következő', 'Next') + '</small><b>' + esc(next.c.num) + '. ' + esc(biv(next.c.title)) + '</b></a>' : '<span></span>') + '</nav>' : '') +
       '<div class="read-line"><button class="btn ' + (progress[s.id + '/' + c.id] ? '' : 'primary') + '" data-read="' + (progress[s.id + '/' + c.id] ? '0' : '1') + '">' + (progress[s.id + '/' + c.id] ? T('Visszavonás', 'Mark unread') : T('Fejezet kész', 'Mark chapter read')) + '</button></div></article>';
     saveProgress();
     renderTOC();
     renderMath();
-    bindExercises();
+    bindQuestions($('#main'));
+    bindRead();
   }
 
-  function normalize(s) {
-    return String(s == null ? '' : s).toLowerCase().replace(/\u2212/g, '-').replace(/[{}]/g, '').replace(/\\left|\\right|\\cdot|\\times/g, '').replace(/[·×]/g, '*').replace(/\s+/g, '').replace(/,/g, '.').replace(/^\+/, '');
-  }
-  function safeEval(expr) {
-    let e = String(expr).replace(/\s+/g, '').replace(/\u2212/g, '-').replace(/,/g, '.');
-    e = e.replace(/\\left|\\right|\\,|\\;/g, '').replace(/\\pi/g, 'pi').replace(/\\frac\{([^{}]+)\}\{([^{}]+)\}/g, '($1)/($2)');
-    e = e.replace(/\^/g, '**').replace(/sqrt/gi, 'Math.sqrt').replace(/\bpi\b/gi, 'Math.PI').replace(/\be\b/g, 'Math.E');
-    e = e.replace(/\bln\b/gi, 'Math.log').replace(/\blog\b/gi, 'Math.log10').replace(/\bsin\b/gi, 'Math.sin').replace(/\bcos\b/gi, 'Math.cos').replace(/\btan\b/gi, 'Math.tan');
-    if (!/^[-+*/().\d\sMathsqrtPIElogasincoetanbexp]*$/.test(e)) return NaN;
-    try { const v = Function('"use strict";return (' + e + ')')(); return typeof v === 'number' && isFinite(v) ? v : NaN; } catch { return NaN; }
-  }
-  function check(user, expected, type) {
-    if (!user || !String(user).trim()) return false;
-    if (type === 'number') {
-      const a = safeEval(user), b = safeEval(expected);
-      return !isNaN(a) && !isNaN(b) && Math.abs(a - b) <= Math.max(1e-7, Math.abs(b) * 1e-6);
-    }
-    if (normalize(user) === normalize(expected)) return true;
-    const a = safeEval(user), b = safeEval(expected);
-    return !isNaN(a) && !isNaN(b) && Math.abs(a - b) <= Math.max(1e-7, Math.abs(b) * 1e-6);
-  }
-  function bindExercises() {
-    if (!current) return;
-    const exs = current.c.exercises || [];
-    $$('.ex').forEach(ex => {
-      const i = Number(ex.dataset.ex);
-      const q = exs[i];
-      const fb = ex.querySelector('.feedback');
-      ex.querySelectorAll('[data-choice]').forEach(btn => btn.addEventListener('click', () => {
-        const ok = String(btn.dataset.choice) === String(q.a);
-        fb.className = 'feedback ' + (ok ? 'ok' : 'bad');
-        fb.textContent = ok ? T('Helyes.', 'Correct.') : T('Nem ez a helyes válasz.', 'Not the correct answer.');
-      }));
-      ex.querySelectorAll('[data-check]').forEach(btn => btn.addEventListener('click', () => {
-        const input = ex.querySelector('.answer');
-        const ok = check(input.value, q.a, q.type);
-        fb.className = 'feedback ' + (ok ? 'ok' : 'bad');
-        fb.textContent = ok ? T('Helyes.', 'Correct.') : T('Nem stimmel. Kérj segítséget, vagy nézd meg a megoldást.', 'Not quite. Ask for a hint or show the solution.');
-      }));
-      ex.querySelectorAll('[data-hint]').forEach(btn => btn.addEventListener('click', () => {
-        const h = ex.querySelector('[data-hintbox]');
-        if (h) h.classList.toggle('show');
-      }));
-      ex.querySelectorAll('[data-sol]').forEach(btn => btn.addEventListener('click', () => {
-        const s = ex.querySelector('[data-solbox]');
-        if (s) s.classList.toggle('show');
-      }));
-      ex.querySelectorAll('[data-proof]').forEach(btn => btn.addEventListener('click', () => {
-        fb.className = 'feedback ok';
-        fb.textContent = T('Elmentve. Ellenőrizd a megoldást.', 'Saved. Check the solution.');
-      }));
-    });
-    const read = current ? current.s.id + '/' + current.c.id : '';
+  function bindRead() {
     $$('[data-read]').forEach(btn => btn.addEventListener('click', () => {
       if (!current) return;
       const sid = current.s.id, cid = current.c.id;
-      if (btn.dataset.read === '1') progress[read] = true;
-      else delete progress[read];
+      if (btn.dataset.read === '1') progress[sid + '/' + cid] = true;
+      else delete progress[sid + '/' + cid];
       renderChapter(sid, cid);
+      renderTOC();
+      saveProgress();
     }));
   }
 
+  function renderFocus() {
+    current = null;
+    const list = chapters();
+    const read = readCount();
+    const next = list.find(x => !progress[x.s.id + '/' + x.c.id]) || list[0];
+    const d = ensureDaily();
+    const done = (d.keys || []).filter(k => daily.done[k]).length;
+    const wrongN = Object.keys(wrong).length;
+    const continueHref = next ? '#/chapter/' + encodeURIComponent(next.s.id) + '/' + encodeURIComponent(next.c.id) : '#/';
+    $('#main').innerHTML = '<section class="hero compact"><div class="kicker">' + T('Fókusz', 'Focus') + '</div><h1>' + esc(biv(site.title)) + '</h1>' +
+      '<p class="lead">' + T('Folytasd ott, ahol abbahagytad, és tartsd karban a tudásod napi gyakorlással.', 'Continue where you left off and keep the knowledge fresh with daily practice.') + '</p>' +
+      '<div class="hero-actions"><a class="btn primary" href="' + continueHref + '">' + (next ? T('Folytatás', 'Continue') + ' · ' + esc(next.c.num) : T('Kezdés', 'Start')) + '</a>' +
+      '<a class="btn" href="#/learn">' + T('Tanulás és ismétlés', 'Learn and review') + '</a></div>' +
+      '<div class="hero-meta"><span><b>' + pct(read, total()) + '%</b> ' + T('elolvasva', 'read') + '</span><span><b>' + done + '/' + (d.keys || []).length + '</b> ' + T('napi küldetés', 'daily quest') + '</span><span><b>' + wrongN + '</b> ' + T('hibafüzet', 'error notebook') + '</span></div></section>' +
+      '<div class="stat-grid">' +
+      '<a class="stat-card" href="#/daily"><span class="stat-ic">' + icon('compass') + '</span><b>' + done + '/' + (d.keys || []).length + '</b><span>' + T('Napi küldetés', 'Daily quest') + '</span></a>' +
+      '<a class="stat-card" href="#/errors"><span class="stat-ic">' + icon('notebook') + '</span><b>' + wrongN + '</b><span>' + T('Hibafüzet', 'Error notebook') + '</span></a>' +
+      '<a class="stat-card" href="#/bank"><span class="stat-ic">' + icon('bank') + '</span><b>' + allExercises().length + '</b><span>' + T('Feladatbank', 'Practice bank') + '</span></a>' +
+      '<a class="stat-card" href="#/progress"><span class="stat-ic">' + icon('chart') + '</span><b>' + stats.streak + '</b><span>' + T('Napos sorozat', 'Day streak') + '</span></a></div>' +
+      '<h2 class="sec-label">' + T('Részek', 'Parts') + '</h2>' + sectionBars();
+  }
+
+  function renderLearn() {
+    current = null;
+    const wrongN = Object.keys(wrong).length;
+    $('#main').innerHTML = '<div class="kicker">' + T('Fókusz', 'Focus') + '</div><h1>' + T('Tanulás és ismétlés', 'Learn and review') + '</h1>' +
+      '<p class="lead">' + T('A fejezetek sorrendben épülnek egymásra. Olvasottnak jelölt fejezetek zöld pipát kapnak.', 'Chapters build on each other. Read chapters get a green check.') + '</p>' +
+      (wrongN ? '<div class="callout note"><b>' + T('Ismétlésre vár', 'Waiting for review') + ':</b> ' + wrongN + ' ' + T('hibás feladat.', 'missed exercises.') + ' <a href="#/errors">' + T('Hibafüzet megnyitása', 'Open error notebook') + '</a></div>' : '') +
+      site.sections.map(s => '<section class="learn-sec"><div class="learn-head"><span class="pill">' + esc(s.num) + '</span><h2>' + esc(biv(s.title)) + '</h2>' +
+        '<span class="learn-count">' + s.chapters.filter(c => progress[s.id + '/' + c.id]).length + '/' + s.chapters.length + '</span></div>' +
+        '<div class="chapter-list">' + s.chapters.map(c => '<a class="chapter-row" href="#/chapter/' + encodeURIComponent(s.id) + '/' + encodeURIComponent(c.id) + '">' +
+          '<span class="n">' + esc(c.num) + '</span><div><h3>' + esc(biv(c.title)) + '</h3><p>' + (progress[s.id + '/' + c.id] ? T('Elolvasva', 'Read') : T('Nincs elolvasva', 'Unread')) + '</p></div>' +
+          '<span>' + (progress[s.id + '/' + c.id] ? '✓' : '→') + '</span></a>').join('') + '</div></section>').join('');
+  }
+
+  function renderMap() {
+    current = null;
+    $('#main').innerHTML = '<div class="kicker">' + T('Fókusz', 'Focus') + '</div><h1>' + T('Tudástérkép', 'Knowledge map') + '</h1>' +
+      '<p class="lead">' + T('A könyv szerkezete egy pillantásra. Kattints egy fejezetre az ugráshoz.', 'The book structure at a glance. Click a chapter to jump.') + '</p>' +
+      '<div class="map-legend"><span><i class="dot done"></i>' + T('elolvasva', 'read') + '</span><span><i class="dot"></i>' + T('hátralévő', 'remaining') + '</span></div>' +
+      '<div class="map">' + site.sections.map(s => {
+        const done = s.chapters.filter(c => progress[s.id + '/' + c.id]).length;
+        return '<div class="map-sec"><div class="map-sec-head"><span class="pill">' + esc(s.num) + '</span><h2>' + esc(biv(s.title)) + '</h2><span class="learn-count">' + done + '/' + s.chapters.length + '</span></div>' +
+          '<div class="map-nodes">' + s.chapters.map(c => '<a class="node' + (progress[s.id + '/' + c.id] ? ' done' : '') + '" href="#/chapter/' + encodeURIComponent(s.id) + '/' + encodeURIComponent(c.id) + '" title="' + esc(biv(c.title)) + '">' + esc(c.num) + '</a>').join('') + '</div>' +
+          '<div class="map-titles">' + s.chapters.map(c => '<span>' + esc(c.num) + ' ' + esc(biv(c.title)) + '</span>').join('') + '</div></div>';
+      }).join('') + '</div>';
+  }
+
+  function renderDaily() {
+    current = null;
+    const d = ensureDaily();
+    const keys = d.keys || [];
+    const done = keys.filter(k => daily.done[k]).length;
+    const items = keys.map(findItem).filter(Boolean);
+    $('#main').innerHTML = '<div class="kicker">' + T('Napi gyakorlás', 'Daily practice') + '</div><h1>' + T('Napi küldetés', 'Daily quest') + '</h1>' +
+      '<p class="lead">' + T('Öt feladat a teljes könyvből, naponta újrahúzva. A helyes válaszok eltűnnek a hibafüzetből.', 'Five exercises from the whole book, reshuffled every day. Correct answers leave the error notebook.') + '</p>' +
+      '<div class="run-bar"><span>' + T('Kész', 'Done') + ': <b id="dailyDone">' + done + ' / ' + keys.length + '</b></span><span>' + T('Sorozat', 'Streak') + ': <b>' + stats.streak + '</b></span></div>' +
+      (items.length ? '<div class="ex-list">' + items.map((x, i) => qCard(x, i + 1, { meta: true })).join('') + '</div>' : emptyState(T('Nincs feladat', 'No exercises'), T('Ez a könyv még nem tartalmaz gyakorlófeladatot.', 'This book has no exercises yet.')));
+    renderMath();
+    bindQuestions($('#main'));
+  }
+
+  function renderErrors() {
+    current = null;
+    const items = Object.keys(wrong).map(findItem).filter(Boolean);
+    $('#main').innerHTML = '<div class="kicker">' + T('Napi gyakorlás', 'Daily practice') + '</div><h1>' + T('Hibafüzet', 'Error notebook') + '</h1>' +
+      '<p class="lead">' + T('Minden téves válasz ide kerül. Javítsd ki őket; a helyes válasz törli a bejegyzést.', 'Every missed answer lands here. Fix them; a correct answer removes the entry.') + '</p>' +
+      '<div class="run-bar"><span>' + T('Bejegyzés', 'Entries') + ': <b>' + items.length + '</b></span><span>' + T('Összes próbálkozás', 'Total attempts') + ': <b>' + stats.attempts + '</b></span></div>' +
+      (items.length ? '<div class="ex-list">' + items.map((x, i) => qCard(x, i + 1, { meta: true })).join('') + '</div>' :
+        emptyState(T('Üres a hibafüzet', 'Notebook is empty'), T('Oldj meg feladatokat; a téves válaszok automatikusan ide kerülnek.', 'Solve exercises; missed answers appear here automatically.')));
+    renderMath();
+    bindQuestions($('#main'));
+  }
+
+  function renderMixed() {
+    current = null;
+    runState = { attempts: 0, correct: 0, wrong: [] };
+    const items = seededShuffle(allExercises(), hashStr(scope + Date.now())).slice(0, 12);
+    $('#main').innerHTML = '<div class="kicker">' + T('Napi gyakorlás', 'Daily practice') + '</div><h1>' + T('Vegyes kör', 'Mixed run') + '</h1>' +
+      '<p class="lead">' + T('Tizenkét feladat fejezeteken át, véletlen sorrendben. Nincs időlimit.', 'Twelve exercises across chapters in random order. No time limit.') + '</p>' +
+      '<div class="run-bar"><span>' + T('Pontszám', 'Score') + ': <b id="runScore">0 / 0</b></span><button class="btn" type="button" id="reroll">' + T('Újrahúzás', 'Reroll') + '</button></div>' +
+      (items.length ? '<div class="ex-list">' + items.map((x, i) => qCard(x, i + 1, { meta: true })).join('') + '</div>' : emptyState(T('Nincs feladat', 'No exercises'), T('Ez a könyv még nem tartalmaz gyakorlófeladatot.', 'This book has no exercises yet.')));
+    renderMath();
+    bindQuestions($('#main'));
+    const btn = $('#reroll');
+    if (btn) btn.addEventListener('click', renderMixed);
+  }
+
+  function mistakeClaim(text) {
+    const s = String(text || '').trim();
+    const quoted = s.match(/^[„"]([^”"]+)[”"]/);
+    if (quoted) return quoted[1].trim();
+    const cut = s.split(/\s+[–—]\s+|\.\s*A javítás|:\s*A javítás/)[0];
+    return (cut || s).trim();
+  }
+  function renderHunt() {
+    current = null;
+    const rounds = [];
+    for (const { s, c } of chapters()) {
+      const mistakes = bivArr(c.mistakes).map(mistakeClaim).filter(Boolean);
+      const facts = (c.theory || []).map(t => biv(t.body)).filter(Boolean);
+      if (!mistakes.length || facts.length < 2) continue;
+      const options = seededShuffle([
+        { text: mistakes[0], bad: true },
+        ...facts.slice(0, 3).map(text => ({ text, bad: false }))
+      ], hashStr(s.id + c.id));
+      rounds.push({ s, c, options, bad: options.findIndex(o => o.bad) });
+      if (rounds.length >= 6) break;
+    }
+    $('#main').innerHTML = '<div class="kicker">' + T('Napi gyakorlás', 'Daily practice') + '</div><h1>' + T('Hibavadászat', 'Error hunt') + '</h1>' +
+      '<p class="lead">' + T('Minden körben pontosan egy állítás tipikus hiba. Találd meg.', 'Exactly one statement per round is a common mistake. Find it.') + '</p>' +
+      '<div class="run-bar"><span>' + T('Körök', 'Rounds') + ': <b>' + rounds.length + '</b></span><span>' + T('Helyes', 'Correct') + ': <b id="huntScore">0</b></span></div>' +
+      (rounds.length ? rounds.map((r, i) => '<div class="hunt" data-bad="' + r.bad + '"><div class="hunt-head"><span class="num">' + String(i + 1).padStart(2, '0') + '</span><div><b>' + esc(r.c.num) + ' · ' + esc(biv(r.c.title)) + '</b><p>' + T('Melyik állítás hiba?', 'Which statement is a mistake?') + '</p></div></div>' +
+        '<div class="hunt-opts">' + r.options.map((o, j) => '<button class="hunt-opt" type="button" data-opt="' + j + '">' + rich(o.text) + '</button>').join('') + '</div><div class="feedback"></div></div>').join('') :
+        emptyState(T('Nincs hibavadászat', 'No error hunt'), T('Ehhez a könyvhöz nincsenek tipikus hibák rögzítve.', 'This book has no recorded common mistakes.')));
+    renderMath();
+    let solved = 0;
+    $$('.hunt').forEach(box => {
+      const bad = Number(box.dataset.bad);
+      $$('.hunt-opt', box).forEach(btn => btn.addEventListener('click', () => {
+        if (box.dataset.done) return;
+        box.dataset.done = '1';
+        const ok = Number(btn.dataset.opt) === bad;
+        btn.classList.add(ok ? 'good' : 'bad');
+        if (!ok) { const right = box.querySelector('[data-opt="' + bad + '"]'); if (right) right.classList.add('good'); }
+        const fb = box.querySelector('.feedback');
+        fb.className = 'feedback ' + (ok ? 'ok' : 'bad');
+        fb.textContent = ok ? T('Helyes, ez a tipikus hiba.', 'Correct, that is the mistake.') : T('Nem ez. A zöld a tipikus hiba.', 'Not that one. Green marks the mistake.');
+        if (ok) solved++;
+        const score = $('#huntScore'); if (score) score.textContent = solved;
+      }));
+    });
+  }
+
+  function renderProgress() {
+    current = null;
+    const attempted = stats.attempts || 0;
+    const correct = stats.correct || 0;
+    const accuracy = attempted ? Math.round(correct / attempted * 100) : 0;
+    const wrongN = Object.keys(wrong).length;
+    $('#main').innerHTML = '<div class="kicker">' + T('Napi gyakorlás', 'Daily practice') + '</div><h1>' + T('Haladás', 'Progress') + '</h1>' +
+      '<div class="stat-grid">' +
+      '<div class="stat-card"><b>' + pct(readCount(), total()) + '%</b><span>' + T('Elolvasva', 'Read') + '</span></div>' +
+      '<div class="stat-card"><b>' + attempted + '</b><span>' + T('Feladatpróba', 'Exercise attempts') + '</span></div>' +
+      '<div class="stat-card"><b>' + accuracy + '%</b><span>' + T('Pontosság', 'Accuracy') + '</span></div>' +
+      '<div class="stat-card"><b>' + stats.streak + '</b><span>' + T('Napos sorozat', 'Day streak') + '</span></div>' +
+      '<div class="stat-card"><b>' + wrongN + '</b><span>' + T('Hibafüzet', 'Error notebook') + '</span></div></div>' +
+      '<h2 class="sec-label">' + T('Fejezetek', 'Chapters') + '</h2>' + sectionBars() +
+      '<h2 class="sec-label">' + T('Fejezet szintű pontosság', 'Per-chapter accuracy') + '</h2>' +
+      '<div class="accuracy">' + chapters().map(({ s, c }) => {
+        let a = 0, ok = 0;
+        for (let i = 0; i < (c.exercises || []).length; i++) {
+          const b = stats.byKey[s.id + '/' + c.id + '/' + i];
+          if (b) { a += b.a; ok += b.c; }
+        }
+        return '<div class="acc-row"><span>' + esc(c.num) + ' ' + esc(biv(c.title)) + '</span><span class="acc-bar"><i style="width:' + (a ? pct(ok, a) : 0) + '%"></i></span><b>' + (a ? Math.round(ok / a * 100) + '%' : '—') + '</b></div>';
+      }).join('') + '</div>';
+    saveProgress();
+  }
+
+  function renderFormulas() {
+    current = null;
+    const rows = [];
+    for (const s of site.sections) for (const c of s.chapters) for (const t of (c.theory || [])) {
+      if (t.type === 'formula' && t.latex) rows.push({ c, t });
+    }
+    $('#main').innerHTML = '<div class="kicker">' + T('Könyvtár', 'Library') + '</div><h1>' + T('Képletgyűjtemény', 'Formula sheet') + '</h1>' +
+      '<p class="lead">' + T('A könyv összes képlete fejezetenként.', 'Every formula in the book, grouped by chapter.') + '</p>' +
+      (rows.length ? '<div class="formulas">' + rows.map(({ c, t }) => '<div class="formula"><div class="formula-meta">' + esc(c.num) + ' · ' + esc(biv(c.title)) + '</div><h3>' + esc(biv(t.title)) + '</h3><div class="fx">$$' + esc(String(t.latex)) + '$$</div>' +
+        (biv(t.note) ? '<p class="muted">' + rich(biv(t.note)) + '</p>' : '') + '</div>').join('') + '</div>' :
+        emptyState(T('Nincs képlet', 'No formulas'), T('Ez a könyv nem tartalmaz képletblokkokat. A programozási anyag kódpéldákra épül.', 'This book has no formula blocks. The programming material is built on code examples.')));
+    renderMath();
+  }
+
+  function renderVideos() {
+    current = null;
+    const vids = Array.isArray(site.videos) ? site.videos : [];
+    $('#main').innerHTML = '<div class="kicker">' + T('Könyvtár', 'Library') + '</div><h1>' + T('Videók', 'Videos') + '</h1>' +
+      '<p class="lead">' + T('A könyvhöz csatolt videós anyagok.', 'Video material attached to this book.') + '</p>' +
+      (vids.length ? '<div class="grid">' + vids.map(v => '<a class="card-link" href="' + esc(v.url || '#') + '" target="_blank" rel="noopener noreferrer"><h2>' + esc(biv(v.title) || v.title) + '</h2><p>' + esc(biv(v.note) || '') + '</p></a>').join('') + '</div>' :
+        emptyState(T('Nincs videó', 'No videos'), T('Ehhez a könyvhöz nem került videó. A tananyag a fejezetekben, példákban és feladatokban található.', 'No videos were supplied for this book. The material lives in the chapters, examples and exercises.')));
+  }
+
+  function renderBank() {
+    current = null;
+    const pool = allExercises();
+    runState = { attempts: 0, correct: 0, wrong: [] };
+    const items = seededShuffle(pool, hashStr(scope + Date.now())).slice(0, Math.min(20, pool.length));
+    $('#main').innerHTML = '<div class="kicker">' + T('Könyvtár', 'Library') + '</div><h1>' + T('Feladatbank', 'Practice bank') + '</h1>' +
+      '<p class="lead">' + T('Húsz véletlen feladat a teljes könyvből. Újrahúzhatod, amikor csak szeretnéd.', 'Twenty random exercises from the whole book. Reroll whenever you like.') + '</p>' +
+      '<div class="run-bar"><span>' + T('Pontszám', 'Score') + ': <b id="runScore">0 / 0</b></span><span>' + T('Készlet', 'Pool') + ': <b>' + pool.length + '</b></span><button class="btn" type="button" id="reroll">' + T('Újrahúzás', 'Reroll') + '</button></div>' +
+      (items.length ? '<div class="ex-list">' + items.map((x, i) => qCard(x, i + 1, { meta: true })).join('') + '</div>' : emptyState(T('Nincs feladat', 'No exercises'), T('Ez a könyv még nem tartalmaz gyakorlófeladatot.', 'This book has no exercises yet.')));
+    renderMath();
+    bindQuestions($('#main'));
+    const btn = $('#reroll'); if (btn) btn.addEventListener('click', renderBank);
+  }
+
+  function examStart(count, minutes) {
+    const pool = seededShuffle(allExercises(), hashStr(scope + Date.now())).slice(0, Math.min(count, allExercises().length));
+    examState = { active: true, finished: false, items: pool, attempts: 0, correct: 0, endsAt: Date.now() + minutes * 60000, total: pool.length };
+    renderExamRun();
+    clearInterval(runTimer);
+    runTimer = setInterval(() => {
+      if (!examState || !examState.active) return;
+      const left = examState.endsAt - Date.now();
+      const el = $('#examClock');
+      if (el) el.textContent = fmtClock(left);
+      if (left <= 0) examFinish();
+    }, 1000);
+  }
+  function fmtClock(ms) {
+    const s = Math.max(0, Math.round(ms / 1000));
+    return String(Math.floor(s / 60)).padStart(2, '0') + ':' + String(s % 60).padStart(2, '0');
+  }
+  function examFinish() {
+    if (!examState || !examState.active) return;
+    examState.active = false;
+    examState.finished = true;
+    if (runTimer) { clearInterval(runTimer); runTimer = null; }
+    renderExamRun(true);
+  }
+  function renderExamRun(finished) {
+    current = null;
+    const st = examState;
+    const left = Math.max(0, st.endsAt - Date.now());
+    $('#main').innerHTML = '<div class="kicker">' + T('Könyvtár', 'Library') + '</div><h1>' + T('Vizsgaszimulátor', 'Exam simulator') + '</h1>' +
+      '<div class="run-bar"><span>' + T('Hátralévő idő', 'Time left') + ': <b id="examClock">' + fmtClock(left) + '</b></span><span>' + T('Pontszám', 'Score') + ': <b id="examScore">' + st.correct + ' / ' + st.attempts + '</b></span>' +
+      (finished ? '<button class="btn primary" type="button" id="again">' + T('Új vizsga', 'New exam') + '</button>' : '<button class="btn" type="button" id="finish">' + T('Befejezés', 'Finish') + '</button>') + '</div>' +
+      (finished ? '<div class="callout note"><b>' + T('Eredmény', 'Result') + ':</b> ' + st.correct + ' / ' + st.items.length + ' (' + pct(st.correct, st.items.length) + '%)</div>' : '') +
+      '<div class="ex-list">' + st.items.map((x, i) => qCard(x, i + 1, { meta: true })).join('') + '</div>';
+    renderMath();
+    bindQuestions($('#main'));
+    if (finished) {
+      $$('[data-qkey]').forEach(ex => $$('[data-qinput],[data-qcheck],[data-qchoice],[data-qproof]', ex).forEach(el => { el.disabled = true; }));
+    }
+    const finish = $('#finish'); if (finish) finish.addEventListener('click', examFinish);
+    const again = $('#again'); if (again) again.addEventListener('click', renderExam);
+  }
+  function renderExam() {
+    current = null;
+    examState = null;
+    if (runTimer) { clearInterval(runTimer); runTimer = null; }
+    const pool = allExercises().length;
+    $('#main').innerHTML = '<div class="kicker">' + T('Könyvtár', 'Library') + '</div><h1>' + T('Vizsgaszimulátor', 'Exam simulator') + '</h1>' +
+      '<p class="lead">' + T('Időzített vegyes vizsga a teljes könyvből. Válasz után a helyes megoldás is megjelenik.', 'A timed mixed exam from the whole book. The correct answer appears after you answer.') + '</p>' +
+      (pool ? '<div class="exam-setup"><label>' + T('Feladatok', 'Questions') + '<select id="examCount"><option value="10">10</option><option value="20" selected>20</option><option value="30">30</option></select></label>' +
+        '<label>' + T('Idő', 'Time') + '<select id="examMinutes"><option value="15">15 min</option><option value="30" selected>30 min</option><option value="45">45 min</option></select></label>' +
+        '<button class="btn primary" type="button" id="examStart">' + T('Vizsga indítása', 'Start exam') + '</button></div>' :
+        emptyState(T('Nincs feladat', 'No exercises'), T('Ez a könyv még nem tartalmaz gyakorlófeladatot.', 'This book has no exercises yet.')));
+    const start = $('#examStart');
+    if (start) start.addEventListener('click', () => examStart(Number($('#examCount').value), Number($('#examMinutes').value)));
+  }
+
+  function renderResources() {
+    current = null;
+    const ex = allExercises().length;
+    const formulas = site.sections.reduce((n, s) => n + s.chapters.reduce((m, c) => m + (c.theory || []).filter(t => t.type === 'formula').length, 0), 0);
+    const code = site.sections.reduce((n, s) => n + s.chapters.reduce((m, c) => m + (c.theory || []).filter(t => t.type === 'code').length, 0), 0);
+    $('#main').innerHTML = '<div class="kicker">' + T('Könyvtár', 'Library') + '</div><h1>' + T('Források', 'Resources') + '</h1>' +
+      '<p class="lead">' + T('A könyv metaadatai és a benne található anyagok.', 'Book metadata and the material it contains.') + '</p>' +
+      '<div class="res-grid">' +
+      '<div class="res-card"><b>' + site.sections.length + '</b><span>' + T('rész', 'parts') + '</span></div>' +
+      '<div class="res-card"><b>' + total() + '</b><span>' + T('fejezet', 'chapters') + '</span></div>' +
+      '<div class="res-card"><b>' + ex + '</b><span>' + T('feladat', 'exercises') + '</span></div>' +
+      '<div class="res-card"><b>' + code + '</b><span>' + T('kódpélda', 'code blocks') + '</span></div>' +
+      '<div class="res-card"><b>' + formulas + '</b><span>' + T('képlet', 'formulas') + '</span></div></div>' +
+      '<div class="callout note"><b>' + T('Nyelv', 'Language') + ':</b> ' + T('magyar és angol', 'Hungarian and English') + ' · <b>' + T('Hozzáférés', 'Access') + ':</b> ' + T('bejelentkezéshez kötött', 'requires sign-in') + '</div>' +
+      '<h2 class="sec-label">' + T('Tartalom', 'Contents') + '</h2>' +
+      '<div class="chapter-list">' + chapters().map(x => '<a class="chapter-row" href="#/chapter/' + encodeURIComponent(x.s.id) + '/' + encodeURIComponent(x.c.id) + '">' +
+        '<span class="n">' + esc(x.c.num) + '</span><div><h3>' + esc(biv(x.c.title)) + '</h3><p>' + esc(biv(x.c.lead)).slice(0, 120) + '…</p></div><span>→</span></a>').join('') + '</div>' +
+      '<p class="muted small">' + T('Ez az oldal a Learning Book Builderrel készült. A könyv a saját URL-jén érhető el; nincs letöltés.', 'This site was generated with Learning Book Builder. It is served at its own URL and is not downloadable.') + '</p>';
+    renderMath();
+  }
+
+  /* --------------------------------------------------------------- router */
   function route() {
     if (!site) return;
+    if (runTimer) { clearInterval(runTimer); runTimer = null; }
+    if (examState && examState.active && !location.hash.startsWith('#/exam')) examState.active = false;
     const h = location.hash.replace(/^#\/?/, '');
     const p = h.split('/').filter(Boolean);
+    renderModes();
     if (p[0] === 'chapter' && p[1] && p[2]) return renderChapter(decodeURIComponent(p[1]), decodeURIComponent(p[2]));
     if (p[0] === 'section' && p[1]) return renderSection(decodeURIComponent(p[1]));
+    const pages = {
+      focus: renderFocus, learn: renderLearn, map: renderMap, daily: renderDaily, errors: renderErrors,
+      mixed: renderMixed, hunt: renderHunt, progress: renderProgress, formulas: renderFormulas,
+      videos: renderVideos, bank: renderBank, exam: renderExam, resources: renderResources
+    };
+    if (pages[p[0]]) return pages[p[0]]();
     renderHome();
   }
 
@@ -245,10 +774,10 @@
       }
     }
     applyTheme();
-    setChrome(); renderTOC();
+    setChrome(); renderModes(); renderTOC();
     const themeBtn = $('#themeBtn');
     if (themeBtn) themeBtn.addEventListener('click', () => { theme = theme === 'dark' ? 'light' : 'dark'; localStorage.setItem('lbs.theme', theme); applyTheme(); });
-    $('#langBtn').addEventListener('click', () => { lang = lang === 'en' ? 'hu' : 'en'; localStorage.setItem('lbs.lang', lang); setChrome(); renderTOC(); route(); });
+    $('#langBtn').addEventListener('click', () => { lang = lang === 'en' ? 'hu' : 'en'; localStorage.setItem('lbs.lang', lang); setChrome(); renderModes(); renderTOC(); route(); });
     $('#brandLink').addEventListener('click', e => { e.preventDefault(); location.hash = '#/'; });
     $('#searchInput').addEventListener('keydown', e => {
       if (e.key !== 'Enter') return;
@@ -260,5 +789,6 @@
     window.addEventListener('hashchange', route);
     route();
   }
+
   boot();
 })();

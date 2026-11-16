@@ -48,3 +48,8 @@ test('schema rejects an empty answer unless the exercise is a proof', () => {
   site.sections[0].chapters[0].exercises[0].type = 'proof';
   assert.equal(validateSite(site).ok, true);
 });
+
+test('generated app checks answers without eval (CSP has no unsafe-eval)', () => {
+  const src = fs.readFileSync(new URL('../src/template/app.js', import.meta.url), 'utf8');
+  assert.equal(/\bFunction\s*\(|\beval\s*\(/.test(src), false);
+});
