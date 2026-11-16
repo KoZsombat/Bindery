@@ -1,9 +1,9 @@
 {
-  "name": "learning-book-builder",
+  "name": "bindery",
   "version": "0.2.0",
   "private": true,
   "type": "module",
-  "description": "Self-hosted builder for routed, bilingual learning-book sites",
+  "description": "Bindery: self-hosted builder for routed, bilingual learning-book sites",
   "workspaces": [
     "apps/server",
     "apps/client"

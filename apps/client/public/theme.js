@@ -1,5 +1,5 @@
 (function () {
-  var KEY = 'lbb.theme';
+  var KEY = 'bindery.theme';
   var root = document.documentElement;
   var saved = null;
   try { saved = localStorage.getItem(KEY); } catch (e) {}

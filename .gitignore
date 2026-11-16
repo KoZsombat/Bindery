@@ -12,7 +12,7 @@ Thumbs.db
 # dependencies
 node_modules/
 
-# builder state
+# bindery state
 data/
 test-data/
 .env

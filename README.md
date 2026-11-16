@@ -1,7 +1,7 @@
-# Learning Book Builder
+# Bindery
 
-A small, self-hosted creator for routed learning-book sites. Users upload notes and paste long
-text; the builder adds the `learning-book-site` skill as context, has a model design the book
+Bindery is a small, self-hosted creator for routed learning-book sites. Users upload notes and paste
+long text; Bindery adds the `learning-book-site` skill as context, has a model design the book
 outline, then writes the chapters in validated batches and publishes the result at its own URL.
 The original MatekBázis book is included only as a **project that was already created**, in
 `examples/matekbazis/`.
@@ -41,7 +41,7 @@ The original MatekBázis book is included only as a **project that was already c
 
 ### Why SQLite instead of PostgreSQL
 
-This builder runs as **one process on one host**: one worker drains the generation queue, and all
+Bindery runs as **one process on one host**: one worker drains the generation queue, and all
 writes are short metadata updates. SQLite in WAL mode handles that load, removes a second stateful
 service from the deployment, and makes backups a single file. PostgreSQL would add a container,
 connection pooling, and an async rewrite of every query without buying anything until there are
@@ -147,14 +147,14 @@ Launchpad for private packages.
 
 1. In Launchpad, create a **Compose project** pointing at the repository, branch `main`, compose
    path [`compose.prod.yaml`](compose.prod.yaml).
-2. Scan the compose file. Publish the `builder` service on subdomain `builder` (or your preferred
+2. Scan the compose file. Publish the `bindery` service on subdomain `bindery` (or your preferred
    name), internal port `8080`, readiness path `/readyz`. Leave `tunnel` unpublished.
 3. Fill the scanned variables (see [`.env.prod.example`](.env.prod.example)). At minimum:
    `BASE_DOMAIN`, `SITE_ORIGIN`, `BETTER_AUTH_SECRET`, `ENCRYPTION_KEY`, `ADMIN_EMAIL`,
    `ADMIN_PASSWORD`, `CLOUDFLARE_TUNNEL_TOKEN`.
-4. Deploy. Launchpad prefixes the `builder-data` volume, so it survives redeploys. The stack's
-   `cloudflared` tunnel publishes `builder.<BASE_DOMAIN>` (and optionally
-   `*.sites.<BASE_DOMAIN>`) to `builder:8080`.
+4. Deploy. Launchpad prefixes the `bindery-data` volume, so it survives redeploys. The stack's
+   `cloudflared` tunnel publishes `bindery.<BASE_DOMAIN>` (and optionally
+   `*.sites.<BASE_DOMAIN>`) to `bindery:8080`.
 
 [`deploy.md`](deploy.md) walks through the scan, the Cloudflare tunnel, optional generated-book
 subdomains, backups, the push webhook and troubleshooting.
@@ -165,12 +165,12 @@ remain the local option: `docker compose up --build` serves the builder at
 
 ### Optional subdomain routing
 
-Path routing works out of the box at `https://builder.<BASE_DOMAIN>/s/<slug>/`. If you also want
+Path routing works out of the box at `https://bindery.<BASE_DOMAIN>/s/<slug>/`. If you also want
 `https://<slug>.sites.<BASE_DOMAIN>/`, point a wildcard at the same Traefik entrypoint and add a
-router for the builder container:
+router for the Bindery container:
 
 ```
-traefik.http.routers.builder-sites.rule=HostRegexp(`^[a-z0-9-]+[.]sites[.]example[.]com$`)
+traefik.http.routers.bindery-sites.rule=HostRegexp(`^[a-z0-9-]+[.]sites[.]example[.]com$`)
 ```
 
 Set `COOKIE_DOMAIN=.example.com` (and `COOKIE_SECURE=1`) so the session is shared with the

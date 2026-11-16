@@ -43,7 +43,7 @@ export const SHARED_DIR = path.join(REPO_ROOT, 'shared');
 export const EXAMPLE_DIR = process.env.EXAMPLE_DIR || path.join(REPO_ROOT, 'examples', 'matekbazis');
 export const SKILL_PATH = process.env.SKILL_PATH || path.join(REPO_ROOT, 'skills', 'learning-book-site', 'SKILL.md');
 
-const rawAuthUrl = String(process.env.BETTER_AUTH_URL || (DEV ? 'http://localhost:' + PORT : 'https://builder.' + BASE_DOMAIN)).trim().replace(/\/+$/, '');
+const rawAuthUrl = String(process.env.BETTER_AUTH_URL || (DEV ? 'http://localhost:' + PORT : 'https://bindery.' + BASE_DOMAIN)).trim().replace(/\/+$/, '');
 export const BETTER_AUTH_URL = DEV && !/^https?:\/\/(localhost|127\.0\.0\.1)(:|\/|$)/.test(rawAuthUrl)
   ? `http://localhost:${PORT}`
   : rawAuthUrl;

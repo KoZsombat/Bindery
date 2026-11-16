@@ -21,7 +21,7 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const type = res.headers.get('content-type') || '';
   const data: unknown = type.includes('application/json') ? await res.json().catch(() => null) : null;
   if (!res.ok) {
-    if (res.status === 401) window.dispatchEvent(new Event('lbb:unauthorized'));
+    if (res.status === 401) window.dispatchEvent(new Event('bindery:unauthorized'));
     const body = data as { error?: string; message?: string } | null;
     throw new ApiError(res.status, body?.error || 'server_error', body?.message || res.statusText);
   }

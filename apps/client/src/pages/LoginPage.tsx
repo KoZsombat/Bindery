@@ -79,12 +79,12 @@ export function LoginPage() {
         <section className="space-y-6">
           <Logo to="/login" />
           <div className="space-y-3">
-            <p className="text-xs font-semibold uppercase tracking-widest text-accent">{t('Learning Book Builder')}</p>
+            <p className="text-xs font-semibold uppercase tracking-widest text-accent">{t('Bindery')}</p>
             <h1 className="max-w-xl text-2xl font-semibold leading-tight tracking-tight text-foreground">
               {t('Turn notes into routed learning books.')}
             </h1>
             <p className="max-w-xl text-sm leading-6 text-muted-foreground">
-              {t('Upload PDFs and paste long text. The builder uses the learning-book-site skill, generates one bilingual book, and publishes it at a URL — no downloads.')}
+              {t('Upload PDFs and paste long text. Bindery uses the learning-book-site skill, generates one bilingual book, and publishes it at a URL — no downloads.')}
             </p>
           </div>
           <ul className="grid max-w-xl gap-2 text-sm text-muted-foreground">

@@ -27,4 +27,4 @@ jobs:
         with:
           context: .
           push: false
-          tags: learning-book-builder:ci
+          tags: bindery:ci

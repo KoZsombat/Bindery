@@ -3,7 +3,6 @@ import type { Lang } from './types';
 type Dict = Record<string, string>;
 
 const HU: Dict = {
-  'Learning Book Builder': 'Tanulókönyv-építő',
   'routed learning sites': 'útvonalon publikált tanulóoldalak',
   Sites: 'Oldalak',
   'New site': 'Új oldal',
@@ -13,8 +12,8 @@ const HU: Dict = {
   'Sign out': 'Kijelentkezés',
   'Sign in': 'Bejelentkezés',
   'Turn notes into routed learning books.': 'Alakítsd a jegyzeteidet publikált tanulókönyvekké.',
-  'Upload PDFs and paste long text. The builder uses the learning-book-site skill, generates one bilingual book, and publishes it at a URL — no downloads.':
-    'Tölts fel PDF-eket vagy illessz be hosszú szöveget. Az építő a learning-book-site készséget használja, elkészít egy kétnyelvű könyvet, és URL-en publikálja — letöltés nélkül.',
+  'Upload PDFs and paste long text. Bindery uses the learning-book-site skill, generates one bilingual book, and publishes it at a URL — no downloads.':
+    'Tölts fel PDF-eket vagy illessz be hosszú szöveget. A Bindery a learning-book-site készséget használja, elkészít egy kétnyelvű könyvet, és URL-en publikálja — letöltés nélkül.',
   'Admin-managed users, no public sign-up': 'Admin által kezelt felhasználók, nyilvános regisztráció nélkül',
   'Daily creation quota per user': 'Napi létrehozási keret felhasználónként',
   'Bring your own model key': 'Saját modellkulcs',

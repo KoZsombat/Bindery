@@ -1,11 +1,11 @@
 # Launchpad deploy stack. Create a "Compose project", point it at this file, and publish
-# only `builder`:
+# only `bindery`:
 #
-#   builder   container port 8080, health path /readyz   ->  builder.<BASE_DOMAIN>
+#   bindery   container port 8080, health path /readyz   ->  bindery.<BASE_DOMAIN>
 #   tunnel    cloudflared that serves that hostname itself (deploy.md 3.1)
 #
 # No host ports are published: Launchpad attaches the service to its `web` network and adds
-# the Traefik router, or the stack's own `tunnel` dials out to Cloudflare. `builder-data`
+# the Traefik router, or the stack's own `tunnel` dials out to Cloudflare. `bindery-data`
 # holds SQLite, uploads and generated sites.
 #
 # Values come from `.env.prod` (template: `.env.prod.example`); Launchpad asks for every
@@ -18,7 +18,7 @@
 # Traefik instead, create a tunnel with no public hostname; it registers and serves nothing.
 
 services:
-  builder:
+  bindery:
     build:
       context: .
       dockerfile: Dockerfile
@@ -36,7 +36,7 @@ services:
       # Public hostname and generated-site domain. SITE_ORIGIN must be the exact browser
       # origin (scheme + host, no trailing slash); it becomes Better Auth's base URL.
       BASE_DOMAIN: ${BASE_DOMAIN:?set BASE_DOMAIN, e.g. example.com}
-      SITE_ORIGIN: ${SITE_ORIGIN:?set SITE_ORIGIN, e.g. https://builder.example.com}
+      SITE_ORIGIN: ${SITE_ORIGIN:?set SITE_ORIGIN, e.g. https://bindery.example.com}
       BETTER_AUTH_URL: ${SITE_ORIGIN:?}
 
       # Secrets. Generate each with: openssl rand -base64 32
@@ -72,7 +72,7 @@ services:
       LLM_MOCK: ${LLM_MOCK:-}
 
     volumes:
-      - builder-data:/data
+      - bindery-data:/data
 
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8080/readyz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
@@ -83,8 +83,8 @@ services:
 
   # The stack's own Cloudflare tunnel, remotely managed: the public hostname lives in the
   # dashboard (Zero Trust -> Networks -> Tunnels -> Public hostnames) and points at
-  #   builder.<BASE_DOMAIN>  ->  http://builder:8080
-  # Add a wildcard hostname (*.sites.<BASE_DOMAIN>) -> http://builder:8080 if generated
+  #   bindery.<BASE_DOMAIN>  ->  http://bindery:8080
+  # Add a wildcard hostname (*.sites.<BASE_DOMAIN>) -> http://bindery:8080 if generated
   # books are served on subdomains. Nothing is published for this service: cloudflared
   # opens the connection outbound.
   tunnel:
@@ -93,9 +93,9 @@ services:
     environment:
       TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN:?set CLOUDFLARE_TUNNEL_TOKEN - the token from the tunnel's install command}
     depends_on:
-      builder:
+      bindery:
         condition: service_started
     restart: unless-stopped
 
 volumes:
-  builder-data:
+  bindery-data:

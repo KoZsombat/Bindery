@@ -1,10 +1,10 @@
 # Launchpad compose project. The same image is built by GitHub Actions and
 # pushed to GHCR, so a single-container Launchpad app can deploy it too.
-name: learning-book-builder
+name: bindery
 
 services:
-  builder:
-    image: ${IMAGE:-learning-book-builder:latest}
+  bindery:
+    image: ${IMAGE:-bindery:latest}
     build:
       context: .
       dockerfile: Dockerfile
@@ -34,7 +34,7 @@ services:
       COOKIE_SECURE: ${COOKIE_SECURE:-1}
       LLM_MOCK: ${LLM_MOCK:-}
     volumes:
-      - builder-data:/data
+      - bindery-data:/data
     expose:
       - "8080"
     networks:
@@ -50,12 +50,12 @@ services:
     labels:
       traefik.enable: "true"
       traefik.docker.network: web
-      traefik.http.routers.builder.rule: Host(`builder.${BASE_DOMAIN}`)
-      traefik.http.routers.builder.entrypoints: web
-      traefik.http.services.builder.loadbalancer.server.port: "8080"
+      traefik.http.routers.bindery.rule: Host(`bindery.${BASE_DOMAIN}`)
+      traefik.http.routers.bindery.entrypoints: web
+      traefik.http.services.bindery.loadbalancer.server.port: "8080"
 
 volumes:
-  builder-data:
+  bindery-data:
 
 networks:
   web:

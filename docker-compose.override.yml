@@ -1,7 +1,7 @@
 # Local-only overrides, picked up automatically by `docker compose up`.
 # Launchpad runs the base docker-compose.yml with an explicit -f, so this is ignored there.
 services:
-  builder:
+  bindery:
     ports:
       - "8080:8080"
 

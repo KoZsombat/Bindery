@@ -10,7 +10,7 @@ interface I18nValue {
 }
 
 const I18nContext = createContext<I18nValue | null>(null);
-const LANG_KEY = 'lbb.lang';
+const LANG_KEY = 'bindery.lang';
 
 function initialLang(): Lang {
   try {

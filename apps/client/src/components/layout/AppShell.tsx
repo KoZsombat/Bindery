@@ -10,7 +10,7 @@ export function AppShell() {
         <Outlet />
       </main>
       <footer className="border-t border-border px-4 py-6 text-center text-xs text-muted-foreground sm:px-6">
-        Learning Book Builder · sites are routed, not downloaded.
+        Bindery · sites are routed, not downloaded.
       </footer>
     </div>
   );

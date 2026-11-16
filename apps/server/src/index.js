@@ -21,7 +21,7 @@ const uploadCleanupTimer = setInterval(() => {
 uploadCleanupTimer.unref();
 
 const server = app.listen(PORT, '0.0.0.0', () => {
-  console.log(`Learning Book Builder on :${PORT} (base ${BASE_DOMAIN}, sites ${SITE_DOMAIN})`);
+  console.log(`Bindery on :${PORT} (base ${BASE_DOMAIN}, sites ${SITE_DOMAIN})`);
   if (LLM_MOCK) console.log('Mock generation enabled; no user API key required.');
   else console.log('Every user must add their own API key in Settings.');
 });

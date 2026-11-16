@@ -40,8 +40,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setMe(null);
       setLoading(false);
     };
-    window.addEventListener('lbb:unauthorized', onUnauthorized);
-    return () => window.removeEventListener('lbb:unauthorized', onUnauthorized);
+    window.addEventListener('bindery:unauthorized', onUnauthorized);
+    return () => window.removeEventListener('bindery:unauthorized', onUnauthorized);
   }, [refresh]);
 
   const logout = useCallback(async () => {
