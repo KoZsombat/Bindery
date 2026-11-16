@@ -16,6 +16,7 @@ node_modules/
 data/
 test-data/
 .env
+.env.prod
 
 # local screenshots / scratch
 screenshots/
