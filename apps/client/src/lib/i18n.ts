@@ -24,7 +24,7 @@ const HU: Dict = {
   Password: 'Jelszó',
   'No public sign-up. Ask the administrator for an account.': 'Nincs nyilvános regisztráció. Kérj fiókot az adminisztrátortól.',
   'Wrong email or password.': 'Hibás e-mail vagy jelszó.',
-  'Development login: admin@example.com / admin1234': 'Fejlesztői belépés: admin@example.com / admin1234',
+  'Development login: admin@example.com / admin12345': 'Fejlesztői belépés: admin@example.com / admin12345',
   'Your workspace': 'Munkaterületed',
   'Learning sites': 'Tanulóoldalak',
   'Start a new book': 'Új könyv indítása',
@@ -146,6 +146,14 @@ const HU: Dict = {
   Users: 'Felhasználók',
   'Only the administrator can create accounts. Each user has a daily site limit.':
     'Csak az adminisztrátor hozhat létre fiókot. Minden felhasználónak napi oldalkerete van.',
+  'Generation limits': 'Generálási korlátok',
+  'Caps for new generations. Running jobs keep the values they started with.':
+    'Az új generálásokra érvényes korlátok. A futó feladatok a induláskori értékeket használják.',
+  'Chapters per book': 'Fejezetek száma könyvenként',
+  'Chapters per request': 'Fejezetek száma kérésenként',
+  'Output tokens per request': 'Kimeneti tokenek kérésenként',
+  'Save limits': 'Korlátok mentése',
+  'Limits saved.': 'Korlátok mentve.',
   'Add user': 'Felhasználó hozzáadása',
   Name: 'Név',
   'Password (10+)': 'Jelszó (10+)',

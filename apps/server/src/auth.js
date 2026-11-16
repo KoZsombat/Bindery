@@ -67,7 +67,7 @@ export async function seedAdmin() {
     const created = await auth.api.signUpEmail({ body: { email, password: ADMIN_PASSWORD, name: 'Administrator' } });
     row = sqlite.prepare('SELECT * FROM user WHERE id=?').get(created.user.id);
     sqlite.prepare("UPDATE user SET role='admin', emailVerified=1 WHERE id=?").run(row.id);
-    console.log('Created admin:', email, DEV_LOGIN_HINT ? '(dev password: admin1234)' : '');
+    console.log('Created admin:', email, DEV_LOGIN_HINT ? '(dev password: admin12345)' : '');
   } else if (row.role !== 'admin') {
     sqlite.prepare("UPDATE user SET role='admin' WHERE id=?").run(row.id);
   }

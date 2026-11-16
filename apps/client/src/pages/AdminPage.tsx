@@ -10,7 +10,7 @@ import { useI18n } from '../context/I18nContext';
 import { useToast } from '../context/ToastContext';
 import { api, describeError } from '../lib/api';
 import { formatDateShort } from '../lib/format';
-import type { AdminUser } from '../lib/types';
+import type { AdminSettings, AdminSettingLimits, AdminUser } from '../lib/types';
 
 function UserRow({ user, onChanged }: { user: AdminUser; onChanged: () => Promise<void> }) {
   const { t, lang } = useI18n();
@@ -110,6 +110,9 @@ export function AdminPage() {
   const [error, setError] = useState('');
   const [creating, setCreating] = useState(false);
   const [form, setForm] = useState({ email: '', name: '', password: '', dailyLimit: '3' });
+  const [settingsForm, setSettingsForm] = useState({ maxBookChapters: '', chapterBatchSize: '', llmMaxTokens: '' });
+  const [limits, setLimits] = useState<AdminSettingLimits | null>(null);
+  const [savingSettings, setSavingSettings] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -123,9 +126,27 @@ export function AdminPage() {
     }
   }, [t]);
 
+  const loadSettings = useCallback(async () => {
+    try {
+      const data = await api.get<{ settings: AdminSettings; limits: AdminSettingLimits }>('/api/admin/settings');
+      setLimits(data.limits);
+      setSettingsForm({
+        maxBookChapters: String(data.settings.maxBookChapters),
+        chapterBatchSize: String(data.settings.chapterBatchSize),
+        llmMaxTokens: String(data.settings.llmMaxTokens),
+      });
+    } catch (e) {
+      setError(describeError(t, e));
+    }
+  }, [t]);
+
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    void loadSettings();
+  }, [loadSettings]);
 
   async function create(event: FormEvent) {
     event.preventDefault();
@@ -153,6 +174,29 @@ export function AdminPage() {
     await refresh();
   }
 
+  async function saveLimits(event: FormEvent) {
+    event.preventDefault();
+    setSavingSettings(true);
+    try {
+      const data = await api.patch<{ settings: AdminSettings; limits: AdminSettingLimits }>('/api/admin/settings', {
+        maxBookChapters: Number(settingsForm.maxBookChapters),
+        chapterBatchSize: Number(settingsForm.chapterBatchSize),
+        llmMaxTokens: Number(settingsForm.llmMaxTokens),
+      });
+      setLimits(data.limits);
+      setSettingsForm({
+        maxBookChapters: String(data.settings.maxBookChapters),
+        chapterBatchSize: String(data.settings.chapterBatchSize),
+        llmMaxTokens: String(data.settings.llmMaxTokens),
+      });
+      push('success', t('Limits saved.'));
+    } catch (e) {
+      setError(describeError(t, e));
+    } finally {
+      setSavingSettings(false);
+    }
+  }
+
   if (loading) return <PageSpinner />;
 
   return (
@@ -164,6 +208,50 @@ export function AdminPage() {
       />
 
       {error ? <Alert tone="error">{error}</Alert> : null}
+
+      {limits ? (
+        <Card>
+          <h2 className="text-lg font-semibold text-foreground">{t('Generation limits')}</h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {t('Caps for new generations. Running jobs keep the values they started with.')}
+          </p>
+          <form className="mt-4 grid gap-4 sm:grid-cols-3" onSubmit={saveLimits}>
+            <Field label={t('Chapters per book')} htmlFor="set-max-chapters">
+              <Input
+                id="set-max-chapters"
+                type="number"
+                min={limits.maxBookChapters.min}
+                max={limits.maxBookChapters.max}
+                value={settingsForm.maxBookChapters}
+                onChange={event => setSettingsForm({ ...settingsForm, maxBookChapters: event.target.value })}
+              />
+            </Field>
+            <Field label={t('Chapters per request')} htmlFor="set-batch-size">
+              <Input
+                id="set-batch-size"
+                type="number"
+                min={limits.chapterBatchSize.min}
+                max={limits.chapterBatchSize.max}
+                value={settingsForm.chapterBatchSize}
+                onChange={event => setSettingsForm({ ...settingsForm, chapterBatchSize: event.target.value })}
+              />
+            </Field>
+            <Field label={t('Output tokens per request')} htmlFor="set-max-tokens">
+              <Input
+                id="set-max-tokens"
+                type="number"
+                min={limits.llmMaxTokens.min}
+                max={limits.llmMaxTokens.max}
+                value={settingsForm.llmMaxTokens}
+                onChange={event => setSettingsForm({ ...settingsForm, llmMaxTokens: event.target.value })}
+              />
+            </Field>
+            <div className="sm:col-span-3">
+              <Button type="submit" loading={savingSettings}>{t('Save limits')}</Button>
+            </div>
+          </form>
+        </Card>
+      ) : null}
 
       <Card>
         <h2 className="mb-4 text-lg font-semibold text-foreground">{t('Add user')}</h2>

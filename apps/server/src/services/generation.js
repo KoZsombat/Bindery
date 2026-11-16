@@ -8,7 +8,7 @@ import {
 } from '../config.js';
 import { decrypt } from '../crypto.js';
 import { assertSafeLlmBase } from './url-safety.js';
-import { sqlite, ensureProfile, now, slugify, siteRow, siteJsonPath, siteUrl, sharedKeySource } from '../db/index.js';
+import { sqlite, ensureProfile, now, slugify, siteRow, siteJsonPath, siteUrl, sharedKeySource, getSettings } from '../db/index.js';
 
 /* ------------------------------------------------------------------ model */
 function biv(v) {
@@ -29,9 +29,11 @@ function bivArr(v) {
   const a = (Array.isArray(v) ? v : [v]).filter(Boolean).map(String);
   return { hu: a, en: a };
 }
-export function normalizeSite(raw, req) {
+export function normalizeSite(raw, req, limits = {}) {
   if (!raw || typeof raw !== 'object') throw new Error('The model did not return a JSON object.');
-  const sections = Array.isArray(raw.sections) ? raw.sections.slice(0, 12) : [];
+  const maxChapters = Math.max(1, Number(limits.maxChapters) || 60);
+  const maxPerSection = Math.max(1, Math.min(maxChapters, Number(limits.maxPerSection) || 25));
+  const sections = Array.isArray(raw.sections) ? raw.sections.slice(0, Math.min(12, maxChapters)) : [];
   if (!sections.length) throw new Error('The generated site has no sections.');
   const out = {
     version: 1,
@@ -47,8 +49,8 @@ export function normalizeSite(raw, req) {
       num: String(s.num || out.sections.length + 1).padStart(2, '0'),
       title: biv(s.title || 'Section'), subtitle: biv(s.subtitle || ''), intro: biv(s.intro || ''), chapters: []
     };
-    for (const c of (Array.isArray(s.chapters) ? s.chapters : []).slice(0, 10)) {
-      if (chapters++ >= 40) break;
+    for (const c of (Array.isArray(s.chapters) ? s.chapters : []).slice(0, maxPerSection)) {
+      if (chapters++ >= maxChapters) break;
       const ch = {
         id: slugify(c.id || c.title || 'chapter'),
         num: String(c.num || (out.sections.length + 1) + '.' + (sec.chapters.length + 1)),
@@ -58,9 +60,10 @@ export function normalizeSite(raw, req) {
         theory: [], examples: [], mistakes: bivArr(c.mistakes), exercises: []
       };
       for (const t of (Array.isArray(c.theory) ? c.theory : []).slice(0, 12)) {
-        const type = ['def', 'thm', 'note', 'warn', 'formula', 'p', 'list'].includes(t.type) ? t.type : 'p';
+        const type = ['def', 'thm', 'note', 'warn', 'formula', 'p', 'list', 'code'].includes(t.type) ? t.type : 'p';
         const b = { type };
         if (type === 'formula') { b.title = biv(t.title || 'Formula'); b.latex = String(t.latex || ''); b.note = biv(t.note || ''); }
+        else if (type === 'code') { b.title = biv(t.title || 'Code'); b.lang = String(t.lang || 'text').slice(0, 20); b.code = String(t.code || ''); }
         else if (type === 'list') { b.title = biv(t.title || ''); b.items = bivArr(t.items); }
         else if (type === 'p') { b.body = biv(t.body || ''); }
         else { b.title = biv(t.title || ''); b.body = biv(t.body || ''); }
@@ -132,13 +135,13 @@ export function keySource(profile) {
     : { kind: 'none', owner: null };
 }
 export function useMock() { return LLM_MOCK; }
-async function callLLM(cfg, messages) {
+async function callLLM(cfg, messages, maxTokens = LLM_MAX_TOKENS) {
   if (useMock()) {
     const delay = Number(process.env.LLM_MOCK_DELAY || 0);
     if (delay > 0) await new Promise(r => setTimeout(r, Math.min(10000, delay)));
     return JSON.stringify(mockSite(messages.request || {}));
   }
-  const payload = { model: cfg.model, messages, temperature: 0.35, max_tokens: LLM_MAX_TOKENS };
+  const payload = { model: cfg.model, messages, temperature: 0.35, max_tokens: maxTokens };
   if (process.env.LLM_JSON_MODE !== '0') payload.response_format = { type: 'json_object' };
   await assertSafeLlmBase(cfg.base);
   const doFetch = async body => {
@@ -170,11 +173,161 @@ function skillText() {
   try { return fs.readFileSync(SKILL_PATH, 'utf8'); } catch { return ''; }
 }
 
+/* ------------------------------------------------- multi-pass book generation */
+// A full course is 20-30 bilingual chapters. One completion cannot hold that,
+// so the model first designs an outline, then writes chapters in small batches.
+// Each batch is validated on its own and merged into the outline.
+function requestText(req) {
+  return `Title: ${req.title}\nTopic: ${req.topic}\nDescription: ${req.description}\nAudience: ${req.audience}\nLanguage preference: ${req.language}\n`;
+}
+function normalizeOutline(raw, req, maxChapters) {
+  if (!raw || typeof raw !== 'object') throw new Error('The model did not return an outline object.');
+  const used = new Set();
+  const sections = [];
+  let total = 0;
+  for (const s of (Array.isArray(raw.sections) ? raw.sections : [])) {
+    if (sections.length >= 8 || total >= maxChapters) break;
+    const sec = {
+      id: slugify(s.id || s.title || 'section'),
+      num: String(s.num || sections.length + 1).padStart(2, '0'),
+      title: biv(s.title || 'Section'),
+      subtitle: biv(s.subtitle || s.title || 'Section'),
+      intro: biv(s.intro || s.subtitle || s.title || 'Section'), chapters: []
+    };
+    while (used.has(sec.id)) sec.id += '-x';
+    used.add(sec.id);
+    for (const c of (Array.isArray(s.chapters) ? s.chapters : [])) {
+      if (total >= maxChapters) break;
+      let id = slugify(c.id || c.title || 'chapter');
+      while (used.has(id)) id += '-x';
+      used.add(id);
+      sec.chapters.push({
+        id, num: String(c.num || (sections.length + 1) + '.' + (sec.chapters.length + 1)),
+        title: biv(c.title || 'Chapter'), focus: String(c.focus || '').trim()
+      });
+      total++;
+    }
+    if (sec.chapters.length) sections.push(sec);
+  }
+  if (!total) throw new Error('The outline has no chapters.');
+  return {
+    title: String(raw.title || req.title || 'Learning book').slice(0, 160),
+    subtitle: biv(raw.subtitle || req.description || ''),
+    summary: biv(raw.summary || req.description || ''),
+    sections, total
+  };
+}
+async function generateOutline(cfg, req, skill, call, maxChapters) {
+  const minChapters = Math.min(6, maxChapters);
+  const messages = [
+    { role: 'system', content: 'You design the outline of a bilingual learning book. Return only valid JSON.' },
+    { role: 'user', content: `SKILL:\n${skill.slice(0, 60000)}\n\nREQUEST:\n${requestText(req)}\n\nSOURCE MATERIAL:\n${req.long_text || '(none)'}\n\nDesign the COMPLETE outline first; chapters are written separately, so the outline must lock the full scope.\nReturn ONE JSON object:\n{"title":"...","subtitle":{"hu":"...","en":"..."},"summary":{"hu":"...","en":"..."},"sections":[{"id":"slug","num":"01","title":{"hu":"...","en":"..."},"subtitle":{"hu":"...","en":"..."},"intro":{"hu":"...","en":"..."},"chapters":[{"id":"slug","num":"1.1","title":{"hu":"...","en":"..."},"focus":"one sentence: what the chapter teaches"}]}]}\nRules:\n- 2-6 sections, ${minChapters}-${maxChapters} chapters total. A full-semester course needs 18-24; a focused topic needs fewer.\n- Cover EVERY topic the SOURCE MATERIAL requires. If it lists chapters or a coverage checklist, preserve their scope; merge only true duplicates. Never silently drop a listed topic.\n- Chapter ids are unique lowercase ASCII slugs; nums are sequential ("01", "1.1", "1.2", "2.1").\n- Order chapters prerequisite-first and spread them across sections.\n- No lesson content yet: only title, subtitle, summary, section intro and each chapter's focus sentence.\n- Complete valid JSON; shorten the focus text rather than truncating the object.` }
+  ];
+  let lastError = 'No outline.';
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const text = await call(cfg, messages);
+    try {
+      const outline = normalizeOutline(extractJSON(text), req, maxChapters);
+      if (outline.total < minChapters) {
+        throw new Error(`The outline has only ${outline.total} chapters. Cover all topics from SOURCE MATERIAL and produce at least ${minChapters}; merge near-duplicates only.`);
+      }
+      return outline;
+    } catch (e) {
+      lastError = String(e.message || e).slice(0, 500);
+      messages.push({ role: 'user', content: 'The outline was rejected: ' + lastError + '\nReturn the complete corrected outline JSON only. Same schema, no commentary.' });
+    }
+  }
+  throw new Error('Could not build a book outline: ' + lastError);
+}
+function chapterPrompt(req, skill, outline, section, batch) {
+  const target = batch.map(c => `- id "${c.id}", num "${c.num}", title HU "${c.title.hu}" / EN "${c.title.en}"${c.focus ? `, focus: ${c.focus}` : ''}`).join('\n');
+  const outlineText = outline.sections.map(s =>
+    `${s.num}. ${s.title.hu} / ${s.title.en}\n` + s.chapters.map(c => `   ${c.num} ${c.id} — ${c.title.hu} / ${c.title.en}`).join('\n')
+  ).join('\n');
+  return `SKILL:\n${skill.slice(0, 60000)}\n\nREQUEST:\n${requestText(req)}\n\nSOURCE MATERIAL:\n${req.long_text || '(none)'}\n\nBOOK OUTLINE (do not change its scope):\n${outlineText}\n\nWRITE EXACTLY THESE CHAPTERS (section ${section.num}, ${section.title.hu} / ${section.title.en}):\n${target}\n\nReturn ONE JSON object: {"chapters":[ ... ]} with exactly ${batch.length} chapter(s), in the same order and with the exact ids above.\nChapter shape:\n{"id":"...","num":"...","title":{"hu":"...","en":"..."},"lead":{"hu":"...","en":"..."},"why":{"hu":["..."],"en":["..."]},"when":{"hu":"...","en":"..."},"minutes":30,"theory":[{"type":"def|thm|note|warn|p|list|formula|code","title":{"hu":"...","en":"..."},"body":{"hu":"...","en":"..."},"items":{"hu":["..."],"en":["..."]},"latex":"...","note":{"hu":"...","en":"..."},"lang":"c","code":"..."}],"examples":[{"title":{"hu":"...","en":"..."},"problem":{"hu":"...","en":"..."},"steps":{"hu":["..."],"en":["..."]},"answer":{"hu":"...","en":"..."}}],"mistakes":{"hu":["..."],"en":["..."]},"exercises":[{"q":{"hu":"...","en":"..."},"a":"...","type":"number|expr|text|choice|proof","choices":{"hu":["..."],"en":["..."]},"hint":{"hu":"...","en":"..."},"sol":{"hu":"...","en":"..."}}]}\n\nDEPTH — each chapter must be a complete 25-40 minute lesson, not a summary:\n- lead: 2-4 sentences on what the reader will be able to do; why: 2-3 concrete bullets; when: 1-2 sentences.\n- theory: 6-9 blocks. Every def/thm/note/warn body is 2-6 full sentences. Include at least 2 "code" blocks with complete, compile-ready programs (lang c/cpp), each introduced and explained in prose. Use inline backticks only for identifiers, never for multi-line code. Math stays in $...$.\n- examples: 2-3, each with a concrete problem, 4-8 numbered steps that explain the reasoning, and the final answer. At least one traces execution line by line.\n- mistakes: 3-5 concrete failure modes with the fix.\n- exercises: 6-8 mixed types; answers must be checkable; give hints and solutions.\n- Teach the "focus" above; no filler, no repeated boilerplate, no placeholders.\nEvery prose field is {"hu":"...","en":"..."} and both languages must carry the full explanation. Return only this batch's chapters, exactly ids/order. Complete valid JSON: if space is tight, shorten prose but never omit required fields or truncate the object.`;
+}
+async function writeChapterBatch(cfg, req, skill, outline, section, batch, call, limits) {
+  const messages = [
+    { role: 'system', content: 'You write chapters for a bilingual learning book. Return only valid JSON.' },
+    { role: 'user', content: chapterPrompt(req, skill, outline, section, batch) }
+  ];
+  let lastError = 'No output.';
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const text = await call(cfg, messages);
+    let raw;
+    try { raw = extractJSON(text); } catch (e) {
+      lastError = 'The reply was not valid JSON (likely truncated): ' + String(e.message || e).slice(0, 200);
+      messages.push({ role: 'user', content: 'Your previous reply was incomplete or invalid JSON. Return the complete JSON for the same chapters now. Shorten the prose if needed, but keep every required field.' });
+      continue;
+    }
+    const got = Array.isArray(raw.chapters) ? raw.chapters : [];
+    if (got.length !== batch.length || got.some((c, i) => String(c?.id ?? '') !== batch[i].id)) {
+      lastError = `Expected exactly ${batch.length} chapter(s) with ids ${batch.map(c => c.id).join(', ')}; got ${got.length}.`;
+      messages.push({ role: 'user', content: lastError + ' Return only {"chapters":[...]} for exactly those ids, in order, nothing else.' });
+      continue;
+    }
+    try {
+      const probe = normalizeSite({
+        version: 1, title: outline.title, subtitle: outline.subtitle, summary: outline.summary,
+        sections: [{ id: section.id, num: section.num, title: section.title, subtitle: section.subtitle, intro: section.intro, chapters: got }]
+      }, req, limits);
+      const check = validateSite(probe);
+      if (!check.ok) throw new Error(check.error);
+      const chapters = probe.sections[0].chapters;
+      chapters.forEach((ch, i) => { ch.id = batch[i].id; ch.num = batch[i].num; });
+      return chapters;
+    } catch (e) {
+      lastError = String(e.message || e).slice(0, 500);
+      messages.push({ role: 'user', content: 'The chapters failed validation: ' + lastError + '\nFix every issue and return the complete corrected JSON only, same ids and order.' });
+    }
+  }
+  throw new Error('Could not write chapters ' + batch.map(c => c.num).join(', ') + ': ' + lastError);
+}
+export async function buildBook({ cfg, req, skill = skillText(), call = callLLM, onProgress = () => {}, maxChapters, batchSize, maxTokens } = {}) {
+  const settings = getSettings();
+  maxChapters = maxChapters ?? settings.maxBookChapters;
+  batchSize = batchSize ?? settings.chapterBatchSize;
+  maxTokens = maxTokens ?? settings.llmMaxTokens;
+  const callModel = (c, m) => call(c, m, maxTokens);
+  const limits = { maxChapters, maxPerSection: maxChapters };
+  if (useMock()) return normalizeSite(mockSite(req), req, limits);
+  const outline = await generateOutline(cfg, req, skill, callModel, maxChapters);
+  onProgress(`Outline ready: ${outline.total} chapters. Writing chapters…`);
+  const sections = [];
+  let done = 0;
+  for (const section of outline.sections) {
+    const chapters = [];
+    for (let i = 0; i < section.chapters.length; i += batchSize) {
+      const batch = section.chapters.slice(i, i + batchSize);
+      let written;
+      try {
+        written = await writeChapterBatch(cfg, req, skill, outline, section, batch, callModel, limits);
+      } catch (e) {
+        if (batch.length === 1) throw e;
+        // A batch that still truncates after a repair is retried one chapter at a time.
+        written = [];
+        for (const one of batch) {
+          written.push(...await writeChapterBatch(cfg, req, skill, outline, section, [one], callModel, limits));
+        }
+      }
+      chapters.push(...written);
+      done += batch.length;
+      onProgress(`Wrote ${done}/${outline.total} chapters.`);
+    }
+    sections.push({ ...section, chapters });
+  }
+  const book = normalizeSite({ version: 1, title: outline.title, subtitle: outline.subtitle, summary: outline.summary, sections }, req, limits);
+  const check = validateSite(book);
+  if (!check.ok) throw new Error('The assembled book failed validation: ' + check.error);
+  return book;
+}
+
 /* ------------------------------------------------------------------ validation */
 const B = z.object({ hu: z.string().min(1), en: z.string().min(1) });
 const BOpt = z.object({ hu: z.string(), en: z.string() });
 const Theory = z.discriminatedUnion('type', [
   z.object({ type: z.literal('formula'), title: B, latex: z.string().min(1), note: BOpt }),
+  z.object({ type: z.literal('code'), title: B, lang: z.string().max(20), code: z.string().min(1) }),
   z.object({ type: z.literal('list'), title: B, items: z.object({ hu: z.array(z.string().min(1)).min(1), en: z.array(z.string().min(1)).min(1) }) }),
   z.object({ type: z.literal('p'), body: B }),
   z.object({ type: z.enum(['def', 'thm', 'note', 'warn']), title: B, body: B })
@@ -269,42 +422,10 @@ async function runJob(job) {
     const cfg = llmConfig(effectiveProfile(profile));
     if (!useMock() && !cfg.key) throw new Error('No API key. Add one in Settings.');
     const req = { title: site.title, description: site.description, topic: site.topic, audience: site.audience, language: site.language, long_text: site.source_text };
-    const schema = `Return ONE JSON object, no markdown, with this exact shape:
-{"title":"...","subtitle":{"hu":"...","en":"..."},"summary":{"hu":"...","en":"..."},"sections":[{"id":"slug","num":"01","title":{"hu":"...","en":"..."},"subtitle":{"hu":"...","en":"..."},"intro":{"hu":"...","en":"..."},"chapters":[{"id":"slug","num":"1.1","title":{"hu":"...","en":"..."},"lead":{"hu":"...","en":"..."},"why":{"hu":["..."],"en":["..."]},"when":{"hu":"...","en":"..."},"minutes":25,"theory":[{"type":"def|thm|note|warn|formula|p|list","title":{"hu":"...","en":"..."},"body":{"hu":"...","en":"..."},"latex":"...","note":{"hu":"...","en":"..."},"items":{"hu":["..."],"en":["..."]}}],"examples":[{"title":{"hu":"...","en":"..."},"problem":{"hu":"...","en":"..."},"steps":{"hu":["..."],"en":["..."]},"answer":{"hu":"...","en":"..."}}],"mistakes":{"hu":["..."],"en":["..."]},"exercises":[{"q":{"hu":"...","en":"..."},"a":"answer","type":"number|expr|text|choice|proof","hint":{"hu":"...","en":"..."},"sol":{"hu":"...","en":"..."},"choices":{"hu":["..."],"en":["..."]}}]}]}]}
-Rules: every prose field is a {hu,en} object; math stays inside $...$; 1-4 sections; 1-10 chapters total; 3-6 exercises and 1-3 examples per chapter; exercises must be checkable or proof; no links, no HTML, no download buttons. The response must be complete valid JSON: if space is tight, use fewer chapters rather than cutting the JSON short.`;
-    const messages = [
-      { role: 'system', content: 'You are a careful curriculum writer and the site generator for a learning-book platform. Follow the supplied skill, teach from the supplied sources, and return only valid JSON.' },
-      { role: 'user', content: `SKILL:\n${skillText().slice(0, 60000)}\n\nREQUEST:\nTitle: ${req.title}\nDescription: ${req.description}\nTopic: ${req.topic}\nAudience: ${req.audience}\nLanguage preference: ${req.language}\n\nSOURCE MATERIAL:\n${req.long_text || '(none)'}\n\n${schema}` }
-    ];
-    messages.request = req;
-    let parsed = null;
-    let validation = { ok: false, error: 'No output.' };
-    for (let repair = 0; repair < 2; repair++) {
-      const text = await callLLM(cfg, messages);
-      let parsedJson = null;
-      try {
-        parsedJson = extractJSON(text);
-      } catch (e) {
-        validation = { ok: false, error: 'The response was not valid JSON: ' + String(e.message || e).slice(0, 300) };
-      }
-      if (parsedJson) {
-        try {
-          parsed = normalizeSite(parsedJson, req);
-          validation = validateSite(parsed);
-        } catch (e) {
-          validation = { ok: false, error: String(e.message || e).slice(0, 300) };
-        }
-      }
-      if (validation.ok) break;
-      const truncated = validation.error.startsWith('The response was not valid JSON');
-      messages.push({
-        role: 'user',
-        content: truncated
-          ? 'Your previous reply was incomplete or invalid JSON, most likely cut off by the output limit. Return the complete JSON now, but smaller: at most 2 sections and 4 chapters total. No markdown, no commentary.'
-          : 'The JSON failed validation. Fix every issue and return the complete corrected JSON only: ' + validation.error,
-      });
-    }
-    if (!validation.ok) throw new Error('Generated content failed validation: ' + validation.error);
+    const parsed = await buildBook({
+      cfg, req,
+      onProgress: log => sqlite.prepare('UPDATE jobs SET log=?,updated_at=? WHERE id=?').run(log, now(), job.id)
+    });
     if (sqlite.prepare('SELECT cancel_requested FROM jobs WHERE id=?').get(job.id)?.cancel_requested) {
       sqlite.prepare("UPDATE jobs SET status='cancelled',locked_at=NULL,updated_at=? WHERE id=?").run(now(), job.id);
       sqlite.prepare("UPDATE sites SET status='cancelled',error='Cancelled by user.',updated_at=? WHERE id=?").run(now(), site.id);

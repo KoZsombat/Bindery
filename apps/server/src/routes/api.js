@@ -13,6 +13,7 @@ import {
 } from '../config.js';
 import {
   sqlite, quotaUsed, uniqueSlug, siteRow, siteJsonPath, publicSite, now, slugify, ensureProfile,
+  getSettings, updateSettings, settingsMeta,
 } from '../db/index.js';
 import { kick, llmConfig, useMock, effectiveProfile, keySource } from '../services/generation.js';
 import { assertSafeLlmBase } from '../services/url-safety.js';
@@ -449,6 +450,22 @@ router.get('/admin/users', requireAdminApi, (req, res) => {
   const users = sqlite.prepare('SELECT id,email,name,role,createdAt,emailVerified FROM user ORDER BY createdAt').all()
     .map(row => userJson(row));
   res.json({ users });
+});
+
+router.get('/admin/settings', requireAdminApi, (req, res) => {
+  res.json({ settings: getSettings(), limits: settingsMeta() });
+});
+
+const GenerationSettingsSchema = z.object({
+  maxBookChapters: z.coerce.number().int().min(4).max(60).optional(),
+  chapterBatchSize: z.coerce.number().int().min(1).max(4).optional(),
+  llmMaxTokens: z.coerce.number().int().min(1024).max(200000).optional(),
+}).refine(body => Object.keys(body).length > 0, 'At least one setting is required.');
+
+router.patch('/admin/settings', requireAdminApi, (req, res) => {
+  const parsed = GenerationSettingsSchema.safeParse(req.body || {});
+  if (!parsed.success) return badRequest(res, parsed.error);
+  res.json({ settings: updateSettings(parsed.data), limits: settingsMeta() });
 });
 
 const NewUserSchema = z.object({

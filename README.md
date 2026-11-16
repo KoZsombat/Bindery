@@ -1,9 +1,10 @@
 # Learning Book Builder
 
 A small, self-hosted creator for routed learning-book sites. Users upload notes and paste long
-text; the builder adds the `learning-book-site` skill as context, asks a model for one structured
-JSON book, and publishes it at its own URL. The original MatekBázis book is included only as a
-**project that was already created**, in `examples/matekbazis/`.
+text; the builder adds the `learning-book-site` skill as context, has a model design the book
+outline, then writes the chapters in validated batches and publishes the result at its own URL.
+The original MatekBázis book is included only as a **project that was already created**, in
+`examples/matekbazis/`.
 
 - **Routed, not downloadable.** Every site is served at `/s/<slug>/` (and optionally at
   `<slug>.<SITE_DOMAIN>`). There is no ZIP endpoint and no download button.
@@ -68,15 +69,18 @@ shared/katex/          shared math assets
 skills/learning-book-site/SKILL.md   required generation context
 examples/matekbazis/   an already-created project, seeded in the catalog
 Dockerfile             Node 24 + poppler-utils single production image
-docker-compose.yml     Launchpad-ready compose project with Traefik labels
+compose.prod.yaml      Launchpad compose stack (one service, one volume, no host ports)
+docker-compose.yml     local compose with a published port
+deploy.md              Launchpad walkthrough: scan, variables, redeploys, troubleshooting
 .env.example           required and optional settings
+.env.prod.example      production values template for compose.prod.yaml
 ```
 
 ## Development (no tokens required)
 
 `NODE_ENV` unset means development. With no `.env` and no environment variables:
 
-- first start creates `admin@example.com` with password `admin1234`
+- first start creates `admin@example.com` with password `admin12345`
 - generation requires a user API key (add one in Settings), unless `LLM_MOCK=1`
 - the API listens on `http://localhost:8080`
 - SQLite and uploads live in `./data`
@@ -103,6 +107,10 @@ switch in the header.
 Add a user key in **Settings** to call a real model; `LLM_BASE_URL` and `LLM_MODEL` are only
 defaults. Set `LLM_MOCK=1` for a deterministic sample without a key. `MAX_CONCURRENT_JOBS=3`
 controls how many generations run at once; `LLM_MOCK_DELAY=500` is useful when mocking.
+`MAX_BOOK_CHAPTERS=30` caps a book's outline; `CHAPTER_BATCH_SIZE=2` controls how many chapters
+each model request writes (lower it when replies truncate). The environment values only seed a
+fresh install: an administrator can change all three caps, including `LLM_MAX_TOKENS`, in
+**Admin → Generation limits**.
 
 ## Deploy on Launchpad
 
@@ -138,16 +146,22 @@ Launchpad for private packages.
 ### B. Compose project
 
 1. In Launchpad, create a **Compose project** pointing at the repository, branch `main`, compose
-   path `docker-compose.yml`.
+   path [`compose.prod.yaml`](compose.prod.yaml).
 2. Scan the compose file. Publish the `builder` service on subdomain `builder` (or your preferred
-   name), internal port `8080`, readiness path `/readyz`.
-3. Fill the scanned variables (the same values as `.env.example`).
-4. Deploy. Launchpad prefixes the `builder-data` volume, so it survives redeploys. The old data
-   directory from a bind mount can be copied in with
-   `docker run --rm -v old:/from -v launchpad-<app>-builder-data:/to alpine cp -a /from/. /to/`.
+   name), internal port `8080`, readiness path `/readyz`. Leave `tunnel` unpublished.
+3. Fill the scanned variables (see [`.env.prod.example`](.env.prod.example)). At minimum:
+   `BASE_DOMAIN`, `SITE_ORIGIN`, `BETTER_AUTH_SECRET`, `ENCRYPTION_KEY`, `ADMIN_EMAIL`,
+   `ADMIN_PASSWORD`, `CLOUDFLARE_TUNNEL_TOKEN`.
+4. Deploy. Launchpad prefixes the `builder-data` volume, so it survives redeploys. The stack's
+   `cloudflared` tunnel publishes `builder.<BASE_DOMAIN>` (and optionally
+   `*.sites.<BASE_DOMAIN>`) to `builder:8080`.
 
-The compose file already carries Traefik labels for a direct `docker compose up` behind the same
-`web` network. Launchpad may add its own labels when scanning; keep the service port at `8080`.
+[`deploy.md`](deploy.md) walks through the scan, the Cloudflare tunnel, optional generated-book
+subdomains, backups, the push webhook and troubleshooting.
+
+`compose.prod.yaml` publishes no host ports, so `docker-compose.yml` + `docker-compose.override.yml`
+remain the local option: `docker compose up --build` serves the builder at
+`http://localhost:8080`.
 
 ### Optional subdomain routing
 
@@ -187,6 +201,7 @@ All routes require the session cookie; mutating requests also require a same-ori
 | `DELETE` | `/api/settings/shares/:id` | Revoke a grant (owner or grantee) |
 | `GET/POST` | `/api/admin/users` | Admin only |
 | `PATCH` | `/api/admin/users/:id` | Limit, disable, or reset password |
+| `GET/PATCH` | `/api/admin/settings` | Generation caps: chapters per book, chapters per request, output tokens |
 | `POST` | `/api/auth/*` | Better Auth endpoints (sign-in, session, sign-out) |
 | `POST` | `/api/logout` | Clears the session and the server session cache |
 
@@ -221,10 +236,14 @@ The model returns one JSON object; `apps/server/src/services/generation.js` norm
 ```
 
 Prose is bilingual; LaTeX is shared. The renderer supports definitions, theorems, notes, warnings,
-formulas, lists, worked examples, mistakes, choice/number/expr/text/proof exercises, local progress,
-language switching, search and print. It never exposes a download. Only `site.json` is stored at
-generation time; `generated.ejs` is rendered per request so template and CSP changes apply
-immediately.
+code blocks, formulas, lists, worked examples, mistakes, choice/number/expr/text/proof exercises,
+local progress, language switching, search and print. Every book also gets the study modes
+generated from `site.json`: Focus/Launchpad, Learn and review, Knowledge map, Daily quest, Error
+notebook, Mixed run, Error hunt, Progress, Formula sheet, Videos, Practice bank, Exam simulator and
+Resources. They run entirely in the browser from the generated content and persist per-book state
+in `localStorage`; numeric answers are checked with a CSP-safe parser, never `eval`. It never
+exposes a download. Only `site.json` is stored at generation time; `generated.ejs` is rendered per
+request so template and CSP changes apply immediately.
 
 ## Security
 

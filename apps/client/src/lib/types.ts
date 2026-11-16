@@ -71,3 +71,17 @@ export interface AdminUser {
   disabled: boolean;
   usedToday: number;
 }
+
+export interface AdminSettings {
+  maxBookChapters: number;
+  chapterBatchSize: number;
+  llmMaxTokens: number;
+}
+
+export interface AdminSettingLimit {
+  min: number;
+  max: number;
+  default: number;
+}
+
+export type AdminSettingLimits = Record<keyof AdminSettings, AdminSettingLimit>;

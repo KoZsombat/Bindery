@@ -139,7 +139,7 @@ export function LoginPage() {
 
           <p className="mt-4 text-xs leading-5 text-muted-foreground">{t('No public sign-up. Ask the administrator for an account.')}</p>
           {import.meta.env.DEV ? (
-            <p className="mt-2 font-mono text-xs text-accent">{t('Development login: admin@example.com / admin1234')}</p>
+            <p className="mt-2 font-mono text-xs text-accent">{t('Development login: admin@example.com / admin12345')}</p>
           ) : null}
         </section>
       </div>

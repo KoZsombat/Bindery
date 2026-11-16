@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import Database from 'better-sqlite3';
-import { DATA_DIR, DB_PATH, SITES_DIR, UPLOADS_DIR, DEFAULT_DAILY_LIMIT } from '../config.js';
+import { DATA_DIR, DB_PATH, SITES_DIR, UPLOADS_DIR, DEFAULT_DAILY_LIMIT, MAX_BOOK_CHAPTERS, CHAPTER_BATCH_SIZE, LLM_MAX_TOKENS } from '../config.js';
 
 for (const dir of [DATA_DIR, SITES_DIR, UPLOADS_DIR]) fs.mkdirSync(dir, { recursive: true });
 
@@ -60,6 +60,11 @@ CREATE TABLE IF NOT EXISTS key_shares (
   grantee_id TEXT NOT NULL,
   created_at TEXT NOT NULL,
   UNIQUE(owner_id, grantee_id)
+);
+CREATE TABLE IF NOT EXISTS settings (
+  key TEXT PRIMARY KEY,
+  value TEXT NOT NULL,
+  updated_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_sites_owner ON sites(owner_id);
 CREATE INDEX IF NOT EXISTS idx_sites_status_published ON sites(status, published);
@@ -133,6 +138,40 @@ CREATE INDEX IF NOT EXISTS idx_uploads_created ON uploads(created_at);
 `);
 
 export const now = () => new Date().toISOString();
+
+/* Generation caps are editable from the admin page. The environment variables
+   only seed the defaults for a fresh install; existing values survive restarts. */
+export const SETTING_DEFS = {
+  max_book_chapters: { key: 'maxBookChapters', min: 4, max: 60, fallback: MAX_BOOK_CHAPTERS },
+  chapter_batch_size: { key: 'chapterBatchSize', min: 1, max: 4, fallback: CHAPTER_BATCH_SIZE },
+  llm_max_tokens: { key: 'llmMaxTokens', min: 1024, max: 200000, fallback: LLM_MAX_TOKENS },
+};
+for (const [name, def] of Object.entries(SETTING_DEFS)) {
+  sqlite.prepare('INSERT OR IGNORE INTO settings (key,value,updated_at) VALUES (?,?,?)')
+    .run(name, String(def.fallback), now());
+}
+export function getSettings() {
+  const saved = new Map(sqlite.prepare('SELECT key,value FROM settings').all().map(row => [row.key, row.value]));
+  const out = {};
+  for (const [name, def] of Object.entries(SETTING_DEFS)) {
+    const n = Number(saved.get(name));
+    out[def.key] = Number.isFinite(n) ? Math.max(def.min, Math.min(def.max, Math.trunc(n))) : def.fallback;
+  }
+  return out;
+}
+export function updateSettings(patch) {
+  const t = now();
+  for (const [name, def] of Object.entries(SETTING_DEFS)) {
+    if (patch[def.key] === undefined) continue;
+    const n = Math.max(def.min, Math.min(def.max, Math.trunc(Number(patch[def.key]))));
+    sqlite.prepare('INSERT INTO settings (key,value,updated_at) VALUES (?,?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at')
+      .run(name, String(n), t);
+  }
+  return getSettings();
+}
+export function settingsMeta() {
+  return Object.fromEntries(Object.values(SETTING_DEFS).map(def => [def.key, { min: def.min, max: def.max, default: def.fallback }]));
+}
 
 export const slugify = s => String(s || 'site')
   .toLowerCase()

@@ -18,5 +18,9 @@
   },
   "engines": {
     "node": ">=24"
+  },
+  "allowScripts": {
+    "better-sqlite3@13.2.0": true,
+    "fsevents@2.3.3": true
   }
 }
