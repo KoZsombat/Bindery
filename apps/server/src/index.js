@@ -1,6 +1,6 @@
 import { migrateAuth, seedAdmin } from './auth.js';
 import { startWorker, stopWorker } from './services/generation.js';
-import { cleanupUploads, closeDb } from './db/index.js';
+import { cleanupUploads, closeDb, backfillSiteI18n } from './db/index.js';
 import { app } from './app.js';
 import { PORT, BASE_DOMAIN, SITE_DOMAIN, LLM_MOCK } from './config.js';
 
@@ -8,6 +8,7 @@ try {
   await migrateAuth();
   await seedAdmin();
   cleanupUploads();
+  backfillSiteI18n();
 } catch (e) {
   console.error('Startup failed:', e);
   process.exit(1);

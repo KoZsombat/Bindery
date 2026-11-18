@@ -83,6 +83,11 @@ function addColumn(table, column, definition) {
 addColumn('sites', 'archived', 'INTEGER NOT NULL DEFAULT 0');
 // Per-book chapter target chosen at creation (null = use the admin setting).
 addColumn('sites', 'max_chapters', 'INTEGER');
+// Bilingual metadata for listings: the book title/summary in both languages.
+addColumn('sites', 'title_hu', 'TEXT');
+addColumn('sites', 'title_en', 'TEXT');
+addColumn('sites', 'summary_hu', 'TEXT');
+addColumn('sites', 'summary_en', 'TEXT');
 addColumn('jobs', 'attempts', 'INTEGER NOT NULL DEFAULT 0');
 addColumn('jobs', 'locked_at', 'TEXT');
 addColumn('jobs', 'next_attempt_at', 'TEXT');
@@ -317,6 +322,8 @@ export function publicSite(s) {
     slug: s.slug,
     title: s.title,
     description: s.description,
+    titleI18n: { hu: s.title_hu || s.title, en: s.title_en || s.title },
+    descriptionI18n: { hu: s.summary_hu || s.description, en: s.summary_en || s.description },
     topic: s.topic,
     audience: s.audience,
     language: s.language,
@@ -330,6 +337,26 @@ export function publicSite(s) {
     archived: !!s.archived,
     reusable: !s.example && fs.existsSync(siteJsonPath(s.slug)),
   };
+}
+
+/** Fills listing metadata for books generated before bilingual titles existed. */
+export function backfillSiteI18n() {
+  const rows = sqlite.prepare("SELECT id,slug FROM sites WHERE title_hu IS NULL OR title_en IS NULL").all();
+  const update = sqlite.prepare(`UPDATE sites SET
+      title_hu=COALESCE(?,title_hu), title_en=COALESCE(?,title_en),
+      summary_hu=COALESCE(?,summary_hu), summary_en=COALESCE(?,summary_en)
+    WHERE id=?`);
+  for (const row of rows) {
+    try {
+      const data = JSON.parse(fs.readFileSync(siteJsonPath(row.slug), 'utf8'));
+      const title = data.title && typeof data.title === 'object' ? data.title : null;
+      const summary = data.summary && typeof data.summary === 'object' ? data.summary : null;
+      if (!title && !summary) continue;
+      update.run(title?.hu || null, title?.en || null, summary?.hu || null, summary?.en || null, row.id);
+    } catch {
+      /* no generated content yet */
+    }
+  }
 }
 
 /** Removes extraction rows (and any leftover raw files) older than `days`. */

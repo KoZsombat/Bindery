@@ -1337,7 +1337,8 @@ async function runJob(job) {
     await fsp.mkdir(dir, { recursive: true });
     await fsp.writeFile(siteJsonPath(site.slug), json);
     clearDraft(site.id);
-    sqlite.prepare("UPDATE sites SET status='ready',error='',updated_at=? WHERE id=?").run(now(), site.id);
+    sqlite.prepare(`UPDATE sites SET status='ready',error='',title_hu=?,title_en=?,summary_hu=?,summary_en=?,updated_at=? WHERE id=?`)
+      .run(parsed.title?.hu || site.title, parsed.title?.en || site.title, parsed.summary?.hu || '', parsed.summary?.en || '', now(), site.id);
     sqlite.prepare("UPDATE jobs SET status='done',log=?,last_error='',locked_at=NULL,next_attempt_at=NULL,progress=NULL,updated_at=? WHERE id=?").run('Generated and routed at ' + siteUrl(site.slug), now(), job.id);
   } catch (e) {
     const attempt = job.attempts || 1;

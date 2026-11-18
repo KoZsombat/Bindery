@@ -124,8 +124,8 @@ export function SitePage() {
     <div className="space-y-6">
       <PageHeader
         kicker={`${t('Site')} · ${site.slug}`}
-        title={site.title}
-        description={site.description || t('No description yet.')}
+        title={site.titleI18n?.[lang] || site.title}
+        description={site.descriptionI18n?.[lang] || site.description || t('No description yet.')}
         actions={
           <>
             <SiteStatusBadge status={site.status} />

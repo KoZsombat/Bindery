@@ -16,17 +16,19 @@ export function SiteCard({
   reusing?: boolean;
 }) {
   const { t, lang } = useI18n();
+  const title = site.titleI18n?.[lang] || site.title;
+  const description = site.descriptionI18n?.[lang] || site.description;
   const generating = site.status === 'queued' || site.status === 'running';
 
   return (
     <article className="flex flex-col rounded-lg border border-border bg-card p-4 shadow-sm transition-shadow hover:shadow-md">
       <div className="flex items-start justify-between gap-2">
-        <h3 className="min-w-0 text-lg font-semibold leading-snug text-foreground">{site.title}</h3>
+        <h3 className="min-w-0 text-lg font-semibold leading-snug text-foreground">{title}</h3>
         <SiteStatusBadge status={site.status} />
       </div>
 
       <p className="mt-2 line-clamp-3 flex-1 text-sm leading-6 text-muted-foreground">
-        {site.description || t('No description yet.')}
+        {description || t('No description yet.')}
       </p>
 
       <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">

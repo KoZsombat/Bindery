@@ -81,5 +81,12 @@ export async function seedAdmin() {
       'BME VIK mathematics', 'first-year BSc', 'both', 'ready', 1, 1, now(), now()
     );
   }
+  sqlite.prepare(`UPDATE sites SET title_hu=?,title_en=?,summary_hu=?,summary_en=?
+      WHERE slug='matekbazis-example' AND title_hu IS NULL`).run(
+    'MatekBázis — BME VIK első féléves matematika',
+    'MatekBázis — BME VIK first-semester mathematics',
+    'Teljesen kétnyelvű példaprojekt a learning-book-site készséggel: 34 fejezet, 266 feladat, generált feladatbankok, napi küldetések és hibafüzet.',
+    'A complete, fully bilingual example built with the learning-book-site skill: 34 chapters, 266 exercises, generated banks, daily quests and an error notebook.'
+  );
   return row;
 }

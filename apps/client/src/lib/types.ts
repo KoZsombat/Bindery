@@ -7,6 +7,9 @@ export interface Site {
   slug: string;
   title: string;
   description: string;
+  /** Book title and summary in both languages, when the book has them. */
+  titleI18n?: { hu: string; en: string };
+  descriptionI18n?: { hu: string; en: string };
   topic: string;
   audience: string;
   language: 'hu' | 'en' | 'both';
