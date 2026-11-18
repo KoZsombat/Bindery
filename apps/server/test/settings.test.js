@@ -12,18 +12,20 @@ test('generation caps default from configuration', () => {
   const settings = getSettings();
   assert.equal(settings.maxBookChapters, 90);
   assert.equal(settings.chapterBatchSize, 1);
+  assert.equal(settings.chapterConcurrency, 4);
   assert.equal(settings.llmMaxTokens, 32000);
 });
 
 test('admin updates persist and are clamped to their bounds', () => {
-  updateSettings({ maxBookChapters: 48, chapterBatchSize: 3, llmMaxTokens: 64000 });
-  assert.deepEqual(getSettings(), { maxBookChapters: 48, chapterBatchSize: 3, llmMaxTokens: 64000 });
+  updateSettings({ maxBookChapters: 48, chapterBatchSize: 3, chapterConcurrency: 6, llmMaxTokens: 64000 });
+  assert.deepEqual(getSettings(), { maxBookChapters: 48, chapterBatchSize: 3, chapterConcurrency: 6, llmMaxTokens: 64000 });
 
-  updateSettings({ maxBookChapters: 999, chapterBatchSize: 0, llmMaxTokens: 10 });
-  assert.deepEqual(getSettings(), { maxBookChapters: 180, chapterBatchSize: 1, llmMaxTokens: 2048 });
+  updateSettings({ maxBookChapters: 999, chapterBatchSize: 0, chapterConcurrency: 99, llmMaxTokens: 10 });
+  assert.deepEqual(getSettings(), { maxBookChapters: 180, chapterBatchSize: 1, chapterConcurrency: 8, llmMaxTokens: 2048 });
 });
 
 test('settings metadata exposes the editable bounds', () => {
   assert.deepEqual(settingsMeta().chapterBatchSize, { min: 1, max: 4, default: 1 });
+  assert.deepEqual(settingsMeta().chapterConcurrency, { min: 1, max: 8, default: 4 });
   assert.deepEqual(settingsMeta().maxBookChapters, { min: 8, max: 180, default: 90 });
 });

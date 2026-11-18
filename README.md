@@ -125,9 +125,10 @@ controls how many generations run at once; `LLM_MOCK_DELAY=500` is useful when m
 Limits live in `apps/server/src/limits.js` (documented constants) and `apps/server/src/config.js`
 (env-seeded defaults); `docs/LIMITS_AUDIT.md` has the full before/after table. Defaults:
 `MAX_BOOK_CHAPTERS=90` (hard cap 180; the target also scales with source topic count),
-`CHAPTER_BATCH_SIZE=1` (one chapter per call), `LLM_MAX_TOKENS=32000` per chapter pass,
-`LLM_TIMEOUT_MS=900000`, 400 000 source characters, and a 96 MiB `site.json` cap. The environment
-values only seed a fresh install; an administrator can change the three editable caps in
+`CHAPTER_BATCH_SIZE=1` (one chapter per call), `CHAPTER_CONCURRENCY=4` (chapter calls in flight
+per book; admin-editable, lower it to 1 if the provider rate-limits), `CHAPTER_WORD_MARGIN=1.15`,
+`LLM_MAX_TOKENS=32000` per chapter pass, `LLM_TIMEOUT_MS=900000`, 400 000 source characters, and a 96 MiB `site.json` cap. The environment
+values only seed a fresh install; an administrator can change the four editable caps in
 **Admin → Generation limits**. The create form shows the real chapter/word/time estimate before a
 job starts, and can split a large source into up to six parts.
 

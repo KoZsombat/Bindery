@@ -11,7 +11,7 @@ import { useAuth } from '../context/AuthContext';
 import { useI18n } from '../context/I18nContext';
 import { useToast } from '../context/ToastContext';
 import { api, describeError } from '../lib/api';
-import { formatDate } from '../lib/format';
+import { formatDate, formatDuration } from '../lib/format';
 import type { Job, Site } from '../lib/types';
 
 export function SitePage() {
@@ -113,6 +113,10 @@ export function SitePage() {
     : progress?.phase === 'validate' ? t('Checking depth and repairing chapters')
     : progress?.phase === 'done' ? t('Finishing')
     : t('Writing chapters');
+  const etaSeconds = progress?.etaAt ? Math.max(0, (new Date(progress.etaAt).getTime() - now) / 1000) : null;
+  const etaLabel = etaSeconds != null
+    ? `${t('Estimated time remaining:')} ~${formatDuration(etaSeconds)}`
+    : progress?.phase === 'outline' ? t('Estimating time…') : '';
 
   return (
     <div className="space-y-6">
@@ -162,6 +166,7 @@ export function SitePage() {
                   : t('Waiting for the first streamed tokens…')}
                 {signalAge != null ? ` · ${t('last signal')} ${signalAge}s ${t('ago')}` : ''}
               </p>
+              {etaLabel ? <p className="text-xs font-medium text-foreground">{etaLabel}</p> : null}
               <p className="text-xs text-muted-foreground">{t('A resumed job keeps its finished chapters.')}</p>
             </div>
           ) : null}

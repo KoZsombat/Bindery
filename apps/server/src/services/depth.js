@@ -9,10 +9,15 @@
  * It never mutates the book. The pipeline decides what to regenerate.
  */
 import { LIMITS, chapterWordBudget } from '../limits.js';
+import { BUDGET_TOLERANCE, HU_BUDGET_RATIO } from '../config.js';
 
 const STOP = new Set(['the', 'and', 'for', 'with', 'that', 'this', 'from', 'into', 'when', 'then',
   'than', 'your', 'you', 'are', 'was', 'were', 'will', 'have', 'has', 'not', 'can', 'may', 'one',
   'two', 'its', 'our', 'their', 'set', 'use', 'used', 'using', 'value', 'values']);
+
+/** Reporting-only issues. Naming a later concept in overview prose is normal and
+ *  cannot be repaired deterministically; glossary `requires` still enforces order. */
+const WARNING_CODES = new Set(['term.beforeDefined']);
 
 export function wordsOf(text) {
   return String(text || '')
@@ -167,13 +172,16 @@ export function validateDepth(site) {
       }
     }
 
-    // Word budget in both languages.
+    // Word budget in both languages. EN carries the content floor; HU must
+    // carry the same content with the naturally lower word count.
     const budget = chapterBudget(c);
     const hu = wordsOf(chapterProse(c, 'hu').join(' '));
     const en = wordsOf(chapterProse(c, 'en').join(' '));
+    const enMin = Math.round(budget * BUDGET_TOLERANCE);
+    const huMin = Math.round(budget * HU_BUDGET_RATIO);
     budgets[`${sid}/${cid}`] = { budget, hu, en, terms: (c.terms || []).length };
-    if (hu < budget || en < budget) {
-      add('chapter.budget', `${label}: ${hu} HU / ${en} EN words, budget ${budget}. Add explanation, do not compress.`, sid, cid);
+    if (en < enMin || hu < huMin) {
+      add('chapter.budget', `${label}: ${hu} HU / ${en} EN words, minimum ${huMin} HU / ${enMin} EN (budget ${budget}). Add explanation, do not compress.`, sid, cid);
     }
 
     // Terms: definition completeness.
@@ -209,7 +217,9 @@ export function validateDepth(site) {
     for (const req of g.requires || []) {
       const reqOwner = termOwner.get(req);
       if (!reqOwner) { add('term.requires', `Term "${g.id}" requires unknown term "${req}".`); continue; }
-      if (owner && reqOwner.idx >= owner.idx) add('term.requires', `Term "${g.id}" requires "${req}", which is introduced later.`);
+      // Same chapter is fine: both terms are introduced together, and the term
+      // array order inside one chapter is not a reading-order guarantee.
+      if (owner && reqOwner.idx > owner.idx) add('term.requires', `Term "${g.id}" requires "${req}", which is introduced later.`);
     }
   }
 
@@ -233,7 +243,8 @@ export function validateDepth(site) {
     }
   }
 
-  return { ok: issues.length === 0, issues, budgets };
+  const blocking = issues.filter(i => !WARNING_CODES.has(i.code));
+  return { ok: blocking.length === 0, issues, blocking, budgets };
 }
 
 /** Compact one-line summary for job logs. */

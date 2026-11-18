@@ -110,7 +110,7 @@ export function AdminPage() {
   const [error, setError] = useState('');
   const [creating, setCreating] = useState(false);
   const [form, setForm] = useState({ email: '', name: '', password: '', dailyLimit: '3' });
-  const [settingsForm, setSettingsForm] = useState({ maxBookChapters: '', chapterBatchSize: '', llmMaxTokens: '' });
+  const [settingsForm, setSettingsForm] = useState({ maxBookChapters: '', chapterBatchSize: '', chapterConcurrency: '', llmMaxTokens: '' });
   const [limits, setLimits] = useState<AdminSettingLimits | null>(null);
   const [savingSettings, setSavingSettings] = useState(false);
 
@@ -133,6 +133,7 @@ export function AdminPage() {
       setSettingsForm({
         maxBookChapters: String(data.settings.maxBookChapters),
         chapterBatchSize: String(data.settings.chapterBatchSize),
+        chapterConcurrency: String(data.settings.chapterConcurrency),
         llmMaxTokens: String(data.settings.llmMaxTokens),
       });
     } catch (e) {
@@ -181,12 +182,14 @@ export function AdminPage() {
       const data = await api.patch<{ settings: AdminSettings; limits: AdminSettingLimits }>('/api/admin/settings', {
         maxBookChapters: Number(settingsForm.maxBookChapters),
         chapterBatchSize: Number(settingsForm.chapterBatchSize),
+        chapterConcurrency: Number(settingsForm.chapterConcurrency),
         llmMaxTokens: Number(settingsForm.llmMaxTokens),
       });
       setLimits(data.limits);
       setSettingsForm({
         maxBookChapters: String(data.settings.maxBookChapters),
         chapterBatchSize: String(data.settings.chapterBatchSize),
+        chapterConcurrency: String(data.settings.chapterConcurrency),
         llmMaxTokens: String(data.settings.llmMaxTokens),
       });
       push('success', t('Limits saved.'));
@@ -234,6 +237,16 @@ export function AdminPage() {
                 max={limits.chapterBatchSize.max}
                 value={settingsForm.chapterBatchSize}
                 onChange={event => setSettingsForm({ ...settingsForm, chapterBatchSize: event.target.value })}
+              />
+            </Field>
+            <Field label={t('Chapters in flight')} htmlFor="set-concurrency">
+              <Input
+                id="set-concurrency"
+                type="number"
+                min={limits.chapterConcurrency.min}
+                max={limits.chapterConcurrency.max}
+                value={settingsForm.chapterConcurrency}
+                onChange={event => setSettingsForm({ ...settingsForm, chapterConcurrency: event.target.value })}
               />
             </Field>
             <Field label={t('Output tokens per chapter pass')} htmlFor="set-max-tokens">

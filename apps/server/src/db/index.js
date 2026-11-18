@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import Database from 'better-sqlite3';
-import { DATA_DIR, DB_PATH, SITES_DIR, UPLOADS_DIR, DEFAULT_DAILY_LIMIT, MAX_BOOK_CHAPTERS, CHAPTER_BATCH_SIZE, LLM_MAX_TOKENS } from '../config.js';
+import { DATA_DIR, DB_PATH, SITES_DIR, UPLOADS_DIR, DEFAULT_DAILY_LIMIT, MAX_BOOK_CHAPTERS, CHAPTER_BATCH_SIZE, CHAPTER_CONCURRENCY, LLM_MAX_TOKENS } from '../config.js';
 
 for (const dir of [DATA_DIR, SITES_DIR, UPLOADS_DIR]) fs.mkdirSync(dir, { recursive: true });
 
@@ -155,6 +155,7 @@ export const now = () => new Date().toISOString();
 export const SETTING_DEFS = {
   max_book_chapters: { key: 'maxBookChapters', min: 8, max: 180, fallback: MAX_BOOK_CHAPTERS },
   chapter_batch_size: { key: 'chapterBatchSize', min: 1, max: 4, fallback: CHAPTER_BATCH_SIZE },
+  chapter_concurrency: { key: 'chapterConcurrency', min: 1, max: 8, fallback: CHAPTER_CONCURRENCY },
   llm_max_tokens: { key: 'llmMaxTokens', min: 2048, max: 200000, fallback: LLM_MAX_TOKENS },
 };
 for (const [name, def] of Object.entries(SETTING_DEFS)) {

@@ -510,6 +510,7 @@ router.get('/admin/settings', requireAdminApi, (req, res) => {
 const GenerationSettingsSchema = z.object({
   maxBookChapters: z.coerce.number().int().min(4).max(60).optional(),
   chapterBatchSize: z.coerce.number().int().min(1).max(4).optional(),
+  chapterConcurrency: z.coerce.number().int().min(1).max(8).optional(),
   llmMaxTokens: z.coerce.number().int().min(1024).max(200000).optional(),
 }).refine(body => Object.keys(body).length > 0, 'At least one setting is required.');
 

@@ -33,6 +33,8 @@ export interface JobProgress {
   total: number;
   chapter: string;
   activity?: JobActivity | null;
+  /** Absolute ISO deadline; the UI counts down from it. */
+  etaAt?: string | null;
 }
 
 export interface Job {
@@ -91,6 +93,7 @@ export interface AdminUser {
 export interface AdminSettings {
   maxBookChapters: number;
   chapterBatchSize: number;
+  chapterConcurrency: number;
   llmMaxTokens: number;
 }
 

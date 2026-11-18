@@ -171,3 +171,79 @@ test('buildBook uses the caps and output budget saved by the admin', async () =>
   assert.equal(book.sections.flatMap(s => s.chapters).length, 6);
   assert.deepEqual([...new Set(seen)], [12000]);
 });
+
+test('chapter passes run concurrently', async () => {
+  const base = stub();
+  let active = 0;
+  let peak = 0;
+  const call = async (cfg, messages, maxTokens) => {
+    const prompt = messages.at(-1)?.content || '';
+    if (!prompt.includes('WRITE EXACTLY THESE CHAPTERS')) return base.call(cfg, messages, maxTokens);
+    active++;
+    peak = Math.max(peak, active);
+    try {
+      await new Promise(r => setTimeout(r, 25));
+      return await base.call(cfg, messages, maxTokens);
+    } finally {
+      active--;
+    }
+  };
+  const book = await buildBook({ cfg: {}, req, skill: 'skill', call, maxChapters: 30, batchSize: 1 });
+  assert.equal(book.sections.flatMap(s => s.chapters).length, 6);
+  assert.ok(peak >= 2, 'expected overlapping chapter calls, peak ' + peak);
+});
+
+test('a chapter prompt lists only earlier terms as defined', async () => {
+  const prompts = [];
+  const call = async (_cfg, messages) => {
+    const prompt = messages.at(-1)?.content || '';
+    if (prompt.includes('Design the COMPLETE outline')) return JSON.stringify(outline);
+    prompts.push(prompt);
+    return JSON.stringify({ chapters: targetIds(messages).map(id => chapter(id, '1.1', 'Chapter ' + id)) });
+  };
+  await buildBook({ cfg: {}, req, skill: 'skill', call, maxChapters: 30, batchSize: 1, draft: null });
+  const first = prompts.find(p => p.includes('id "types"'));
+  assert.ok(first, 'chapter 1.1 prompt was captured');
+  const definedBlock = first.slice(first.indexOf('TERMS ALREADY DEFINED'), first.indexOf('TERMS YOU MUST DEFINE'));
+  const laterBlock = first.slice(first.indexOf('TERMS DEFINED LATER'), first.indexOf('WRITE EXACTLY'));
+  assert.doesNotMatch(definedBlock, /term-stl/, 'later term must not be advertised as already defined');
+  assert.match(laterBlock, /Template \/ Sablon/, 'later term names are listed as forbidden');
+});
+
+test('the assembled book drops forward prerequisites and refresher links', async () => {
+  const chapters = {};
+  for (const s of outline.sections) {
+    for (const c of s.chapters) {
+      const ch = chapter(c.id, c.num, 'Chapter ' + c.id);
+      ch.theory.push({ type: 'p', title: { hu: 'Részletek', en: 'Details' }, body: { hu: FILLER_HU.join(' '), en: FILLER_EN.join(' ') } });
+      chapters[c.id] = ch;
+    }
+  }
+  chapters.types.terms[0].requires = ['term-stl'];
+  chapters.functions.refresher = [
+    { label: { hu: 'Típusok', en: 'Types' }, chapter: { section: 'c-basics', chapter: 'types' } },
+    { label: { hu: 'Később', en: 'Later' }, chapter: { section: 'cpp', chapter: 'stl' } }
+  ];
+  const call = async () => { throw new Error('a complete draft must not call the model'); };
+  const book = await buildBook({
+    cfg: {}, req, skill: 'skill', call, maxChapters: 30, batchSize: 1,
+    draft: { phase: 'chapters', outline, chapters }
+  });
+  const functions = book.sections[0].chapters.find(c => c.id === 'functions');
+  assert.equal(functions.refresher.length, 1, 'forward refresher link is dropped');
+  assert.equal(functions.refresher[0].chapter.chapter, 'types', 'backward refresher link is kept');
+  assert.deepEqual(book.glossary.find(g => g.id === 'term-types').requires, [], 'forward prerequisite is dropped');
+  assert.equal(book.sections.flatMap(s => s.chapters).length, 6);
+});
+
+test('chapter progress carries an ETA deadline', async () => {
+  const events = [];
+  const { call } = stub();
+  await buildBook({
+    cfg: {}, req, skill: 'skill', call, maxChapters: 30, batchSize: 1,
+    onProgress: event => events.push(event)
+  });
+  const completed = events.filter(event => event.phase === 'chapters' && event.etaAt);
+  assert.ok(completed.length > 0, 'a chapter completion reports etaAt');
+  assert.ok(completed.every(event => Number.isFinite(Date.parse(event.etaAt))));
+});

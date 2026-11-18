@@ -4,7 +4,8 @@ import path from 'node:path';
 import { z } from 'zod';
 import {
   LLM_BASE_URL, LLM_MODEL, LLM_MOCK, LLM_MAX_TOKENS, LLM_TIMEOUT_MS,
-  MAX_CONCURRENT_JOBS, MAX_JOB_ATTEMPTS, JOB_LEASE_MS, SKILL_PATH
+  MAX_CONCURRENT_JOBS, MAX_JOB_ATTEMPTS, JOB_LEASE_MS, SKILL_PATH,
+  CHAPTER_CONCURRENCY, CHAPTER_WORD_MARGIN, LLM_RETRY_BACKOFF_MAX_MS
 } from '../config.js';
 import { LIMITS, SCHEMA_VERSION, targetChapterCount, countTopics, chapterWordBudget } from '../limits.js';
 import { decrypt } from '../crypto.js';
@@ -560,7 +561,12 @@ async function callLLM(cfg, messages, maxTokens = LLM_MAX_TOKENS, onActivity = n
       if (r.status >= 300 && r.status < 400) throw new Error('LLM API redirected; point the base URL at the final endpoint.');
       const type = r.headers.get('content-type') || '';
       if (body.stream && type.includes('text/event-stream')) {
-        if (!r.ok) throw new Error('LLM API ' + r.status);
+        if (!r.ok) {
+          const e = new Error('LLM API ' + r.status);
+          e.status = r.status;
+          e.retryAfter = Number(r.headers.get('retry-after')) || 0;
+          throw e;
+        }
         return await readStream(r, controller);
       }
       const text = await withTimeout(
@@ -569,7 +575,12 @@ async function callLLM(cfg, messages, maxTokens = LLM_MAX_TOKENS, onActivity = n
         `LLM response body timed out after ${Math.round(LLM_TIMEOUT_MS / 1000)}s`,
         () => controller.abort()
       );
-      if (!r.ok) { const e = new Error('LLM API ' + r.status + ': ' + text.slice(0, 500)); e.status = r.status; throw e; }
+      if (!r.ok) {
+        const e = new Error('LLM API ' + r.status + ': ' + text.slice(0, 500));
+        e.status = r.status;
+        e.retryAfter = Number(r.headers.get('retry-after')) || 0;
+        throw e;
+      }
       return JSON.parse(text).choices?.[0]?.message?.content || '';
     } finally {
       clearTimeout(killer);
@@ -755,11 +766,26 @@ function chapterPrompt(req, skill, outline, section, batch, registry, source, is
   const outlineText = outline.sections.map(s =>
     `${s.num}. ${s.title.hu} / ${s.title.en}\n` + s.chapters.map(c => `   ${c.num} ${c.id} — ${c.title.hu} / ${c.title.en}`).join('\n')
   ).join('\n');
-  const defined = [...registry.values()].filter(t => !batch.some(c => (c.newTerms || []).some(x => x.id === t.id)));
-  const definedText = defined.map(t => `${t.id} = ${t.term.en} / ${t.term.hu} (chapter ${t.num})`).join('\n') || '(none yet — this is the first chapter)';
+  const chapterOrder = outline.sections.flatMap(s => s.chapters.map(c => c.id));
+  const batchIds = new Set(batch.map(c => c.id));
+  const batchIdx = batch.map(c => chapterOrder.indexOf(c.id)).filter(i => i >= 0);
+  const lastIdx = batchIdx.length ? Math.max(...batchIdx) : 0;
+  const earlier = [], later = [];
+  for (const t of registry.values()) {
+    if (batchIds.has(t.chapter)) continue;
+    const idx = chapterOrder.indexOf(t.chapter);
+    if (idx > lastIdx) later.push(t);
+    else earlier.push(t);
+  }
+  const definedText = earlier.map(t => `${t.id} = ${t.term.en} / ${t.term.hu} (chapter ${t.num})`).join('\n') || '(none yet — this is the first chapter)';
+  const laterText = later.slice(0, 120).map(t => `${t.term.en} / ${t.term.hu}`).join(', ') || '(none)';
   const newTermText = batch.flatMap(c => (c.newTerms || []).map(t => `${t.id} = ${t.term.en} / ${t.term.hu}${t.requires?.length ? `; requires: ${t.requires.join(', ')}` : ''}`)).join('\n') || '(none)';
   const issueText = issues.length ? `\nFIX THESE VALIDATION ISSUES FROM THE PREVIOUS ATTEMPT:\n- ${issues.join('\n- ')}\n` : '';
-  return `SKILL (structure and style):\n${skill.slice(0, LIMITS.model.promptSkillChars)}\n\n${DEPTH_RULES}\n\nREQUEST:\n${requestText(req)}\n\nRELEVANT SOURCE EXCERPTS (selected for these chapters; the rest of the source is covered by other chapters):\n${source.text}\n\nBOOK OUTLINE (do not change its scope):\n${outlineText}\n\nTERMS ALREADY DEFINED (link to them, do not redefine):\n${definedText}\n\nTERMS YOU MUST DEFINE IN THIS PASS (exact ids):\n${newTermText}\n\nWRITE EXACTLY THESE CHAPTERS (section ${section.num}, ${section.title.hu} / ${section.title.en}):\n${target}\n${issueText}
+  const termCount = batch.reduce((n, c) => n + (c.newTerms || []).length, 0);
+  const budget = chapterWordBudget(termCount);
+  const minWords = Math.ceil(budget * CHAPTER_WORD_MARGIN);
+  const maxWords = Math.round(budget * 1.5);
+  return `SKILL (structure and style):\n${skill.slice(0, LIMITS.model.promptSkillChars)}\n\n${DEPTH_RULES}\n\nREQUEST:\n${requestText(req)}\n\nRELEVANT SOURCE EXCERPTS (selected for these chapters; the rest of the source is covered by other chapters):\n${source.text}\n\nBOOK OUTLINE (do not change its scope):\n${outlineText}\n\nTERMS ALREADY DEFINED (link to them, do not redefine):\n${definedText}\n\nTERMS YOU MUST DEFINE IN THIS PASS (exact ids):\n${newTermText}\n\nTERMS DEFINED LATER (do not use these names in this pass, not even as examples):\n${laterText}\n\nWRITE EXACTLY THESE CHAPTERS (section ${section.num}, ${section.title.hu} / ${section.title.en}):\n${target}\n${issueText}
 Return ONE JSON object: {"chapters":[ ... ]} with exactly ${batch.length} chapter(s), in the same order and with the exact ids above.
 Chapter shape:
 {"id":"...","num":"...","title":{"hu":"...","en":"..."},"lead":{"hu":"...","en":"..."},"why":{"hu":["..."],"en":["..."]},"when":{"hu":"...","en":"..."},"minutes":40,
@@ -781,7 +807,7 @@ HARD RULES:
 - Define every term listed above, exactly once, in this chapter's "terms". Do not redefine terms already defined.
 - Each def/thm block introduces at most 3 terms and includes plain, why, precise, analogy, 1-2 checks.
 - Every example step has a matching reason. exercises: 6-10, checkable, mixed types.
-- Length: between ${chapterWordBudget(batch.reduce((n, c) => n + (c.newTerms || []).length, 0))} and ${Math.round(chapterWordBudget(batch.reduce((n, c) => n + (c.newTerms || []).length, 0)) * 1.5)} words of explanation per language in this pass. Do not compress below the minimum and do not pad above the maximum; an overlong reply may be cut off and rejected.
+- Length: between ${minWords} and ${maxWords} words of explanation per language in this pass. Both languages are counted separately; a chapter below the minimum is rejected and rewritten. Do not pad above the maximum; an overlong reply may be cut off.
 - Complete valid JSON. Return only this pass's chapters.`;
 }
 
@@ -813,13 +839,30 @@ async function generateOutline(cfg, req, skill, call, maxChapters, onProgress) {
   throw new Error('Could not build a book outline: ' + lastError);
 }
 
-/** Network-level failures worth retrying; HTTP status errors are not. */
+/** Network-level failures worth retrying. Rate limits and provider 5xx are also
+ *  transient: they cost a call, not a job attempt. */
 function isTransientCallError(e) {
+  if (e?.status === 429 || (e?.status >= 500 && e?.status < 600)) return true;
   if (e?.status) return false;
   const code = e?.cause?.code || e?.code;
   if (['ENOTFOUND', 'EAI_AGAIN', 'ECONNRESET', 'ECONNREFUSED', 'ETIMEDOUT', 'EPIPE',
     'UND_ERR_CONNECT_TIMEOUT', 'UND_ERR_SOCKET', 'UND_ERR_CLOSED'].includes(code)) return true;
   return /fetch failed|could not be resolved|socket hang up|timed out|aborted/i.test(String(e?.message || ''));
+}
+
+/** Run async work over items with at most `limit` in flight. On failure, stop
+ *  starting new items; work already in flight finishes and keeps its results. */
+async function poolMap(items, limit, fn) {
+  let next = 0;
+  let failure = null;
+  const worker = async () => {
+    while (!failure && next < items.length) {
+      const item = items[next++];
+      try { await fn(item); } catch (e) { failure = failure || e; }
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(Math.max(1, limit), items.length) }, worker));
+  if (failure) throw failure;
 }
 
 async function writeChapterBatch(cfg, req, skill, outline, section, batch, call, limits, registry, source, issues) {
@@ -835,8 +878,9 @@ async function writeChapterBatch(cfg, req, skill, outline, section, batch, call,
     } catch (e) {
       // A resolver/socket blip must not cost a whole job attempt: retry here.
       if (!isTransientCallError(e) || attempt === LIMITS.model.chapterRetries - 1) throw e;
-      console.error('Chapter call failed, retrying:', e.message || e);
-      await new Promise(r => setTimeout(r, 1000 * (attempt + 1)));
+      const wait = Math.min(LLM_RETRY_BACKOFF_MAX_MS, Math.max(Number(e.retryAfter || 0) * 1000, 1000 * (attempt + 1)));
+      console.error(`Chapter call failed, retrying in ${wait} ms:`, e.message || e);
+      await new Promise(r => setTimeout(r, wait));
       continue;
     }
     let raw;
@@ -869,6 +913,48 @@ async function writeChapterBatch(cfg, req, skill, outline, section, batch, call,
   throw new Error('Could not write chapters ' + batch.map(c => c.num).join(', ') + ': ' + lastError);
 }
 
+/** Prerequisites may only point at terms introduced no later than their chapter.
+ *  The model sometimes lists a same-chapter or still-unwritten term; dropping it
+ *  keeps the glossary direction valid instead of failing an otherwise good book. */
+function dropForwardRequires(book) {
+  const earlier = new Set();
+  for (const s of book.sections) {
+    for (const c of s.chapters) {
+      const here = new Set((c.terms || []).map(t => t.id));
+      for (const t of c.terms || []) {
+        t.requires = (t.requires || []).filter(id => id !== t.id && (earlier.has(id) || here.has(id)));
+      }
+      for (const id of here) earlier.add(id);
+    }
+  }
+}
+
+/** Refresher links must point at earlier chapters and known terms. The model
+ *  sometimes links forward; drop the link and keep the human-readable label. */
+function dropForwardRefreshers(book) {
+  const order = [];
+  const termIds = new Set();
+  for (const s of book.sections) {
+    for (const c of s.chapters) {
+      order.push({ sid: s.id, cid: c.id });
+      for (const t of c.terms || []) termIds.add(t.id);
+    }
+  }
+  const pos = new Map(order.map((x, i) => [x.sid + '/' + x.cid, i]));
+  for (const s of book.sections) {
+    for (const c of s.chapters) {
+      const self = pos.get(s.id + '/' + c.id);
+      c.refresher = (c.refresher || []).filter(r => {
+        if (r.term && !termIds.has(r.term)) r.term = '';
+        if (!r.chapter) return true;
+        const at = pos.get(r.chapter.section + '/' + r.chapter.chapter);
+        return at !== undefined && at < self;
+      });
+      if (!c.refresher.length) c.refresher.push({ label: { hu: 'Kezdés előtt', en: 'Before you start' } });
+    }
+  }
+}
+
 /** Assemble a site-like object from the draft (only chapters that exist). */
 function draftBook(outline, written) {
   const sections = outline.sections.map(s => ({
@@ -879,6 +965,8 @@ function draftBook(outline, written) {
   const book = normalizeSite({
     version: SCHEMA_VERSION, title: outline.title, subtitle: outline.subtitle, summary: outline.summary, sections
   }, {}, { maxChapters: LIMITS.chapters.cap, maxPerSection: LIMITS.chapters.perSection });
+  dropForwardRequires(book);
+  dropForwardRefreshers(book);
   book.glossary = assembleGlossary(book);
   return book;
 }
@@ -913,6 +1001,7 @@ export async function buildBook({
   maxChapters = maxChapters ?? settings.maxBookChapters;
   batchSize = batchSize ?? settings.chapterBatchSize;
   maxTokens = maxTokens ?? settings.llmMaxTokens;
+  const concurrency = Math.max(1, Math.min(8, Number(settings.chapterConcurrency) || CHAPTER_CONCURRENCY));
   const callModel = (c, m) => call(c, m, maxTokens, onActivity);
   const limits = { maxChapters, maxPerSection: Math.min(LIMITS.chapters.perSection, maxChapters) };
   const persist = state => { try { saveDraft && saveDraft(state); } catch (e) { console.error('Draft save failed:', e.message); } };
@@ -936,53 +1025,74 @@ export async function buildBook({
   let done = Object.keys(written).length;
   onProgress({ phase: 'chapters', done, total, message: `Resuming: ${done}/${total} chapters already written.` });
 
+  /** Absolute deadline from the observed rate. Null until one unit finished. */
+  const etaAtAfter = (start, finished, remaining) => {
+    if (remaining <= 0) return new Date().toISOString();
+    if (finished <= 0) return null;
+    const seconds = (Date.now() - start) / 1000 * remaining / finished;
+    return new Date(Date.now() + seconds * 1000).toISOString();
+  };
+  const chapterStart = Date.now();
+  const chapterBase = done;
+  let chapterEtaAt = null;
+
+  const units = [];
   for (const s of outline.sections) {
     const pending = s.chapters.filter(c => !written[c.id]);
     for (let i = 0; i < pending.length; i += batchSize) {
-      const batch = pending.slice(i, i + batchSize);
-      const selected = selectSourceChunks(source, {
-        ...batch[0],
-        newTerms: batch.flatMap(c => c.newTerms || [])
-      }, outline);
-      onProgress({
-        phase: 'chapters', done, total,
-        chapter: batch[0].num + ' ' + batch[0].title.en,
-        message: `Writing ${batch.map(c => c.num + ' ' + c.title.en).join(', ')}…`
-      });
-      let produced;
-      try {
-        produced = await writeChapterBatch(cfg, req, skill, outline, s, batch, callModel, limits, registry, selected, []);
-      } catch (e) {
-        if (batch.length === 1) throw new Error(`Chapter ${batch[0].num} (${batch[0].id}) failed: ${e.message}`);
-        // A batch that still truncates is retried one chapter at a time.
-        produced = [];
-        for (const one of batch) {
-          produced.push(...await writeChapterBatch(cfg, req, skill, outline, s, [one], callModel, limits, registry,
-            selectSourceChunks(source, one, outline), []));
-        }
-      }
-      for (const chapter of produced) {
-        const outlineChapter = batch.find(c => c.id === chapter.id) || chapter;
-        chapter.id = outlineChapter.id;
-        chapter.num = outlineChapter.num;
-        written[chapter.id] = chapter;
-        const probeBook = draftBook(outline, written);
-        const issues = issuesForChapter(validateDepth(probeBook), chapter);
-        if (issues.length) {
-          onProgress({ phase: 'validate', done, total, chapter: chapter.id, message: `Re-generating ${chapter.num}: ${issues.length} depth issue(s).` });
-          const retry = await writeChapterBatch(cfg, req, skill, outline, s, [outlineChapter], callModel, limits, registry,
-            selectSourceChunks(source, outlineChapter, outline), issues.slice(0, 8));
-          written[chapter.id] = retry[0];
-          const after = issuesForChapter(validateDepth(draftBook(outline, written)), retry[0]);
-          if (after.length) throw new Error(`Chapter ${chapter.num} (${chapter.id}) still fails the depth contract: ${after.slice(0, 4).join(' | ')}`);
-        }
-        done++;
-        state = { phase: 'chapters', outline, chapters: written };
-        persist(state);
-        onProgress({ phase: 'chapters', done, total, chapter: chapter.id, message: `Wrote ${done}/${total} chapters · ${chapter.num} ${chapter.title?.en || ''}.` });
-      }
+      units.push({ section: s, batch: pending.slice(i, i + batchSize) });
     }
   }
+  const writeUnit = async ({ section: s, batch }) => {
+    const selected = selectSourceChunks(source, {
+      ...batch[0],
+      newTerms: batch.flatMap(c => c.newTerms || [])
+    }, outline);
+    onProgress({
+      phase: 'chapters', done, total,
+      chapter: batch[0].num + ' ' + batch[0].title.en,
+      etaAt: chapterEtaAt,
+      message: `Writing ${batch.map(c => c.num + ' ' + c.title.en).join(', ')}…`
+    });
+    let produced;
+    try {
+      produced = await writeChapterBatch(cfg, req, skill, outline, s, batch, callModel, limits, registry, selected, []);
+    } catch (e) {
+      if (batch.length === 1) throw new Error(`Chapter ${batch[0].num} (${batch[0].id}) failed: ${e.message}`);
+      // A batch that still truncates is retried one chapter at a time.
+      produced = [];
+      for (const one of batch) {
+        produced.push(...await writeChapterBatch(cfg, req, skill, outline, s, [one], callModel, limits, registry,
+          selectSourceChunks(source, one, outline), []));
+      }
+    }
+    for (const chapter of produced) {
+      const outlineChapter = batch.find(c => c.id === chapter.id) || chapter;
+      chapter.id = outlineChapter.id;
+      chapter.num = outlineChapter.num;
+      written[chapter.id] = chapter;
+      const probeBook = draftBook(outline, written);
+      const issues = issuesForChapter(validateDepth(probeBook), chapter);
+      if (issues.length) {
+        onProgress({ phase: 'validate', done, total, chapter: chapter.id, message: `Re-generating ${chapter.num}: ${issues.length} depth issue(s).` });
+        const retry = await writeChapterBatch(cfg, req, skill, outline, s, [outlineChapter], callModel, limits, registry,
+          selectSourceChunks(source, outlineChapter, outline), issues.slice(0, 8));
+        written[chapter.id] = retry[0];
+        const after = issuesForChapter(validateDepth(draftBook(outline, written)), retry[0]);
+        if (after.length) throw new Error(`Chapter ${chapter.num} (${chapter.id}) still fails the depth contract: ${after.slice(0, 4).join(' | ')}`);
+      }
+      done++;
+      state = { phase: 'chapters', outline, chapters: written };
+      persist(state);
+      chapterEtaAt = etaAtAfter(chapterStart, done - chapterBase, total - done);
+      onProgress({ phase: 'chapters', done, total, chapter: chapter.id, etaAt: chapterEtaAt, message: `Wrote ${done}/${total} chapters · ${chapter.num} ${chapter.title?.en || ''}.` });
+    }
+  };
+
+  // Chapter passes are independent once the outline and term registry exist, so
+  // a small worker pool hides provider latency. A failure stops new units but
+  // lets in-flight calls finish and persist their chapters for the retry.
+  await poolMap(units, concurrency, writeUnit);
 
   // 3 — glossary pass (deterministic assembly + de-duplication).
   const book = draftBook(outline, written);
@@ -993,22 +1103,29 @@ export async function buildBook({
   let depth = validateDepth(book);
   if (!depth.ok) {
     const byChapter = new Map();
-    for (const issue of depth.issues) {
+    for (const issue of depth.blocking) {
       if (!issue.cid) continue;
       if (!byChapter.has(issue.cid)) byChapter.set(issue.cid, []);
       byChapter.get(issue.cid).push(`${issue.code}: ${issue.message}`);
     }
     for (let round = 0; round < LIMITS.model.validationRetries; round++) {
-      for (const [cid, issues] of byChapter) {
+      const repairStart = Date.now();
+      const repairTotal = byChapter.size;
+      let repairDone = 0;
+      let repairEtaAt = null;
+      await poolMap([...byChapter], concurrency, async ([cid, issues]) => {
         const entry = flat.find(x => x.c.id === cid);
-        if (!entry) continue;
-        onProgress({ phase: 'validate', done, total, chapter: cid, message: `Validation round ${round + 1}: re-generating ${entry.c.num}.` });
+        if (!entry) return;
+        onProgress({ phase: 'validate', done, total, chapter: cid, etaAt: repairEtaAt, message: `Validation round ${round + 1}: re-generating ${entry.c.num}.` });
         const sourceSel = selectSourceChunks(source, entry.c, outline);
         const got = await writeChapterBatch(cfg, req, skill, outline, entry.s, [entry.c], callModel, limits, registry, sourceSel, issues.slice(0, 8));
         written[cid] = got[0];
         state = { phase: 'validate', outline, chapters: written };
         persist(state);
-      }
+        repairDone++;
+        repairEtaAt = etaAtAfter(repairStart, repairDone, repairTotal - repairDone);
+        onProgress({ phase: 'validate', done, total, chapter: cid, etaAt: repairEtaAt, message: `Repaired ${repairDone}/${repairTotal} chapter(s)…` });
+      });
       const next = draftBook(outline, written);
       next.glossary = assembleGlossary(next);
       depth = validateDepth(next);
@@ -1016,8 +1133,8 @@ export async function buildBook({
     }
   }
   if (!depth.ok) {
-    const first = depth.issues.slice(0, 6).map(i => i.message).join(' | ');
-    throw new Error(`The assembled book failed the depth contract (${depth.issues.length} issues): ${first}`);
+    const first = depth.blocking.slice(0, 6).map(i => i.message).join(' | ');
+    throw new Error(`The assembled book failed the depth contract (${depth.blocking.length} issues): ${first}`);
   }
 
   book.glossary = assembleGlossary(book);
@@ -1114,7 +1231,7 @@ function claimJob() {
   if (!job) return null;
   const changed = sqlite.prepare("UPDATE jobs SET status='running',attempts=attempts+1,locked_at=?,next_attempt_at=NULL,log='Contacting the model…',progress=NULL,updated_at=? WHERE id=? AND status='queued'").run(t, t, job.id);
   if (!changed.changes) return null;
-  sqlite.prepare("UPDATE sites SET status='running',updated_at=? WHERE id=?").run(t, job.site_id);
+  sqlite.prepare("UPDATE sites SET status='running',error='',updated_at=? WHERE id=?").run(t, job.site_id);
   return { ...job, attempts: (job.attempts || 0) + 1 };
 }
 /** Milliseconds until the earliest queued job becomes eligible (0 when one is ready now). */
@@ -1168,7 +1285,7 @@ async function runJob(job) {
     const draft = loadDraft(site.id);
     // Live status, not just chapter boundaries: the builder shows the phase,
     // the current chapter and streamed characters while a call is in flight.
-    let live = { phase: 'outline', done: 0, total: 0, chapter: '', activity: null };
+    let live = { phase: 'outline', done: 0, total: 0, chapter: '', activity: null, etaAt: null };
     const writeLive = message => {
       try {
         sqlite.prepare('UPDATE jobs SET log=?,progress=?,updated_at=? WHERE id=?')
@@ -1184,7 +1301,10 @@ async function runJob(job) {
       saveDraft: state => saveDraft(site.id, state),
       source: site.source_text || '',
       onProgress: p => {
-        live = { phase: p.phase || live.phase, done: p.done || 0, total: p.total || 0, chapter: p.chapter || '', activity: null };
+        live = {
+          phase: p.phase || live.phase, done: p.done || 0, total: p.total || 0,
+          chapter: p.chapter || '', activity: null, etaAt: p.etaAt || null
+        };
         writeLive(p.message);
       },
       onActivity: a => {

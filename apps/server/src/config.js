@@ -72,6 +72,18 @@ export const JOB_LEASE_MS = Math.max(60000, Number(process.env.JOB_LEASE_MS || 6
 export const MAX_BOOK_CHAPTERS = Math.max(LIMITS.chapters.floor, Math.min(LIMITS.chapters.settingMax, Number(process.env.MAX_BOOK_CHAPTERS || LIMITS.chapters.defaultMax)));
 /** Chapters written per model request. Default 1: one deep chapter per call. */
 export const CHAPTER_BATCH_SIZE = Math.max(1, Math.min(4, Number(process.env.CHAPTER_BATCH_SIZE || 1)));
+/** Chapter calls in flight inside one book. Provider latency dominates generation
+ *  time; more concurrency trades tokens/s for a higher chance of 429s. */
+export const CHAPTER_CONCURRENCY = Math.max(1, Math.min(8, Number(process.env.CHAPTER_CONCURRENCY || 4)));
+/** Ask for this multiple of the minimum word budget so small model undershoots
+ *  do not fail validation. 1.15 = 15% headroom. */
+export const CHAPTER_WORD_MARGIN = Math.max(1, Math.min(1.5, Number(process.env.CHAPTER_WORD_MARGIN || 1.15)));
+/** Longest wait (ms) between a 429/5xx retry. Retry-After wins when larger. */
+export const LLM_RETRY_BACKOFF_MAX_MS = Math.max(1000, Number(process.env.LLM_RETRY_BACKOFF_MAX_MS || 30000));
+/** Accepted shortfall from the nominal word budget: EN floor. */
+export const BUDGET_TOLERANCE = Math.max(0.5, Math.min(1, Number(process.env.CHAPTER_BUDGET_TOLERANCE || 0.9)));
+/** Hungarian floor as a share of the nominal budget (fewer words, same content). */
+export const HU_BUDGET_RATIO = Math.max(0.5, Math.min(1, Number(process.env.CHAPTER_HU_BUDGET_RATIO || 0.8)));
 export const MAX_UPLOAD = 8 * 1024 * 1024;
 export const MAX_FILES = 6;
 export const MAX_CONCURRENT_UPLOADS = Math.max(1, Math.min(20, Number(process.env.MAX_CONCURRENT_UPLOADS || 4)));

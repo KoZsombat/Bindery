@@ -30,7 +30,7 @@ test('a chapter below its word budget fails', () => {
   assert.ok(result.budgets[`${book.sections[0].id}/${c.id}`].hu < result.budgets[`${book.sections[0].id}/${c.id}`].budget);
 });
 
-test('a term used before its defining chapter fails', () => {
+test('a term used before its defining chapter is a warning, not a failure', () => {
   const book = site();
   const later = book.sections[0].chapters[1].terms[0];
   book.sections[0].chapters[0].theory.push({
@@ -38,7 +38,7 @@ test('a term used before its defining chapter fails', () => {
     body: { hu: 'Ez a szöveg említi a ' + later.term.hu + ' fogalmat.', en: 'This text mentions ' + later.term.en + ' before it is defined.' }
   });
   const result = validateDepth(book);
-  assert.equal(result.ok, false);
+  assert.equal(result.ok, true, JSON.stringify(result.blocking));
   assert.ok(result.issues.some(i => i.code === 'term.beforeDefined'), JSON.stringify(result.issues.slice(0, 3)));
 });
 
@@ -74,4 +74,17 @@ test('a glossary requirement pointing forward fails', () => {
   const result = validateDepth(book);
   assert.equal(result.ok, false);
   assert.ok(result.issues.some(i => i.code === 'term.requires'));
+});
+
+test('a requirement inside the same chapter is allowed', () => {
+  const book = site();
+  const chapter = book.sections.flatMap(s => s.chapters).find(c => c.terms.length >= 2);
+  assert.ok(chapter, 'mock book has a chapter with two terms');
+  const [owner, prerequisite] = chapter.terms;
+  owner.requires = [prerequisite.id];
+  const entry = book.glossary.find(g => g.id === owner.id);
+  assert.ok(entry, 'term has a glossary entry');
+  entry.requires = [prerequisite.id];
+  const result = validateDepth(book);
+  assert.equal(result.issues.some(i => i.code === 'term.requires'), false, JSON.stringify(result.issues.slice(0, 3)));
 });
