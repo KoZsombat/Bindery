@@ -43,6 +43,29 @@ function isBlockedAddress(address) {
   return true;
 }
 
+/** Resolver errors worth a retry; a typo (NXDOMAIN) still fails fast enough. */
+const TRANSIENT_DNS = new Set(['EAI_AGAIN', 'ENOTFOUND', 'ESERVFAIL', 'ETIMEOUT', 'ECONNREFUSED']);
+
+/**
+ * Resolve a hostname, retrying transient resolver failures. Resolution runs on
+ * every model call, so a single blip must not fail a whole book: the draft is
+ * fine, the endpoint is fine, only the local resolver hiccuped.
+ */
+async function lookupHost(host, attempts = 3) {
+  let lastError;
+  for (let attempt = 0; attempt < attempts; attempt++) {
+    try {
+      return (await dns.lookup(host, { all: true })).map(row => row.address);
+    } catch (e) {
+      lastError = e;
+      if (!TRANSIENT_DNS.has(e.code) || attempt === attempts - 1) break;
+      await new Promise(r => setTimeout(r, 250 * (attempt + 1)));
+    }
+  }
+  const reason = lastError?.code || lastError?.message || 'unknown error';
+  throw new Error(`API base URL host could not be resolved: ${host} (${reason}).`);
+}
+
 /**
  * Validates a user-supplied OpenAI-compatible endpoint before it is saved or
  * fetched. Blocks loopback, private, link-local, CGNAT, multicast and IPv6
@@ -71,11 +94,7 @@ export async function assertSafeLlmBase(base) {
   if (literal) {
     addresses = [host];
   } else {
-    try {
-      addresses = (await dns.lookup(host, { all: true })).map(row => row.address);
-    } catch {
-      throw new Error('API base URL host could not be resolved.');
-    }
+    addresses = await lookupHost(host);
   }
   if (!LLM_ALLOW_PRIVATE_HOSTS && addresses.some(isBlockedAddress)) {
     throw new Error('API base URL points to a private, loopback or link-local address.');

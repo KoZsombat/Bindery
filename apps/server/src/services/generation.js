@@ -813,6 +813,15 @@ async function generateOutline(cfg, req, skill, call, maxChapters, onProgress) {
   throw new Error('Could not build a book outline: ' + lastError);
 }
 
+/** Network-level failures worth retrying; HTTP status errors are not. */
+function isTransientCallError(e) {
+  if (e?.status) return false;
+  const code = e?.cause?.code || e?.code;
+  if (['ENOTFOUND', 'EAI_AGAIN', 'ECONNRESET', 'ECONNREFUSED', 'ETIMEDOUT', 'EPIPE',
+    'UND_ERR_CONNECT_TIMEOUT', 'UND_ERR_SOCKET', 'UND_ERR_CLOSED'].includes(code)) return true;
+  return /fetch failed|could not be resolved|socket hang up|timed out|aborted/i.test(String(e?.message || ''));
+}
+
 async function writeChapterBatch(cfg, req, skill, outline, section, batch, call, limits, registry, source, issues) {
   const messages = [
     { role: 'system', content: 'You write chapters for a bilingual learning book. Return only valid JSON.' },
@@ -820,7 +829,16 @@ async function writeChapterBatch(cfg, req, skill, outline, section, batch, call,
   ];
   let lastError = 'No output.';
   for (let attempt = 0; attempt < LIMITS.model.chapterRetries; attempt++) {
-    const text = await call(cfg, messages);
+    let text;
+    try {
+      text = await call(cfg, messages);
+    } catch (e) {
+      // A resolver/socket blip must not cost a whole job attempt: retry here.
+      if (!isTransientCallError(e) || attempt === LIMITS.model.chapterRetries - 1) throw e;
+      console.error('Chapter call failed, retrying:', e.message || e);
+      await new Promise(r => setTimeout(r, 1000 * (attempt + 1)));
+      continue;
+    }
     let raw;
     try { raw = extractJSON(text); } catch (e) {
       lastError = 'The reply was not valid JSON (likely truncated): ' + String(e.message || e).slice(0, 200);
