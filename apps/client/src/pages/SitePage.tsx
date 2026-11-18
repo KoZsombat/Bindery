@@ -140,7 +140,7 @@ export function SitePage() {
 
       {error ? <Alert tone="error">{error}</Alert> : null}
 
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid items-start gap-4 lg:grid-cols-2">
         <Card className="space-y-3">
           <h2 className="text-lg font-semibold text-foreground">{t('Routing')}</h2>
           <p className="text-sm text-muted-foreground">{t('The site is served at this path. There is no ZIP or download.')}</p>

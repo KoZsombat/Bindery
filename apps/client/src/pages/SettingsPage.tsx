@@ -154,7 +154,8 @@ export function SettingsPage() {
 
       {error ? <Alert tone="error">{error}</Alert> : null}
 
-      <Card className="max-w-2xl">
+      <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1.4fr)_minmax(320px,1fr)]">
+      <Card>
         <form className="space-y-4" onSubmit={save}>
           <Field label={t('API base URL')} htmlFor="apiBase" hint="https://api.commandcode.ai/provider/v1">
             <Input
@@ -210,7 +211,7 @@ export function SettingsPage() {
         </form>
       </Card>
 
-      <Card className="max-w-2xl">
+      <Card>
         <div className="space-y-5">
           <div>
             <h2 className="text-sm font-semibold">{t('Key sharing')}</h2>
@@ -298,6 +299,7 @@ export function SettingsPage() {
           </div>
         </div>
       </Card>
+      </div>
     </div>
   );
 }

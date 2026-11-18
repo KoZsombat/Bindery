@@ -50,25 +50,22 @@ function UserRow({ user, onChanged }: { user: AdminUser; onChanged: () => Promis
   }
 
   return (
-    <div className="p-4 sm:p-6">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div className="min-w-0">
-          <div className="truncate text-sm font-medium text-foreground">{user.email}</div>
-          <div className="text-xs text-muted-foreground">{user.name || '—'}</div>
-          <div className="mt-2 flex flex-wrap gap-1">
-            <Badge tone={user.role === 'admin' ? 'accent' : 'neutral'}>{t(user.role)}</Badge>
-            <Badge tone={user.disabled ? 'danger' : 'success'}>{user.disabled ? t('disabled') : t('active')}</Badge>
-          </div>
+    <div className="flex flex-wrap items-center gap-x-6 gap-y-3 p-4 sm:px-6">
+      <div className="min-w-56 flex-1">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="truncate text-sm font-medium text-foreground">{user.email}</span>
+          <Badge tone={user.role === 'admin' ? 'accent' : 'neutral'}>{t(user.role)}</Badge>
+          <Badge tone={user.disabled ? 'danger' : 'success'}>{user.disabled ? t('disabled') : t('active')}</Badge>
         </div>
-        <div className="text-right text-xs text-muted-foreground">
-          <div><b className="font-mono text-sm text-foreground">{user.usedToday}</b> {t('Used today')}</div>
-          <div className="mt-1">{t('Created')} {formatDateShort(user.createdAt, lang)}</div>
+        <div className="mt-0.5 text-xs text-muted-foreground">
+          {user.name ? `${user.name} · ` : ''}{t('Created')} {formatDateShort(user.createdAt, lang)} ·{' '}
+          <b className="font-mono text-foreground">{user.usedToday}</b> {t('Used today')}
         </div>
       </div>
 
-      <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-        <div className="space-y-2">
-          <div className="text-xs font-medium text-foreground">{t('Sites per day')}</div>
+      <div className="flex flex-wrap items-end gap-3">
+        <div>
+          <div className="mb-1 text-xs text-muted-foreground">{t('Sites per day')}</div>
           <div className="flex items-center gap-2">
             <Input
               type="number"
@@ -76,7 +73,7 @@ function UserRow({ user, onChanged }: { user: AdminUser; onChanged: () => Promis
               max={1000}
               value={limit}
               onChange={event => setLimit(event.target.value)}
-              className="h-9 w-full max-w-28"
+              className="h-8 w-20 px-2 text-xs"
               aria-label={t('Sites per day')}
             />
             <Button size="sm" variant="outline" loading={busy === 'limit'} onClick={() => void patch({ dailyLimit: Number(limit) }, 'limit')}>
@@ -84,8 +81,8 @@ function UserRow({ user, onChanged }: { user: AdminUser; onChanged: () => Promis
             </Button>
           </div>
         </div>
-        <div className="space-y-2">
-          <div className="text-xs font-medium text-foreground">{t('New password (10+)')}</div>
+        <div>
+          <div className="mb-1 text-xs text-muted-foreground">{t('New password (10+)')}</div>
           <div className="flex items-center gap-2">
             <Input
               type="password"
@@ -93,7 +90,7 @@ function UserRow({ user, onChanged }: { user: AdminUser; onChanged: () => Promis
               value={password}
               onChange={event => setPassword(event.target.value)}
               placeholder={t('New password (10+)')}
-              className="h-9 w-full"
+              className="h-8 w-40 px-2 text-xs"
               autoComplete="new-password"
             />
             <Button
@@ -107,7 +104,7 @@ function UserRow({ user, onChanged }: { user: AdminUser; onChanged: () => Promis
             </Button>
           </div>
         </div>
-        <div className="flex flex-wrap items-end gap-2 md:col-span-2 xl:col-span-1">
+        <div className="flex items-center gap-2">
           <Button size="sm" variant="secondary" loading={busy === 'link'} onClick={() => void loginLink()}>
             {t('Copy login link')}
           </Button>
