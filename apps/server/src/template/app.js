@@ -1249,7 +1249,7 @@
     if (tocLabel) tocLabel.textContent = T('Tartalomjegyzék', 'Contents');
     const footNote = $('#footNote');
     if (footNote) footNote.textContent = T('a Learning Book Builderrel készült', 'generated with Learning Book Builder');
-    $('#langBtn').textContent = lang === 'en' ? 'HU' : 'EN';
+    $('#langSelect').value = lang;
     $('#searchInput').placeholder = T('Keresés…', 'Search…');
   }
 
@@ -1392,7 +1392,7 @@
     setChrome(); renderModes(); renderTOC();
     const themeBtn = $('#themeBtn');
     if (themeBtn) themeBtn.addEventListener('click', () => { theme = theme === 'dark' ? 'light' : 'dark'; localStorage.setItem('lbs.theme', theme); applyTheme(); });
-    $('#langBtn').addEventListener('click', () => { lang = lang === 'en' ? 'hu' : 'en'; localStorage.setItem('lbs.lang', lang); setChrome(); renderModes(); renderTOC(); route(); });
+    $('#langSelect').addEventListener('change', event => { lang = event.target.value === 'en' ? 'en' : 'hu'; localStorage.setItem('lbs.lang', lang); setChrome(); renderModes(); renderTOC(); route(); });
     $('#brandLink').addEventListener('click', e => { e.preventDefault(); location.hash = '#/'; });
     $('#searchInput').addEventListener('keydown', e => {
       if (e.key !== 'Enter') return;
