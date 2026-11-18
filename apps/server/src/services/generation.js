@@ -761,7 +761,7 @@ function buildTermRegistry(outline) {
   return registry;
 }
 
-function chapterPrompt(req, skill, outline, section, batch, registry, source, issues = []) {
+function chapterPrompt(req, skill, outline, section, batch, registry, source, issues = [], wordMargin = CHAPTER_WORD_MARGIN) {
   const target = batch.map(c => `- id "${c.id}", num "${c.num}", title HU "${c.title.hu}" / EN "${c.title.en}"${c.focus ? `, focus: ${c.focus}` : ''}\n  new terms: ${(c.newTerms || []).map(t => `${t.id} (${t.term.en})`).join(', ') || '(none)'}`).join('\n');
   const outlineText = outline.sections.map(s =>
     `${s.num}. ${s.title.hu} / ${s.title.en}\n` + s.chapters.map(c => `   ${c.num} ${c.id} — ${c.title.hu} / ${c.title.en}`).join('\n')
@@ -783,7 +783,7 @@ function chapterPrompt(req, skill, outline, section, batch, registry, source, is
   const issueText = issues.length ? `\nFIX THESE VALIDATION ISSUES FROM THE PREVIOUS ATTEMPT:\n- ${issues.join('\n- ')}\n` : '';
   const termCount = batch.reduce((n, c) => n + (c.newTerms || []).length, 0);
   const budget = chapterWordBudget(termCount);
-  const minWords = Math.ceil(budget * CHAPTER_WORD_MARGIN);
+  const minWords = Math.ceil(budget * wordMargin);
   const maxWords = Math.round(budget * 1.5);
   return `SKILL (structure and style):\n${skill.slice(0, LIMITS.model.promptSkillChars)}\n\n${DEPTH_RULES}\n\nREQUEST:\n${requestText(req)}\n\nRELEVANT SOURCE EXCERPTS (selected for these chapters; the rest of the source is covered by other chapters):\n${source.text}\n\nBOOK OUTLINE (do not change its scope):\n${outlineText}\n\nTERMS ALREADY DEFINED (link to them, do not redefine):\n${definedText}\n\nTERMS YOU MUST DEFINE IN THIS PASS (exact ids):\n${newTermText}\n\nTERMS DEFINED LATER (do not use these names in this pass, not even as examples):\n${laterText}\n\nWRITE EXACTLY THESE CHAPTERS (section ${section.num}, ${section.title.hu} / ${section.title.en}):\n${target}\n${issueText}
 Return ONE JSON object: {"chapters":[ ... ]} with exactly ${batch.length} chapter(s), in the same order and with the exact ids above.
@@ -868,7 +868,7 @@ async function poolMap(items, limit, fn) {
 async function writeChapterBatch(cfg, req, skill, outline, section, batch, call, limits, registry, source, issues) {
   const messages = [
     { role: 'system', content: 'You write chapters for a bilingual learning book. Return only valid JSON.' },
-    { role: 'user', content: chapterPrompt(req, skill, outline, section, batch, registry, source, issues) }
+    { role: 'user', content: chapterPrompt(req, skill, outline, section, batch, registry, source, issues, limits.wordMargin) }
   ];
   let lastError = 'No output.';
   for (let attempt = 0; attempt < LIMITS.model.chapterRetries; attempt++) {
@@ -1002,8 +1002,13 @@ export async function buildBook({
   batchSize = batchSize ?? settings.chapterBatchSize;
   maxTokens = maxTokens ?? settings.llmMaxTokens;
   const concurrency = Math.max(1, Math.min(8, Number(settings.chapterConcurrency) || CHAPTER_CONCURRENCY));
+  const depthOptions = { budgetTolerance: settings.budgetTolerance, huBudgetRatio: settings.huBudgetRatio };
+  const checkDepth = book => validateDepth(book, depthOptions);
   const callModel = (c, m) => call(c, m, maxTokens, onActivity);
-  const limits = { maxChapters, maxPerSection: Math.min(LIMITS.chapters.perSection, maxChapters) };
+  const limits = {
+    maxChapters, maxPerSection: Math.min(LIMITS.chapters.perSection, maxChapters),
+    wordMargin: settings.chapterWordMargin
+  };
   const persist = state => { try { saveDraft && saveDraft(state); } catch (e) { console.error('Draft save failed:', e.message); } };
 
   let outline = draft?.outline ? normalizeOutline(draft.outline, req, maxChapters) : null;
@@ -1072,13 +1077,13 @@ export async function buildBook({
       chapter.num = outlineChapter.num;
       written[chapter.id] = chapter;
       const probeBook = draftBook(outline, written);
-      const issues = issuesForChapter(validateDepth(probeBook), chapter);
+      const issues = issuesForChapter(checkDepth(probeBook), chapter);
       if (issues.length) {
         onProgress({ phase: 'validate', done, total, chapter: chapter.id, message: `Re-generating ${chapter.num}: ${issues.length} depth issue(s).` });
         const retry = await writeChapterBatch(cfg, req, skill, outline, s, [outlineChapter], callModel, limits, registry,
           selectSourceChunks(source, outlineChapter, outline), issues.slice(0, 8));
         written[chapter.id] = retry[0];
-        const after = issuesForChapter(validateDepth(draftBook(outline, written)), retry[0]);
+        const after = issuesForChapter(checkDepth(draftBook(outline, written)), retry[0]);
         if (after.length) throw new Error(`Chapter ${chapter.num} (${chapter.id}) still fails the depth contract: ${after.slice(0, 4).join(' | ')}`);
       }
       done++;
@@ -1100,7 +1105,7 @@ export async function buildBook({
   onProgress({ phase: 'glossary', done: total, total, message: `Glossary assembled: ${book.glossary.length} terms.` });
 
   // 4 — validation pass with one targeted regeneration round.
-  let depth = validateDepth(book);
+  let depth = checkDepth(book);
   if (!depth.ok) {
     const byChapter = new Map();
     for (const issue of depth.blocking) {
@@ -1128,7 +1133,7 @@ export async function buildBook({
       });
       const next = draftBook(outline, written);
       next.glossary = assembleGlossary(next);
-      depth = validateDepth(next);
+      depth = checkDepth(next);
       if (depth.ok) { Object.assign(book, next); break; }
     }
   }

@@ -41,6 +41,9 @@ COPY shared ./shared
 COPY skills ./skills
 COPY examples/matekbazis ./examples/matekbazis
 
+# Forces a fresh runtime layer per build and proves which image is running.
+RUN date -u +%FT%TZ > BUILD
+
 RUN mkdir -p /data && chown -R node:node /data
 USER node
 VOLUME ["/data"]

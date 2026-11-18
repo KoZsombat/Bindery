@@ -110,7 +110,7 @@ export function AdminPage() {
   const [error, setError] = useState('');
   const [creating, setCreating] = useState(false);
   const [form, setForm] = useState({ email: '', name: '', password: '', dailyLimit: '3' });
-  const [settingsForm, setSettingsForm] = useState({ maxBookChapters: '', chapterBatchSize: '', chapterConcurrency: '', llmMaxTokens: '' });
+  const [settingsForm, setSettingsForm] = useState({ maxBookChapters: '', chapterBatchSize: '', chapterConcurrency: '', chapterWordMargin: '', budgetTolerance: '', huBudgetRatio: '', llmMaxTokens: '' });
   const [limits, setLimits] = useState<AdminSettingLimits | null>(null);
   const [savingSettings, setSavingSettings] = useState(false);
 
@@ -134,6 +134,9 @@ export function AdminPage() {
         maxBookChapters: String(data.settings.maxBookChapters),
         chapterBatchSize: String(data.settings.chapterBatchSize),
         chapterConcurrency: String(data.settings.chapterConcurrency),
+        chapterWordMargin: String(data.settings.chapterWordMargin),
+        budgetTolerance: String(data.settings.budgetTolerance),
+        huBudgetRatio: String(data.settings.huBudgetRatio),
         llmMaxTokens: String(data.settings.llmMaxTokens),
       });
     } catch (e) {
@@ -183,6 +186,9 @@ export function AdminPage() {
         maxBookChapters: Number(settingsForm.maxBookChapters),
         chapterBatchSize: Number(settingsForm.chapterBatchSize),
         chapterConcurrency: Number(settingsForm.chapterConcurrency),
+        chapterWordMargin: Number(settingsForm.chapterWordMargin),
+        budgetTolerance: Number(settingsForm.budgetTolerance),
+        huBudgetRatio: Number(settingsForm.huBudgetRatio),
         llmMaxTokens: Number(settingsForm.llmMaxTokens),
       });
       setLimits(data.limits);
@@ -190,6 +196,9 @@ export function AdminPage() {
         maxBookChapters: String(data.settings.maxBookChapters),
         chapterBatchSize: String(data.settings.chapterBatchSize),
         chapterConcurrency: String(data.settings.chapterConcurrency),
+        chapterWordMargin: String(data.settings.chapterWordMargin),
+        budgetTolerance: String(data.settings.budgetTolerance),
+        huBudgetRatio: String(data.settings.huBudgetRatio),
         llmMaxTokens: String(data.settings.llmMaxTokens),
       });
       push('success', t('Limits saved.'));
@@ -247,6 +256,39 @@ export function AdminPage() {
                 max={limits.chapterConcurrency.max}
                 value={settingsForm.chapterConcurrency}
                 onChange={event => setSettingsForm({ ...settingsForm, chapterConcurrency: event.target.value })}
+              />
+            </Field>
+            <Field label={t('Word budget headroom')} htmlFor="set-word-margin">
+              <Input
+                id="set-word-margin"
+                type="number"
+                step={limits.chapterWordMargin.step ?? 0.05}
+                min={limits.chapterWordMargin.min}
+                max={limits.chapterWordMargin.max}
+                value={settingsForm.chapterWordMargin}
+                onChange={event => setSettingsForm({ ...settingsForm, chapterWordMargin: event.target.value })}
+              />
+            </Field>
+            <Field label={t('English budget floor')} htmlFor="set-en-floor">
+              <Input
+                id="set-en-floor"
+                type="number"
+                step={limits.budgetTolerance.step ?? 0.05}
+                min={limits.budgetTolerance.min}
+                max={limits.budgetTolerance.max}
+                value={settingsForm.budgetTolerance}
+                onChange={event => setSettingsForm({ ...settingsForm, budgetTolerance: event.target.value })}
+              />
+            </Field>
+            <Field label={t('Hungarian budget floor')} htmlFor="set-hu-floor">
+              <Input
+                id="set-hu-floor"
+                type="number"
+                step={limits.huBudgetRatio.step ?? 0.05}
+                min={limits.huBudgetRatio.min}
+                max={limits.huBudgetRatio.max}
+                value={settingsForm.huBudgetRatio}
+                onChange={event => setSettingsForm({ ...settingsForm, huBudgetRatio: event.target.value })}
               />
             </Field>
             <Field label={t('Output tokens per chapter pass')} htmlFor="set-max-tokens">

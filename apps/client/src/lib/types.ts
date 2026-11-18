@@ -94,6 +94,9 @@ export interface AdminSettings {
   maxBookChapters: number;
   chapterBatchSize: number;
   chapterConcurrency: number;
+  chapterWordMargin: number;
+  budgetTolerance: number;
+  huBudgetRatio: number;
   llmMaxTokens: number;
 }
 
@@ -101,6 +104,7 @@ export interface AdminSettingLimit {
   min: number;
   max: number;
   default: number;
+  step?: number;
 }
 
 export type AdminSettingLimits = Record<keyof AdminSettings, AdminSettingLimit>;

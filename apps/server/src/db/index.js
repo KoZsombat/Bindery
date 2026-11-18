@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import Database from 'better-sqlite3';
-import { DATA_DIR, DB_PATH, SITES_DIR, UPLOADS_DIR, DEFAULT_DAILY_LIMIT, MAX_BOOK_CHAPTERS, CHAPTER_BATCH_SIZE, CHAPTER_CONCURRENCY, LLM_MAX_TOKENS } from '../config.js';
+import { DATA_DIR, DB_PATH, SITES_DIR, UPLOADS_DIR, DEFAULT_DAILY_LIMIT, MAX_BOOK_CHAPTERS, CHAPTER_BATCH_SIZE, CHAPTER_CONCURRENCY, CHAPTER_WORD_MARGIN, BUDGET_TOLERANCE, HU_BUDGET_RATIO, LLM_MAX_TOKENS } from '../config.js';
 
 for (const dir of [DATA_DIR, SITES_DIR, UPLOADS_DIR]) fs.mkdirSync(dir, { recursive: true });
 
@@ -156,18 +156,27 @@ export const SETTING_DEFS = {
   max_book_chapters: { key: 'maxBookChapters', min: 8, max: 180, fallback: MAX_BOOK_CHAPTERS },
   chapter_batch_size: { key: 'chapterBatchSize', min: 1, max: 4, fallback: CHAPTER_BATCH_SIZE },
   chapter_concurrency: { key: 'chapterConcurrency', min: 1, max: 8, fallback: CHAPTER_CONCURRENCY },
+  chapter_word_margin: { key: 'chapterWordMargin', min: 1, max: 1.5, fallback: CHAPTER_WORD_MARGIN, decimals: 2, step: 0.05 },
+  budget_tolerance: { key: 'budgetTolerance', min: 0.5, max: 1, fallback: BUDGET_TOLERANCE, decimals: 2, step: 0.05 },
+  hu_budget_ratio: { key: 'huBudgetRatio', min: 0.5, max: 1, fallback: HU_BUDGET_RATIO, decimals: 2, step: 0.05 },
   llm_max_tokens: { key: 'llmMaxTokens', min: 2048, max: 200000, fallback: LLM_MAX_TOKENS },
 };
 for (const [name, def] of Object.entries(SETTING_DEFS)) {
   sqlite.prepare('INSERT OR IGNORE INTO settings (key,value,updated_at) VALUES (?,?,?)')
     .run(name, String(def.fallback), now());
 }
+function clampSetting(def, raw) {
+  const n = Number(raw);
+  if (!Number.isFinite(n)) return def.fallback;
+  const clamped = Math.max(def.min, Math.min(def.max, n));
+  const digits = def.decimals || 0;
+  return digits ? Math.round(clamped * 10 ** digits) / 10 ** digits : Math.trunc(clamped);
+}
 export function getSettings() {
   const saved = new Map(sqlite.prepare('SELECT key,value FROM settings').all().map(row => [row.key, row.value]));
   const out = {};
   for (const [name, def] of Object.entries(SETTING_DEFS)) {
-    const n = Number(saved.get(name));
-    out[def.key] = Number.isFinite(n) ? Math.max(def.min, Math.min(def.max, Math.trunc(n))) : def.fallback;
+    out[def.key] = saved.has(name) ? clampSetting(def, saved.get(name)) : def.fallback;
   }
   return out;
 }
@@ -175,14 +184,15 @@ export function updateSettings(patch) {
   const t = now();
   for (const [name, def] of Object.entries(SETTING_DEFS)) {
     if (patch[def.key] === undefined) continue;
-    const n = Math.max(def.min, Math.min(def.max, Math.trunc(Number(patch[def.key]))));
     sqlite.prepare('INSERT INTO settings (key,value,updated_at) VALUES (?,?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at')
-      .run(name, String(n), t);
+      .run(name, String(clampSetting(def, patch[def.key])), t);
   }
   return getSettings();
 }
 export function settingsMeta() {
-  return Object.fromEntries(Object.values(SETTING_DEFS).map(def => [def.key, { min: def.min, max: def.max, default: def.fallback }]));
+  return Object.fromEntries(Object.values(SETTING_DEFS).map(def => [def.key, {
+    min: def.min, max: def.max, default: def.fallback, step: def.step || 1
+  }]));
 }
 
 export const slugify = s => String(s || 'site')

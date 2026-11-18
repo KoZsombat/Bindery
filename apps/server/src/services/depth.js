@@ -90,7 +90,9 @@ function escapeRe(s) {
   return String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-export function validateDepth(site) {
+export function validateDepth(site, options = {}) {
+  const budgetTolerance = Number.isFinite(options.budgetTolerance) ? options.budgetTolerance : BUDGET_TOLERANCE;
+  const huBudgetRatio = Number.isFinite(options.huBudgetRatio) ? options.huBudgetRatio : HU_BUDGET_RATIO;
   const issues = [];
   const add = (code, message, sid = '', cid = '') => issues.push({ code, message, sid, cid });
   const sections = site?.sections || [];
@@ -177,8 +179,8 @@ export function validateDepth(site) {
     const budget = chapterBudget(c);
     const hu = wordsOf(chapterProse(c, 'hu').join(' '));
     const en = wordsOf(chapterProse(c, 'en').join(' '));
-    const enMin = Math.round(budget * BUDGET_TOLERANCE);
-    const huMin = Math.round(budget * HU_BUDGET_RATIO);
+    const enMin = Math.round(budget * budgetTolerance);
+    const huMin = Math.round(budget * huBudgetRatio);
     budgets[`${sid}/${cid}`] = { budget, hu, en, terms: (c.terms || []).length };
     if (en < enMin || hu < huMin) {
       add('chapter.budget', `${label}: ${hu} HU / ${en} EN words, minimum ${huMin} HU / ${enMin} EN (budget ${budget}). Add explanation, do not compress.`, sid, cid);

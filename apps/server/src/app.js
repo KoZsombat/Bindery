@@ -20,6 +20,10 @@ app.set('view engine', 'ejs');
 app.set('views', VIEWS_DIR);
 app.set('trust proxy', TRUST_PROXY);
 
+/** Build stamp written by the Dockerfile; 'dev' outside an image. */
+let BUILD = 'dev';
+try { BUILD = fs.readFileSync(path.join(process.cwd(), 'BUILD'), 'utf8').trim() || 'dev'; } catch {}
+
 /* ---------------------------------------------------------------- headers */
 app.use((req, res, next) => {
   res.locals.cspNonce = crypto.randomBytes(16).toString('base64');
@@ -109,7 +113,7 @@ app.get('/readyz', (req, res) => {
     const workerOk = heartbeat > 0 && Date.now() - heartbeat < 60000;
     const queue = sqlite.prepare("SELECT status, COUNT(*) AS n FROM jobs WHERE status IN ('queued','running') GROUP BY status").all();
     const ok = db && workerOk;
-    res.status(ok ? 200 : 503).json({ ok, db, worker: { ...workerSnapshot(), ok: workerOk }, queue });
+    res.status(ok ? 200 : 503).json({ ok, db, build: BUILD, worker: { ...workerSnapshot(), ok: workerOk }, queue });
   } catch (e) {
     res.status(503).json({ ok: false, error: e.message });
   }
