@@ -339,9 +339,29 @@ export function publicSite(s) {
   };
 }
 
+const hungarianLetters = /[áéíóöőúüű]/i;
+
+/**
+ * Books generated before bilingual titles stored one string. The request title
+ * in the sites row is often the same title in the other language, so pair them
+ * when the scripts make the direction unambiguous.
+ */
+function inferTitleI18n(jsonTitle, requestTitle) {
+  if (jsonTitle && typeof jsonTitle === 'object') return { hu: jsonTitle.hu || '', en: jsonTitle.en || '' };
+  const a = typeof jsonTitle === 'string' ? jsonTitle.trim() : '';
+  const b = String(requestTitle || '').trim();
+  if (!a) return null;
+  if (!b || a.toLowerCase() === b.toLowerCase()) return null;
+  const aHu = hungarianLetters.test(a);
+  const bHu = hungarianLetters.test(b);
+  if (aHu && !bHu) return { hu: a, en: b };
+  if (!aHu && bHu) return { hu: b, en: a };
+  return null;
+}
+
 /** Fills listing metadata for books generated before bilingual titles existed. */
 export function backfillSiteI18n() {
-  const rows = sqlite.prepare("SELECT id,slug FROM sites WHERE title_hu IS NULL OR title_en IS NULL").all();
+  const rows = sqlite.prepare("SELECT id,slug,title FROM sites WHERE title_hu IS NULL OR title_en IS NULL").all();
   const update = sqlite.prepare(`UPDATE sites SET
       title_hu=COALESCE(?,title_hu), title_en=COALESCE(?,title_en),
       summary_hu=COALESCE(?,summary_hu), summary_en=COALESCE(?,summary_en)
@@ -349,7 +369,7 @@ export function backfillSiteI18n() {
   for (const row of rows) {
     try {
       const data = JSON.parse(fs.readFileSync(siteJsonPath(row.slug), 'utf8'));
-      const title = data.title && typeof data.title === 'object' ? data.title : null;
+      const title = inferTitleI18n(data.title, row.title);
       const summary = data.summary && typeof data.summary === 'object' ? data.summary : null;
       if (!title && !summary) continue;
       update.run(title?.hu || null, title?.en || null, summary?.hu || null, summary?.en || null, row.id);

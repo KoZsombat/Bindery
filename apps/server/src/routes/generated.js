@@ -28,6 +28,14 @@ async function serveGenerated(req, res, slug, sub) {
     } catch {
       return res.status(404).send('This site has no generated content.');
     }
+    // Older books stored one title string; use the inferred pair so the page
+    // follows the language selector like newly generated books do.
+    if (typeof data.title === 'string' && site.title_hu && site.title_en) {
+      data.title = { hu: site.title_hu, en: site.title_en };
+    }
+    if (typeof data.summary === 'string' && site.summary_hu && site.summary_en) {
+      data.summary = { hu: site.summary_hu, en: site.summary_en };
+    }
     const json = JSON.stringify(data).replace(/</g, '\\u003c');
     res.setHeader('Cache-Control', 'private, no-cache');
     res.setHeader('X-Robots-Tag', 'noindex');
