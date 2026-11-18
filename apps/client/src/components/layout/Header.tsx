@@ -60,7 +60,7 @@ export function Header() {
           <select
             value={lang}
             onChange={event => setLang(event.target.value === 'hu' ? 'hu' : 'en')}
-            className="h-9 rounded-md border border-border bg-background px-2 font-mono text-xs font-semibold text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            className="select-chevron h-9 rounded-md border border-border bg-background px-2 font-mono text-xs font-semibold text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
             aria-label={t('Language')}
             title={t('Language')}
           >
