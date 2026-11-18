@@ -17,6 +17,7 @@ import {
   getSettings, updateSettings, settingsMeta,
 } from '../db/index.js';
 import { kick, llmConfig, useMock, effectiveProfile, keySource } from '../services/generation.js';
+import { createLoginLink } from '../services/login-links.js';
 import { assertSafeLlmBase } from '../services/url-safety.js';
 import { extractUpload } from '../services/uploads.js';
 import { encrypt } from '../crypto.js';
@@ -512,6 +513,13 @@ router.get('/admin/users', requireAdminApi, (req, res) => {
 
 router.get('/admin/settings', requireAdminApi, (req, res) => {
   res.json({ settings: getSettings(), limits: settingsMeta() });
+});
+
+router.post('/admin/users/:id/login-link', requireAdminApi, rateLimit({ windowMs: 60 * 1000, max: 30, key: req => req.user.id }), (req, res) => {
+  const user = sqlite.prepare('SELECT id,email FROM user WHERE id=?').get(String(req.params.id));
+  if (!user) return fail(res, 404, 'not_found', 'User not found.');
+  const link = createLoginLink(user.id, req.user.id);
+  res.status(201).json({ url: link.url, expiresAt: link.expiresAt, email: user.email });
 });
 
 const GenerationSettingsSchema = z.object({

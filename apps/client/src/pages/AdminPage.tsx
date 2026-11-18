@@ -32,6 +32,23 @@ function UserRow({ user, onChanged }: { user: AdminUser; onChanged: () => Promis
     }
   }
 
+  async function loginLink() {
+    setBusy('link');
+    try {
+      const data = await api.post<{ url: string; expiresAt: string }>(`/api/admin/users/${user.id}/login-link`);
+      try {
+        await navigator.clipboard.writeText(data.url);
+        push('success', t('Login link copied. It works once, for 10 minutes, only when signed out.'));
+      } catch {
+        window.prompt(t('Copy this one-time login link (10 minutes):'), data.url);
+      }
+    } catch (e) {
+      push('error', describeError(t, e));
+    } finally {
+      setBusy('');
+    }
+  }
+
   return (
     <tr className="border-b border-border last:border-0">
       <td className="px-3 py-3 align-top">
@@ -94,6 +111,9 @@ function UserRow({ user, onChanged }: { user: AdminUser; onChanged: () => Promis
               {user.disabled ? t('Enable') : t('Disable')}
             </Button>
           ) : null}
+          <Button size="sm" variant="secondary" loading={busy === 'link'} onClick={() => void loginLink()}>
+            {t('Copy login link')}
+          </Button>
         </div>
       </td>
     </tr>

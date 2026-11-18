@@ -8,10 +8,11 @@ import { auth } from './auth.js';
 import {
   STATIC_DIR, SHARED_DIR, EXAMPLE_DIR, VIEWS_DIR, SITE_DOMAIN, IS_PROD, TRUST_PROXY,
 } from './config.js';
-import { sessionMiddleware, requireUser } from './middleware/session.js';
+import { sessionMiddleware } from './middleware/session.js';
 import { dbReady, sqlite } from './db/index.js';
 import { workerHeartbeat, workerSnapshot } from './services/generation.js';
 import apiRouter from './routes/api.js';
+import loginLinkRouter from './routes/login-links.js';
 import generatedRouter, { subdomainHandler } from './routes/generated.js';
 
 export const app = express();
@@ -122,8 +123,9 @@ app.get('/readyz', (req, res) => {
 app.use('/api', apiRouter);
 
 app.use(generatedRouter);
+app.use(loginLinkRouter);
 
-app.use('/shared', requireUser, express.static(SHARED_DIR, {
+app.use('/shared', express.static(SHARED_DIR, {
   maxAge: '30d',
   immutable: true,
   setHeaders(res) { res.setHeader('Cache-Control', 'private, max-age=2592000, immutable'); },

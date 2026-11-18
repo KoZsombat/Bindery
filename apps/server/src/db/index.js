@@ -143,9 +143,19 @@ CREATE TABLE IF NOT EXISTS site_drafts (
   state TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS login_links (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  token_hash TEXT NOT NULL UNIQUE,
+  created_by TEXT,
+  created_at TEXT NOT NULL,
+  expires_at TEXT NOT NULL,
+  used_at TEXT
+);
 CREATE INDEX IF NOT EXISTS idx_jobs_queue ON jobs(status, next_attempt_at);
 CREATE INDEX IF NOT EXISTS idx_jobs_site ON jobs(site_id);
 CREATE INDEX IF NOT EXISTS idx_uploads_created ON uploads(created_at);
+CREATE INDEX IF NOT EXISTS idx_login_links_hash ON login_links(token_hash);
 `);
 
 export const now = () => new Date().toISOString();

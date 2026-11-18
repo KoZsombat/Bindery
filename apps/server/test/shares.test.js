@@ -198,3 +198,47 @@ test('admins list every site with its owner', async () => {
   assert.ok(userSites.sites.some(site => site.slug === 'admin-list-check'));
   assert.equal(userSites.sites.find(site => site.slug === 'admin-list-check').ownerEmail, undefined);
 });
+
+test('an admin login link signs the recipient in once and any click burns it', async () => {
+  const admin = await login('admin@test.local', 'test-password-12345');
+  const created = await fetch(base + '/api/admin/users', {
+    method: 'POST',
+    headers: headers(admin),
+    body: JSON.stringify({ email: 'link@test.local', password: 'link-password-12345' }),
+  });
+  assert.equal(created.status, 201);
+  const id = (await created.json()).user.id;
+
+  async function issue() {
+    const made = await fetch(base + '/api/admin/users/' + id + '/login-link', {
+      method: 'POST',
+      headers: headers(admin),
+    });
+    assert.equal(made.status, 201);
+    const { url } = await made.json();
+    return new URL(url).pathname.split('/').pop();
+  }
+
+  // A signed-in click is refused and still burns the link.
+  const burnedToken = await issue();
+  const blocked = await fetch(base + '/claim/' + burnedToken, { headers: { cookie: admin }, redirect: 'manual' });
+  assert.equal(blocked.status, 409);
+  assert.match(await blocked.text(), /already signed in/);
+  const afterBlocked = await fetch(base + '/claim/' + burnedToken, { redirect: 'manual' });
+  assert.equal(afterBlocked.status, 410);
+  assert.match(await afterBlocked.text(), /already been used/);
+
+  // A fresh link signs a signed-out visitor in, then is dead.
+  const token = await issue();
+  const claim = await fetch(base + '/claim/' + token, { redirect: 'manual' });
+  assert.equal(claim.status, 302);
+  const cookie = (claim.headers.getSetCookie ? claim.headers.getSetCookie() : [])
+    .map(c => c.split(';')[0]).join('; ');
+  assert.match(cookie, /session_token=/);
+  const me = await (await fetch(base + '/api/me', { headers: { cookie } })).json();
+  assert.equal(me.user.email, 'link@test.local');
+
+  const again = await fetch(base + '/claim/' + token, { redirect: 'manual' });
+  assert.equal(again.status, 410);
+  assert.match(await again.text(), /already been used/);
+});

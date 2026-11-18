@@ -197,6 +197,10 @@ const HU: Dict = {
   'Sites per day': 'Könyvgenerálás naponta',
   'Create user': 'Felhasználó létrehozása',
   'Existing users': 'Meglévő felhasználók',
+  'Copy login link': 'Bejelentkező link másolása',
+  'Login link copied. It works once, for 10 minutes, only when signed out.':
+    'Bejelentkező link másolva. Egyszer, 10 percig működik, és csak kijelentkezett állapotban.',
+  'Copy this one-time login link (10 minutes):': 'Másold ezt az egyszer használatos bejelentkező linket (10 perc):',
   Limit: 'Keret',
   'Used today': 'Mai felhasználás',
   Status: 'Állapot',
