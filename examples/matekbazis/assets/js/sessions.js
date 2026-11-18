@@ -209,8 +209,8 @@
         T('Egy új fejezet: rövid elmélet, egy példa, majd 2 feladat.', 'One new chapter: short theory, one example, then 2 tasks.'), '#/learn/10/' + s.id, unknown === 0) +
       sessionCard(T('tanulás', 'learn'), 20, T('20 perces tanulás', '20-minute learn'),
         T('Két új fejezet: elmélet, példák, majd 4 feladat.', 'Two new chapters: theory, examples, then 4 tasks.'), '#/learn/20/' + s.id, unknown === 0) +
-      sessionCard(T('ismétlés', 'review'), 5, T('5 perces ismétlés', '5-minute review'),
-        T('Három kérdés csak ismert, befejezett fejezetekből.', 'Three questions only from known, completed chapters.'), '#/review/5/' + s.id, known === 0) +
+      sessionCard(T('ismétlés', 'review'), 5, T('Rossz nap? 5 perc is számít.', 'Bad day? 5 minutes counts.'),
+        T('Három kérdés ismert fejezetekből. Ez a minimum nap: a sorozat és a heti vállalás is számolja.', 'Three questions from known chapters. This is the minimum day: it counts toward the streak and the weekly commitment.'), '#/review/5/' + s.id, known === 0) +
       sessionCard(T('ismétlés', 'review'), 10, T('10 perces ismétlés', '10-minute review'),
         T('Hat kérdés ismert fejezetekből, vegyesen.', 'Six questions from known chapters, mixed.'), '#/review/10/' + s.id, known === 0) +
       '</div>';

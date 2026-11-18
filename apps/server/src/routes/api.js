@@ -11,6 +11,7 @@ import {
   MAX_SOURCE, MAX_LONG_TEXT, MAX_UPLOAD, MAX_FILES, MAX_CONCURRENT_UPLOADS,
   UPLOADS_DIR, DEFAULT_DAILY_LIMIT, LLM_MOCK,
 } from '../config.js';
+import { LIMITS, limitsSummary, targetChapterCount } from '../limits.js';
 import {
   sqlite, quotaUsed, uniqueSlug, siteRow, siteJsonPath, publicSite, now, slugify, ensureProfile,
   getSettings, updateSettings, settingsMeta,
@@ -79,6 +80,8 @@ router.get('/me', requireAuthApi, (req, res) => {
       dailyLimit: req.profile.daily_limit,
       usedToday,
       remaining: Math.max(0, req.profile.daily_limit - usedToday),
+      quotaUnit: LIMITS.quota.unit,
+      limits: limitsSummary(getSettings().maxBookChapters),
       ...settingsOf(req.profile),
     },
   });
@@ -108,6 +111,47 @@ const CreateSchema = z.object({
   published: z.boolean().default(true),
   force: z.boolean().default(false),
   uploadIds: z.array(z.number().int().positive()).max(MAX_FILES).default([]),
+  /** Optional per-book chapter target; omitted = derive from topic count. */
+  maxChapters: z.coerce.number().int().min(LIMITS.chapters.floor).max(LIMITS.chapters.settingMax).optional(),
+  /** Split the source into N separate books. Each part is one quota unit. */
+  parts: z.coerce.number().int().min(1).max(6).default(1),
+});
+
+/** Split source text into N roughly equal parts at paragraph boundaries. */
+function splitSource(text, parts) {
+  if (parts <= 1) return [text];
+  const blocks = String(text || '').split(/\n{2,}/).filter(Boolean);
+  if (blocks.length < parts) return [text];
+  const target = Math.ceil(text.length / parts);
+  const out = [];
+  let current = '';
+  for (const block of blocks) {
+    if (current && current.length >= target && out.length < parts - 1) { out.push(current); current = ''; }
+    current += (current ? '\n\n' : '') + block;
+  }
+  if (current) out.push(current);
+  while (out.length < parts) out.push(out[out.length - 1] || '');
+  return out.slice(0, parts);
+}
+
+/** Honest, pre-generation limits for the builder: what this request will do. */
+router.get('/limits', requireAuthApi, (req, res) => {
+  const settings = getSettings();
+  const source = String(req.query.source || '');
+  const requested = Number(req.query.maxChapters) || 0;
+  const target = targetChapterCount({
+    topic: String(req.query.topic || ''),
+    description: String(req.query.description || ''),
+    sourceText: source,
+    requested
+  }, settings.maxBookChapters);
+  res.json({
+    limits: limitsSummary(settings.maxBookChapters),
+    target,
+    sourceChars: source.length,
+    overCap: target >= settings.maxBookChapters || source.length > LIMITS.source.totalChars * 0.6,
+    quotaUnit: LIMITS.quota.unit
+  });
 });
 
 router.get('/sites', requireAuthApi, (req, res) => {
@@ -123,8 +167,8 @@ router.post('/sites', requireAuthApi, rateLimit({ windowMs: 60 * 1000, max: 8, k
   if (!parsed.success) return badRequest(res, parsed.error);
   const body = parsed.data;
   const used = quotaUsed(req.user.id);
-  if (used >= req.profile.daily_limit) {
-    return fail(res, 429, 'quota_exceeded', 'Daily limit reached (' + req.profile.daily_limit + ' sites/day).');
+  if (used + body.parts > req.profile.daily_limit) {
+    return fail(res, 429, 'quota_exceeded', `Daily limit reached (${req.profile.daily_limit} book generations/day). This request needs ${body.parts}.`);
   }
 
   let uploads = [];
@@ -164,37 +208,42 @@ router.post('/sites', requireAuthApi, rateLimit({ windowMs: 60 * 1000, max: 8, k
 
   const title = body.title || body.topic || 'Untitled learning book';
   const t = now();
-  let id = 0;
-  for (let attempt = 0; attempt < 5 && !id; attempt++) {
-    const slug = uniqueSlug(title);
-    try {
-      id = sqlite.transaction(() => {
-        if (quotaUsed(req.user.id) >= req.profile.daily_limit) {
-          throw Object.assign(new Error('Daily limit reached (' + req.profile.daily_limit + ' sites/day).'), { code: 'QUOTA' });
-        }
+  const slices = splitSource(source, body.parts);
+  const created = [];
+  try {
+    sqlite.transaction(() => {
+      if (quotaUsed(req.user.id) + body.parts > req.profile.daily_limit) {
+        throw Object.assign(new Error(`Daily limit reached (${req.profile.daily_limit} book generations/day).`), { code: 'QUOTA' });
+      }
+      for (let part = 0; part < body.parts; part++) {
+        const partTitle = body.parts > 1 ? `${title} · ${part + 1}/${body.parts}` : title;
+        const slug = uniqueSlug(partTitle);
         const result = sqlite.prepare(
-          `INSERT INTO sites (owner_id,slug,title,description,topic,audience,language,status,published,source_text,created_at,updated_at)
-           VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`
-        ).run(req.user.id, slug, title, body.description, body.topic, body.audience, body.language,
-          'queued', body.published ? 1 : 0, source, t, t);
+          `INSERT INTO sites (owner_id,slug,title,description,topic,audience,language,status,published,source_text,max_chapters,created_at,updated_at)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`
+        ).run(req.user.id, slug, partTitle, body.description, body.topic, body.audience, body.language,
+          'queued', body.published ? 1 : 0, slices[part], body.maxChapters || null, t, t);
         const siteId = Number(result.lastInsertRowid);
         sqlite.prepare('INSERT INTO jobs (site_id,status,log,created_at,updated_at) VALUES (?,?,?,?,?)')
-          .run(siteId, 'queued', 'Queued.', t, t);
-        if (uploads.length) {
-          const del = sqlite.prepare('DELETE FROM uploads WHERE id=? AND user_id=?');
-          for (const up of uploads) del.run(up.id, req.user.id);
-        }
-        return siteId;
-      })();
-    } catch (e) {
-      if (e.code === 'SQLITE_CONSTRAINT_UNIQUE' && attempt < 4) continue;
-      if (e.code === 'QUOTA') return fail(res, 429, 'quota_exceeded', e.message);
-      console.error('Create site failed:', e);
-      return fail(res, 500, 'server_error', 'Could not create the site.');
-    }
+          .run(siteId, 'queued', body.parts > 1 ? `Queued part ${part + 1}/${body.parts}.` : 'Queued.', t, t);
+        created.push(siteId);
+      }
+      if (uploads.length) {
+        const del = sqlite.prepare('DELETE FROM uploads WHERE id=? AND user_id=?');
+        for (const up of uploads) del.run(up.id, req.user.id);
+      }
+    })();
+  } catch (e) {
+    if (e.code === 'QUOTA') return fail(res, 429, 'quota_exceeded', e.message);
+    console.error('Create site failed:', e);
+    return fail(res, 500, 'server_error', 'Could not create the site.');
   }
   kick(0);
-  res.status(201).json({ site: publicSite(siteRow(id)), suggestions: [] });
+  res.status(201).json({
+    site: publicSite(siteRow(created[0])),
+    sites: created.map(id => publicSite(siteRow(id))),
+    suggestions: []
+  });
 });
 
 function accessibleSite(req) {
@@ -219,6 +268,8 @@ router.get('/sites/:id', requireAuthApi, (req, res) => {
       log: job.log,
       attempts: job.attempts || 0,
       lastError: job.last_error || '',
+      heartbeatAt: job.locked_at || job.updated_at,
+      progress: (() => { try { return job.progress ? JSON.parse(job.progress) : null; } catch { return null; } })(),
       updatedAt: job.updated_at,
     } : null,
   });
@@ -274,7 +325,7 @@ router.post('/sites/:id/regenerate', requireAuthApi, rateLimit({ windowMs: 60 * 
   try {
     sqlite.transaction(() => {
       if (quotaUsed(req.user.id) >= req.profile.daily_limit) {
-        throw Object.assign(new Error('Daily limit reached (' + req.profile.daily_limit + ' sites/day).'), { code: 'QUOTA' });
+        throw Object.assign(new Error('Daily limit reached (' + req.profile.daily_limit + ' book generations/day).'), { code: 'QUOTA' });
       }
       sqlite.prepare("UPDATE sites SET status='queued',error='',updated_at=? WHERE id=?").run(t, site.id);
       sqlite.prepare("UPDATE jobs SET cancel_requested=1,status='cancelled',locked_at=NULL,next_attempt_at=NULL,updated_at=? WHERE site_id=? AND status IN ('queued','running')").run(t, site.id);

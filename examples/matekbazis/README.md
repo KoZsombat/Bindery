@@ -32,6 +32,10 @@ Feltételezem, hogy **középszintű érettségi** szinten tanultál matematiká
 - **Fejezet teszt**: a fejezet végén 8 kérdés, 10 perc, pontszám és részletes kiértékelés.
 - **Feladatbank**: 15 kategória, kategóriánként 50 generált feladat (10 könnyű / 10 közepes / 30 nehéz, arány 1 : 1 : 3). Az „Új feladatsor” gombbal új változatokat kapsz; az egyes feladatok mellett is van újragenerálás.
 - **ZH / vizsga szimulátor**: ZH1, ZH2, vizsga és gyors gyakorlás, időlimittel és jegybecsléssel.
+- **Mai terv**: a kezdőlapon a „Mai terv indítása” gomb 30 / 60 / 120 perces blokkot épít: esedékes ismétlés → következő fejezet tanulása → vegyes gyakorlás → a mai hibák újra. A lépések külön blokkok; a tanulás és az ismétlés nem keveredik. A „Rossz nap? 5 perc is számít.” a minimum nap, és beleszámít a sorozatba.
+- **Napi percek és szokás**: a látható fülön töltött aktív időt méri, 5 hetes naptárrácsot mutat, és 30 perctől 60–120 perc felé emeli a napi célt javaslatként (elfogadható, átállítható, figyelmen kívül hagyható). Hiányzó nap nem hiba.
+- **Szokáseszközök**: szándékmezőből napi `.ics` emlékeztető; 15 perc után „nézd meg a megoldást, majd egy hasonlót” tipp; téves válasznál „miért nem ment?” címke (fogalom / számolási hiba / félreolvasás) és mintaösszegzés; tempóterv a vizsga dátumából; visszatérő képernyő hosszú kihagyás után; heti összegzés másolása és helyi haladáskód export/import (összefésül, nem töröl).
+- **Fogalomtár**: 12 központi fogalom hétköznapi és pontos meghatározással, fejezetlinkkel; a szövegben minden definiált fogalom aláhúzott, kattintásra/préselésre buborékban mutatja a hétköznapi jelentést, és a fogalomtár bejegyzésre visz. A fogalomtár és a tárgymutató kereshető, és a keresés is megtalálja.
 - **Tanulás és ismétlés**: négy külön mód — **10 perces tanulás** (elmélet + példa + 2 feladat), **20 perces tanulás** (két fejezet + 4 feladat), **5 perces ismétlés** (3 ismert feladat) és **10 perces ismétlés** (6 ismert feladat). A tanulás csak a kiválasztott rész még nem ismert fejezeteiből kérdez; az ismétlés csak a már teljesített fejezetekből. Emellett **tudástérkép**, **felmérés** résszinten, vizsga-visszaszámláló és heti vállalás. A „Nyugodt mód” elrejti a streak-elemeket, ha azok inkább nyomást jelentenek.
 - **Napi küldetés**: 5 vegyes feladat naponta, kb. öt perc. A sorozat a megoldott napokat számolja, heti egy fagyasztóval.
 - **Hibafüzet**: minden hibás válasz visszatér 1, 3, 7, majd 21 nap múlva. Az esedékes ismétlések száma a bal oldalon látszik.
@@ -75,4 +79,4 @@ Ez tanulást segítő összefoglaló, nem hivatalos tanszéki jegyzet. A számon
 
 ---
 
-**Ez egy már elkészült projekt.** A Learning Book Builder katalógusában példaként szerepel; a szerkesztő és az új site-ok generálása a repository gyökér `server.js` fájljában és a `public/`, `template/` mappákban található.
+**Ez egy már elkészült projekt.** A Bindery katalógusában példaként szerepel; a szerkesztő és az új könyvek generálása a repository `apps/server` és `apps/client` mappáiban található.

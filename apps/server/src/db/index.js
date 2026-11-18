@@ -81,11 +81,15 @@ function addColumn(table, column, definition) {
   if (!hasColumn(table, column)) sqlite.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
 }
 addColumn('sites', 'archived', 'INTEGER NOT NULL DEFAULT 0');
+// Per-book chapter target chosen at creation (null = use the admin setting).
+addColumn('sites', 'max_chapters', 'INTEGER');
 addColumn('jobs', 'attempts', 'INTEGER NOT NULL DEFAULT 0');
 addColumn('jobs', 'locked_at', 'TEXT');
 addColumn('jobs', 'next_attempt_at', 'TEXT');
 addColumn('jobs', 'last_error', 'TEXT');
 addColumn('jobs', 'cancel_requested', 'INTEGER NOT NULL DEFAULT 0');
+// Structured progress for the builder: {"phase":"chapters","done":7,"total":42,"chapter":"3.2"}
+addColumn('jobs', 'progress', 'TEXT');
 
 // Legacy installs created sites.owner_id with a FK to users(id), but the auth
 // table is user(id). SQLite cannot alter a constraint, so rebuild once.
@@ -132,6 +136,13 @@ CREATE INDEX IF NOT EXISTS idx_uploads_created ON uploads(created_at);
   sqlite.pragma('foreign_keys = ON');
 }
 sqlite.exec(`
+-- Resumable multi-pass generation. The draft is written after every chapter,
+-- and site.json is written only after the depth validation passes.
+CREATE TABLE IF NOT EXISTS site_drafts (
+  site_id INTEGER PRIMARY KEY,
+  state TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
 CREATE INDEX IF NOT EXISTS idx_jobs_queue ON jobs(status, next_attempt_at);
 CREATE INDEX IF NOT EXISTS idx_jobs_site ON jobs(site_id);
 CREATE INDEX IF NOT EXISTS idx_uploads_created ON uploads(created_at);
@@ -142,9 +153,9 @@ export const now = () => new Date().toISOString();
 /* Generation caps are editable from the admin page. The environment variables
    only seed the defaults for a fresh install; existing values survive restarts. */
 export const SETTING_DEFS = {
-  max_book_chapters: { key: 'maxBookChapters', min: 4, max: 60, fallback: MAX_BOOK_CHAPTERS },
+  max_book_chapters: { key: 'maxBookChapters', min: 8, max: 180, fallback: MAX_BOOK_CHAPTERS },
   chapter_batch_size: { key: 'chapterBatchSize', min: 1, max: 4, fallback: CHAPTER_BATCH_SIZE },
-  llm_max_tokens: { key: 'llmMaxTokens', min: 1024, max: 200000, fallback: LLM_MAX_TOKENS },
+  llm_max_tokens: { key: 'llmMaxTokens', min: 2048, max: 200000, fallback: LLM_MAX_TOKENS },
 };
 for (const [name, def] of Object.entries(SETTING_DEFS)) {
   sqlite.prepare('INSERT OR IGNORE INTO settings (key,value,updated_at) VALUES (?,?,?)')
@@ -190,13 +201,43 @@ export function ensureProfile(userId, limit = DEFAULT_DAILY_LIMIT) {
   return p;
 }
 
-export function quotaUsed(userId) {
-  const day = new Date().toISOString().slice(0, 10);
+/** Server-local calendar day bounds, as ISO strings. A deadline is a local date. */
+export function localDayBounds(date = new Date()) {
+  const start = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  const end = new Date(date.getFullYear(), date.getMonth(), date.getDate() + 1);
+  return [start.toISOString(), end.toISOString()];
+}
+
+/**
+ * Daily quota, in **book generations**: one job is one unit. The outline,
+ * chapter, glossary and validation passes of that job are free, so a deep
+ * 90-chapter book costs one unit, not ninety. Regenerating is one more unit.
+ * The day boundary is the server's local midnight, not UTC.
+ */
+export function quotaUsed(userId, date = new Date()) {
+  const [start, end] = localDayBounds(date);
   return sqlite.prepare(
     `SELECT COUNT(*) AS n FROM jobs j
      JOIN sites s ON s.id = j.site_id
-     WHERE s.owner_id=? AND substr(j.created_at,1,10)=? AND s.example=0`
-  ).get(userId, day).n;
+     WHERE s.owner_id=? AND j.created_at>=? AND j.created_at<? AND s.example=0`
+  ).get(userId, start, end).n;
+}
+
+/* ------------------------------------------------------------ book drafts */
+
+export function loadDraft(siteId) {
+  const row = sqlite.prepare('SELECT state FROM site_drafts WHERE site_id=?').get(siteId);
+  if (!row) return null;
+  try { return JSON.parse(row.state); } catch { return null; }
+}
+
+export function saveDraft(siteId, state) {
+  sqlite.prepare('INSERT INTO site_drafts (site_id,state,updated_at) VALUES (?,?,?) ON CONFLICT(site_id) DO UPDATE SET state=excluded.state, updated_at=excluded.updated_at')
+    .run(siteId, JSON.stringify(state), now());
+}
+
+export function clearDraft(siteId) {
+  sqlite.prepare('DELETE FROM site_drafts WHERE site_id=?').run(siteId);
 }
 
 /**

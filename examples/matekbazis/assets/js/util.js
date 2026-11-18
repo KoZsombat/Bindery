@@ -201,6 +201,41 @@
     return x;
   };
 
+  MB.glossary = MB.glossary || [];
+  MB.termById = function (id) {
+    return (MB.glossary || []).find(function (g) { return g.id === id; }) || null;
+  };
+  MB.termLabel = function (g) {
+    if (!g || !g.term) return '';
+    return MB.lang === 'en' ? (g.term.en || g.term.hu) : (g.term.hu || g.term.en);
+  };
+  /* Wrap glossary terms in the given HTML with a tooltip button. Tags and
+     math segments are left untouched. */
+  MB.decorateTerms = function (html) {
+    const terms = (MB.glossary || []).map(function (g) {
+      return { id: g.id, label: MB.termLabel(g) };
+    }).filter(function (g) { return g.label && g.label.length >= 3; })
+      .sort(function (a, b) { return b.label.length - a.label.length; });
+    if (!terms.length) return html;
+    function escapeRe(x) { return String(x).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
+    function decorateText(text) {
+      return text.split(/(\$[^$]*\$)/).map(function (part) {
+        if (part.charAt(0) === '$') return part;
+        let out = part;
+        terms.forEach(function (t) {
+          const re = new RegExp('(^|[^\\w])(' + escapeRe(t.label) + ')(?=[^\\w]|$)', 'gi');
+          out = out.replace(re, function (m, pre) {
+            return pre + '<button type="button" class="term" data-term="' + MB.esc(t.id) + '">' + MB.esc(t.label) + '</button>';
+          });
+        });
+        return out;
+      }).join('');
+    }
+    return String(html == null ? '' : html).split(/(<[^>]+>)/).map(function (seg) {
+      return seg.charAt(0) === '<' ? seg : decorateText(seg);
+    }).join('');
+  };
+
   MB.esc = function (s) {
     return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
       return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c];

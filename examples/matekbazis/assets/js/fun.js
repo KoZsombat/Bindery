@@ -704,6 +704,8 @@
     });
     h += '</div></div>';
 
+    if (MB.habit && MB.habit.patternHTML) h += MB.habit.patternHTML();
+
     h += '<div class="home-section"><div class="section-head"><div><h2>' + T('Heti riport', 'Weekly recap') + '</h2><p>' + T('Az utolsó hét nap. Nem a látogatásokat számoljuk, hanem a megoldott feladatokat.', 'The last seven days. We count solved exercises, not visits.') + '</p></div></div>' +
       '<div class="week-card"><div class="week-bars">';
     const max = Math.max(1, Math.max.apply(null, w.days.map(function (d) { return d.n; })));

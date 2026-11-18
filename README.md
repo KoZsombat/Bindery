@@ -2,14 +2,16 @@
 
 Bindery is a small, self-hosted creator for routed learning-book sites. Users upload notes and paste
 long text; Bindery adds the `learning-book-site` skill as context, has a model design the book
-outline, then writes the chapters in validated batches and publishes the result at its own URL.
+outline and term registry, writes one deep chapter per validated pass, assembles the glossary, runs
+the depth contract, and publishes the result at its own URL.
 The original MatekBázis book is included only as a **project that was already created**, in
 `examples/matekbazis/`.
 
 - **Routed, not downloadable.** Every site is served at `/s/<slug>/` (and optionally at
   `<slug>.<SITE_DOMAIN>`). There is no ZIP endpoint and no download button.
 - **Users only.** Sign-up is disabled. One seeded administrator creates accounts.
-- **Daily quota.** Each user has a configurable sites-per-day limit; the admin can change it.
+- **Daily quota.** Each user has a configurable **book generations per day** limit; the admin can
+  change it. One deep book is one unit, however many chapter passes it needs.
 - **Bring your own model.** Every user saves their own OpenAI-compatible endpoint, model and key
   in Settings (encrypted at rest). There is no server-wide model key.
 - **Reuse first.** The create form searches the catalog; the API also returns up to five
@@ -22,10 +24,23 @@ The original MatekBázis book is included only as a **project that was already c
   shortcuts, plus archive, regenerate and cancel actions.
 - **Light and dark themes.** The builder, login, example and generated shells all ship both
   themes; the choice is persisted and applied before CSS loads.
-- **Durable queue.** Leased jobs survive restarts, retry once with backoff, and validate the
-  model output against a strict bilingual schema (with one repair attempt).
+- **Durable queue.** Leased jobs survive restarts and retry once with backoff. A draft is saved after
+  every chapter, so a resumed job continues instead of restarting the book. Output is validated
+  against the bilingual schema and the depth contract; failing chapters are regenerated, and
+  `site.json` is written only after validation passes.
+- **Beginner-proof books.** Every definition/theorem has plain words, a reason to exist, a precise
+  version, an analogy, common confusions and check-yourself questions; every chapter has a
+  refresher, recap, term list and a word budget that scales with its new terms. A searchable
+  glossary, term index and hover/tap tooltips are generated from the registry.
+- **Habit layer in the book.** Today's plan (30/60/120 minutes), active-minute tracking with a
+  ramped target, a five-minute minimum day, daily `.ics` export, a stuck prompt, miss-reason tags,
+  a pace planner, a welcome-back screen, and a local buddy summary/import code. No accounts, no
+  network, no telemetry.
 - **Operations.** `/healthz` and `/readyz`, a SQLite + sites backup script, and CI that runs tests,
   builds the client, and builds the image.
+
+Generation limits are audited in `docs/LIMITS_AUDIT.md` and the recorded verification run is in
+`docs/VERIFICATION.md`.
 
 ## Stack
 
@@ -107,10 +122,14 @@ switch in the header.
 Add a user key in **Settings** to call a real model; `LLM_BASE_URL` and `LLM_MODEL` are only
 defaults. Set `LLM_MOCK=1` for a deterministic sample without a key. `MAX_CONCURRENT_JOBS=3`
 controls how many generations run at once; `LLM_MOCK_DELAY=500` is useful when mocking.
-`MAX_BOOK_CHAPTERS=30` caps a book's outline; `CHAPTER_BATCH_SIZE=2` controls how many chapters
-each model request writes (lower it when replies truncate). The environment values only seed a
-fresh install: an administrator can change all three caps, including `LLM_MAX_TOKENS`, in
-**Admin → Generation limits**.
+Limits live in `apps/server/src/limits.js` (documented constants) and `apps/server/src/config.js`
+(env-seeded defaults); `docs/LIMITS_AUDIT.md` has the full before/after table. Defaults:
+`MAX_BOOK_CHAPTERS=90` (hard cap 180; the target also scales with source topic count),
+`CHAPTER_BATCH_SIZE=1` (one chapter per call), `LLM_MAX_TOKENS=32000` per chapter pass,
+`LLM_TIMEOUT_MS=900000`, 400 000 source characters, and a 96 MiB `site.json` cap. The environment
+values only seed a fresh install; an administrator can change the three editable caps in
+**Admin → Generation limits**. The create form shows the real chapter/word/time estimate before a
+job starts, and can split a large source into up to six parts.
 
 ## Deploy on Launchpad
 
@@ -187,8 +206,9 @@ All routes require the session cookie; mutating requests also require a same-ori
 | `GET` | `/readyz` | DB + generation worker readiness and queue counts |
 | `GET` | `/api/me` | User, quota, remaining, key state |
 | `GET` | `/api/sites` | Own sites + example |
-| `POST` | `/api/sites` | Queue a generation; returns catalog suggestions unless `force: true` |
-| `GET` | `/api/sites/:id` | Status + job log |
+| `POST` | `/api/sites` | Queue a generation; `maxChapters` and `parts` are optional; returns catalog suggestions unless `force: true` |
+| `GET` | `/api/limits?source=&topic=` | Pre-generation limits: target chapters, words, tokens, time |
+| `GET` | `/api/sites/:id` | Status, job log and per-chapter progress |
 | `POST` | `/api/sites/:id/clone` | Reuse an existing site |
 | `POST` | `/api/sites/:id/cancel` | Cancel a queued/running job |
 | `POST` | `/api/sites/:id/regenerate` | Queue the site again |
@@ -212,35 +232,56 @@ grant at any time.
 
 ## Generated-site contract
 
-The model returns one JSON object; `apps/server/src/services/generation.js` normalizes and validates it:
+The model returns outline/term JSON, then one chapter object per pass; `apps/server/src/services/generation.js`
+normalizes them, `depth.js` validates the depth contract, and schema version 2 is written:
 
 ```json
 {
+  "version": 2,
   "title": "…",
   "subtitle": { "hu": "…", "en": "…" },
   "sections": [{
     "id": "basics", "num": "01",
-    "title": { "hu": "…", "en": "…" },
+    "conceptMap": { "hu": ["…"], "en": ["…"] },
+    "summary": { "hu": "…", "en": "…" },
     "chapters": [{
       "id": "first", "num": "1.1",
       "title": { "hu": "…", "en": "…" },
       "lead": { "hu": "…", "en": "…" },
       "why": { "hu": ["…"], "en": ["…"] },
-      "theory": [{ "type": "def", "title": { "hu": "…", "en": "…" }, "body": { "hu": "…", "en": "…" } }],
-      "examples": [{ "title": { "hu": "…", "en": "…" }, "problem": { "hu": "…", "en": "…" }, "steps": { "hu": ["…"], "en": ["…"] }, "answer": { "hu": "…", "en": "…" } }],
-      "mistakes": { "hu": ["…"], "en": ["…"] },
-      "exercises": [{ "q": { "hu": "…", "en": "…" }, "a": "4", "type": "number", "hint": { "hu": "…", "en": "…" }, "sol": { "hu": "…", "en": "…" } }]
+      "terms": [{ "id": "power", "term": { "hu": "…", "en": "…" },
+                  "plain": { "hu": "…", "en": "…" }, "precise": { "hu": "…", "en": "…" },
+                  "requires": [] }],
+      "refresher": [{ "label": { "hu": "…", "en": "…" } }],
+      "checks": [{ "q": { "hu": "…", "en": "…" }, "a": { "hu": "…", "en": "…" } }],
+      "recap": { "points": { "hu": ["…"], "en": ["…"] }, "next": { "hu": "…", "en": "…" } },
+      "theory": [{ "type": "def", "title": { "hu": "…", "en": "…" },
+                   "body": { "hu": "…", "en": "…" },
+                   "plain": { "hu": "…", "en": "…" }, "why": { "hu": "…", "en": "…" },
+                   "precise": { "hu": "…", "en": "…" }, "analogy": { "hu": "…", "en": "…" },
+                   "confusions": [], "checks": [], "terms": ["power"] }],
+      "examples": [{ "problem": { "hu": "…", "en": "…" },
+                     "steps": { "hu": ["…"], "en": ["…"] },
+                     "reasons": { "hu": ["…"], "en": ["…"] },
+                     "answer": { "hu": "…", "en": "…" } }]
     }]
-  }]
+  }],
+  "glossary": [{ "id": "power", "term": { "hu": "…", "en": "…" },
+                 "plain": { "hu": "…", "en": "…" }, "precise": { "hu": "…", "en": "…" },
+                 "requires": [], "chapter": { "section": "basics", "chapter": "first" } }]
 }
 ```
+
+Version-1 books (including the pre-change `data/sites/*/site.json`) still load: the renderer treats
+the new fields as optional and never rewrites stored data. A read-time normalizer is exported as
+`migrateSite` for tooling.
 
 Prose is bilingual; LaTeX is shared. The renderer supports definitions, theorems, notes, warnings,
 code blocks, formulas, lists, worked examples, mistakes, choice/number/expr/text/proof exercises,
 local progress, language switching, search and print. Every book also gets the study modes
-generated from `site.json`: Focus/Launchpad, Learn and review, Knowledge map, Daily quest, Error
-notebook, Mixed run, Error hunt, Progress, Formula sheet, Videos, Practice bank, Exam simulator and
-Resources. They run entirely in the browser from the generated content and persist per-book state
+generated from `site.json`: Today's plan, Focus/Launchpad, Learn and review, Knowledge map, Daily
+quest, Error notebook, Mixed run, Error hunt, Progress, Glossary, Formula sheet, Videos, Practice
+bank, Exam simulator and Resources. They run entirely in the browser from the generated content and persist per-book state
 in `localStorage`; numeric answers are checked with a CSP-safe parser, never `eval`. It never
 exposes a download. Only `site.json` is stored at generation time; `generated.ejs` is rendered per
 request so template and CSP changes apply immediately.
@@ -260,8 +301,9 @@ request so template and CSP changes apply immediately.
   link-local, CGNAT and metadata addresses are rejected on save and before every call, and
   provider redirects are refused. `LLM_ALLOW_PRIVATE_HOSTS=1` is the explicit opt-in for local
   models (Ollama, vLLM).
-- Daily quotas count started generation jobs, so cancelling, archiving or regenerating cannot
-  bypass the limit.
+- Daily quotas count **book generations** (one job per book run) on the server's local day, so
+  cancelling, archiving or regenerating cannot bypass the limit, while a deep 90-chapter book costs
+  one unit rather than ninety calls.
 - Catalog search never reads private source text, and cloning another user's site copies only the
   generated book, not the source material.
 - API writes require same-origin `Origin` and a same-site `Sec-Fetch-Site` where the browser sends

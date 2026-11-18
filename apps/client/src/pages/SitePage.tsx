@@ -27,6 +27,7 @@ export function SitePage() {
   const [error, setError] = useState('');
   const [busy, setBusy] = useState('');
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [now, setNow] = useState(() => Date.now());
 
   const load = useCallback(async () => {
     if (!id) return;
@@ -52,6 +53,11 @@ export function SitePage() {
     const timer = window.setInterval(() => void load(), 3000);
     return () => window.clearInterval(timer);
   }, [polling, load]);
+  useEffect(() => {
+    if (!polling) return;
+    const ticker = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(ticker);
+  }, [polling]);
 
   async function action(name: string, request: () => Promise<unknown>, after?: () => void) {
     setBusy(name);
@@ -98,6 +104,16 @@ export function SitePage() {
     );
   }
 
+  const progress = job?.progress;
+  const activity = progress?.activity;
+  const lastSignal = activity?.updatedAt || job?.heartbeatAt || job?.updatedAt;
+  const signalAge = lastSignal ? Math.max(0, Math.round((now - new Date(lastSignal).getTime()) / 1000)) : null;
+  const phaseLabel = progress?.phase === 'outline' ? t('Designing the outline')
+    : progress?.phase === 'glossary' ? t('Assembling the glossary')
+    : progress?.phase === 'validate' ? t('Checking depth and repairing chapters')
+    : progress?.phase === 'done' ? t('Finishing')
+    : t('Writing chapters');
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -130,7 +146,25 @@ export function SitePage() {
             <SiteFlags site={site} />
           </div>
           {site.error ? <Alert tone="error">{site.error}</Alert> : null}
-          {polling ? <p className="text-sm text-muted-foreground">{t('Generating… this page refreshes automatically.')}</p> : null}
+          {polling ? (
+            <div className="space-y-2 rounded-md border border-border bg-muted/40 p-3">
+              <div className="flex items-center gap-2 text-sm font-medium text-foreground">
+                <span className="relative flex h-2.5 w-2.5">
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-success opacity-70" />
+                  <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-success" />
+                </span>
+                {t('Working')} · {phaseLabel}
+                {progress?.chapter ? <span className="font-mono text-xs text-muted-foreground">{progress.chapter}</span> : null}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                {activity
+                  ? `${Number(activity.chars).toLocaleString()} ${t('characters received')} · ${Math.round(activity.elapsedMs / 1000)}s`
+                  : t('Waiting for the first streamed tokens…')}
+                {signalAge != null ? ` · ${t('last signal')} ${signalAge}s ${t('ago')}` : ''}
+              </p>
+              <p className="text-xs text-muted-foreground">{t('A resumed job keeps its finished chapters.')}</p>
+            </div>
+          ) : null}
         </Card>
 
         <Card className="space-y-3">
@@ -161,6 +195,26 @@ export function SitePage() {
           </div>
         </Card>
       </div>
+
+      {job?.progress ? (
+        <Card className="space-y-3">
+          <div className="flex items-center justify-between gap-3">
+            <h2 className="text-lg font-semibold text-foreground">{t('Generation progress')}</h2>
+            <span className="font-mono text-sm text-muted-foreground">
+              {job.progress.done} / {job.progress.total} · {t(job.progress.phase)}
+            </span>
+          </div>
+          <div className="h-2 overflow-hidden rounded-full bg-muted">
+            <div
+              className={'h-full rounded-full bg-foreground transition-all' + (polling ? ' progress-live' : '')}
+              style={{ width: `${job.progress.total ? Math.round(job.progress.done / job.progress.total * 100) : 0}%` }}
+            />
+          </div>
+          {job.progress.chapter ? (
+            <p className="text-xs text-muted-foreground">{t('Current chapter:')} <code className="font-mono">{job.progress.chapter}</code></p>
+          ) : null}
+        </Card>
+      ) : null}
 
       <Card className="space-y-3">
         <h2 className="text-lg font-semibold text-foreground">{t('Job log')}</h2>

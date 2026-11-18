@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { LIMITS } from './limits.js';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 /** apps/server */
@@ -65,23 +66,25 @@ export const TRUST_PROXY = /^\d+$/.test(trustProxyRaw) ? Number(trustProxyRaw) :
 export const DEFAULT_DAILY_LIMIT = Math.max(0, Number(process.env.DEFAULT_DAILY_LIMIT || 3));
 export const ADMIN_DAILY_LIMIT = Math.max(0, Number(process.env.ADMIN_DAILY_LIMIT || 100));
 export const MAX_CONCURRENT_JOBS = Math.max(1, Math.min(20, Number(process.env.MAX_CONCURRENT_JOBS || 3)));
-export const MAX_JOB_ATTEMPTS = Math.max(1, Math.min(5, Number(process.env.MAX_JOB_ATTEMPTS || 2)));
+export const MAX_JOB_ATTEMPTS = Math.max(1, Math.min(6, Number(process.env.MAX_JOB_ATTEMPTS || 4)));
 export const JOB_LEASE_MS = Math.max(60000, Number(process.env.JOB_LEASE_MS || 600000));
-/** Upper bound on chapters in one book. One request cannot hold a full course, so chapters are written in batches. */
-export const MAX_BOOK_CHAPTERS = Math.max(4, Math.min(60, Number(process.env.MAX_BOOK_CHAPTERS || 30)));
-/** Chapters written per model request. Lower it if batches truncate; raise it to cut round trips. */
-export const CHAPTER_BATCH_SIZE = Math.max(1, Math.min(4, Number(process.env.CHAPTER_BATCH_SIZE || 2)));
+/** Upper bound on chapters in one book. The outline target is derived from topic count (limits.js). */
+export const MAX_BOOK_CHAPTERS = Math.max(LIMITS.chapters.floor, Math.min(LIMITS.chapters.settingMax, Number(process.env.MAX_BOOK_CHAPTERS || LIMITS.chapters.defaultMax)));
+/** Chapters written per model request. Default 1: one deep chapter per call. */
+export const CHAPTER_BATCH_SIZE = Math.max(1, Math.min(4, Number(process.env.CHAPTER_BATCH_SIZE || 1)));
 export const MAX_UPLOAD = 8 * 1024 * 1024;
 export const MAX_FILES = 6;
 export const MAX_CONCURRENT_UPLOADS = Math.max(1, Math.min(20, Number(process.env.MAX_CONCURRENT_UPLOADS || 4)));
 export const SESSION_CACHE_MS = Math.max(0, Number(process.env.SESSION_CACHE_MS || 15000));
-export const MAX_SOURCE = 80000;
-export const MAX_LONG_TEXT = 40000;
+export const MAX_SOURCE = LIMITS.source.totalChars;
+export const MAX_LONG_TEXT = LIMITS.source.longTextChars;
 export const LLM_MOCK = process.env.LLM_MOCK === '1';
 export const LLM_BASE_URL = String(process.env.LLM_BASE_URL || process.env.COMMAND_CODE_BASE_URL || 'https://api.commandcode.ai/provider/v1').trim().replace(/\/+$/, '');
 export const LLM_MODEL = String(process.env.LLM_MODEL || process.env.COMMAND_CODE_MODEL || 'deepseek/deepseek-v4.1-flash').trim();
-/** Output cap per generation. Lower it when a provider rejects large max_tokens. */
-export const LLM_MAX_TOKENS = Math.max(1024, Number(process.env.LLM_MAX_TOKENS) || 32000);
+/** Output cap per chapter pass. Lower it when a provider rejects large max_tokens. */
+export const LLM_MAX_TOKENS = Math.max(2048, Number(process.env.LLM_MAX_TOKENS) || LIMITS.model.chapterTokens);
+/** One model request, milliseconds. */
+export const LLM_TIMEOUT_MS = Math.max(30000, Number(process.env.LLM_TIMEOUT_MS) || LIMITS.model.timeoutMs);
 /** Allow http and private/loopback provider endpoints (local Ollama, vLLM). */
 export const LLM_ALLOW_PRIVATE_HOSTS = process.env.LLM_ALLOW_PRIVATE_HOSTS === '1';
 export const ADMIN_EMAIL = String(process.env.ADMIN_EMAIL || (DEV ? 'admin@example.com' : '')).trim();

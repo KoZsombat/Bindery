@@ -151,29 +151,49 @@
   }
 
   /* ---------- chapter components ---------- */
+  function checksHTML(list) {
+    if (!list || !list.length) return '';
+    return (Array.isArray(list) ? list : [list]).map(function (q) {
+      if (!q || !q.q) return '';
+      return '<details class="selfcheck"><summary>' + MB.T('Ellenőrizd magad', 'Check yourself') + ': ' + MB.decorateTerms(q.q) + '</summary>' +
+        '<p class="sc-a"><b>' + MB.T('Válasz.', 'Answer.') + '</b> ' + MB.decorateTerms(q.a || '') + '</p>' +
+        (q.hint ? '<p class="sc-h"><b>' + MB.T('Tipp.', 'Hint.') + '</b> ' + MB.decorateTerms(q.hint) + '</p>' : '') + '</details>';
+    }).join('');
+  }
   function theoryHTML(t) {
-    if (t.t === 'p') return '<p>' + t.body + '</p>';
+    if (t.t === 'p') return '<p>' + MB.decorateTerms(t.body) + '</p>';
     if (t.t === 'list') {
       return '<div class="callout ' + (t.tone || 'note') + '"><div class="ct">' + MB.icon('layers') + MB.esc(t.title) + '</div><div class="body"><ul>' +
-        t.items.map(function (i) { return '<li>' + i + '</li>'; }).join('') + '</ul></div></div>';
+        t.items.map(function (i) { return '<li>' + MB.decorateTerms(i) + '</li>'; }).join('') + '</ul></div></div>';
     }
     const label = MB.T({ def: 'Definíció', thm: 'Tétel', note: 'Megjegyzés', warn: 'Vigyázat', formula: 'Képlet' }[t.t] || 'Megjegyzés',
       { def: 'Definition', thm: 'Theorem', note: 'Note', warn: 'Warning', formula: 'Formula' }[t.t] || 'Note');
     const icon = t.t === 'warn' ? 'alert' : t.t === 'thm' ? 'target' : t.t === 'def' ? 'book' : t.t === 'formula' ? 'sigma' : 'info';
     let body = '';
     if (t.t === 'formula') {
-      body = '<div class="fx">$$' + t.latex + '$$</div>' + (t.note ? '<p class="muted" style="font-size:.82rem;margin:.3rem 0 0">' + t.note + '</p>' : '');
+      body = '<div class="fx">$$' + t.latex + '$$</div>' + (t.note ? '<p class="muted" style="font-size:.82rem;margin:.3rem 0 0">' + MB.decorateTerms(t.note) + '</p>' : '');
     } else {
-      body = t.body;
+      body = '';
+      if (t.plain) body += '<div class="plain-words"><span class="tag-label">' + MB.T('Egyszerű szavakkal', 'In plain words') + '</span><p>' + MB.decorateTerms(t.plain) + '</p></div>';
+      if (t.why) body += '<div class="why-note"><span class="tag-label">' + MB.T('Miért létezik?', 'Why it exists') + '</span><p>' + MB.decorateTerms(t.why) + '</p></div>';
+      body += '<div class="precise"><span class="tag-label">' + MB.T('Pontos megfogalmazás', 'Precise version') + '</span><p>' + MB.decorateTerms(t.precise || t.body) + '</p></div>';
+      if (t.analogy) body += '<div class="analogy"><span class="tag-label">' + MB.T('Kép vagy hasonlat', 'Analogy or picture') + '</span><p>' + MB.decorateTerms(t.analogy) + '</p></div>';
+      if (t.confusions && t.confusions.length) body += '<div class="confusions"><div class="ct">' + MB.T('Ne keverd össze', 'Common confusion') + '</div>' + t.confusions.map(function (x) {
+        return '<p><b>' + MB.esc(x.a) + '</b> <span class="vs">' + MB.T('vs', 'vs') + '</span> <b>' + MB.esc(x.b) + '</b>' + (x.note ? '<br><span class="muted">' + MB.decorateTerms(x.note) + '</span>' : '') + '</p>';
+      }).join('') + '</div>';
+      body += checksHTML(t.checks);
     }
     return '<div class="callout ' + t.t + '"><div class="ct">' + MB.icon(icon) + label + (t.title ? ' · ' + MB.esc(t.title) : '') + '</div><div class="body">' + body + '</div></div>';
   }
 
   function exampleHTML(ex, i) {
+    const steps = ex.steps || [], reasons = ex.reasons || [];
     return '<div class="example"><div class="example-head"><span class="badge">' + MB.T('PÉLDA ', 'EXAMPLE ') + (i + 1) + '</span><h3>' + MB.esc(ex.title) + '</h3></div>' +
-      '<div class="example-body"><div class="problem">' + ex.problem + '</div>' +
-      (ex.steps ? '<ol class="steps">' + ex.steps.map(function (s) { return '<li>' + s + '</li>'; }).join('') + '</ol>' : '') +
-      (ex.answer ? '<div class="answer-line"><b>' + MB.T('Eredmény:', 'Answer:') + '</b> ' + ex.answer + '</div>' : '') +
+      '<div class="example-body"><div class="problem">' + MB.decorateTerms(ex.problem) + '</div>' +
+      (steps.length ? '<ol class="steps">' + steps.map(function (s, j) {
+        return '<li>' + MB.decorateTerms(s) + (reasons[j] ? '<small class="step-why"><b>' + MB.T('Miért?', 'Why this step') + '</b> ' + MB.decorateTerms(reasons[j]) + '</small>' : '') + '</li>';
+      }).join('') + '</ol>' : '') +
+      (ex.answer ? '<div class="answer-line"><b>' + MB.T('Eredmény:', 'Answer:') + '</b> ' + MB.decorateTerms(ex.answer) + '</div>' : '') +
       '</div></div>';
   }
 
@@ -238,7 +258,7 @@
     let h = '<article class="book">';
     h += '<header class="chapter-head">';
     h += '<div class="running-head"><span class="gold">' + MB.T(s.num + '. rész', 'Part ' + s.num) + '</span><span class="line"></span><span>' + MB.esc(MB.sTitle(s)) + (s.role === 'extra' ? MB.T(' · opcionális', ' · optional') : '') + '</span><span class="line"></span><span>' + MB.T(c.num + '. fejezet', 'Chapter ' + c.num) + '</span></div>';
-    h += '<div class="chapter-opener"><div class="chapter-num">' + c.num + '</div><div class="chapter-title-wrap"><h1>' + MB.esc(MB.cTitle(c)) + '</h1><p class="lead">' + MB.cLead(c) + '</p></div></div>';
+    h += '<div class="chapter-opener"><div class="chapter-num">' + c.num + '</div><div class="chapter-title-wrap"><h1>' + MB.esc(MB.cTitle(c)) + '</h1><p class="lead">' + MB.decorateTerms(MB.cLead(c)) + '</p></div></div>';
     h += '<div class="chapter-meta">' +
       '<span class="meta-pill">' + MB.icon('clock') + '<b>' + (c.minutes || 20) + ' ' + MB.T('perc', 'min') + '</b> ' + MB.T('olvasás', 'read') + '</span>' +
       '<span class="meta-pill">' + MB.icon('dumbbell') + '<b>' + exs.length + '</b> ' + MB.T('feladat', 'exercises') + '</span>' +
@@ -249,14 +269,24 @@
       (read ? '<span class="meta-pill" style="color:var(--ok);border-color:var(--ok)">' + MB.icon('check') + MB.T('elolvasva', 'read') + '</span>' : '') +
       '</div></header>';
 
+    if (c.refresher && c.refresher.length) {
+      h += '<div class="callout note before"><div class="ct">' + MB.icon('layers') + MB.T('Mielőtt elkezded', 'Before you start') + '</div><div class="body"><ul>' +
+        c.refresher.map(function (r) {
+          const label = MB.decorateTerms(r.label || '');
+          if (r.chapter) return '<li><a href="#/chapter/' + r.chapter.section + '/' + r.chapter.chapter + '">' + label + '</a></li>';
+          if (r.term) return '<li><button type="button" class="term" data-term="' + MB.esc(r.term) + '">' + label + '</button></li>';
+          return '<li>' + label + '</li>';
+        }).join('') + '</ul></div></div>';
+    }
+
     /* 1 — theory */
     h += '<section class="book-section" id="elmelet"><h2 class="section-label">' + MB.T('Elmélet', 'Theory') + ' <span class="sub">' + MB.T('a miért, a hogyan és a mikor', 'the why, the how and the when') + '</span></h2>';
     if (c.why) {
       h += '<div class="callout why"><div class="ct">' + MB.icon('bulb') + MB.T('Miért van ez így?', 'Why does this work?') + '</div><div class="body">' +
-        (Array.isArray(c.why) ? c.why.map(function (p) { return '<p>' + p + '</p>'; }).join('') : '<p>' + c.why + '</p>') + '</div></div>';
+        (Array.isArray(c.why) ? c.why.map(function (p) { return '<p>' + MB.decorateTerms(p) + '</p>'; }).join('') : '<p>' + MB.decorateTerms(c.why) + '</p>') + '</div></div>';
     }
     if (c.when) {
-      h += '<div class="callout when"><div class="ct">' + MB.icon('target') + MB.T('Mikor használd?', 'When to use it') + '</div><div class="body">' + c.when + '</div></div>';
+      h += '<div class="callout when"><div class="ct">' + MB.icon('target') + MB.T('Mikor használd?', 'When to use it') + '</div><div class="body">' + MB.decorateTerms(c.when) + '</div></div>';
     }
     (c.theory || []).forEach(function (t) { h += theoryHTML(t); });
     if (c.demo) h += '<div data-demo="' + c.demo + '"></div>';
@@ -277,7 +307,7 @@
     /* 4 — mistakes */
     if (c.mistakes && c.mistakes.length) {
       h += '<section class="book-section" id="hibak"><div class="mistakes"><h3>' + MB.icon('alert') + ' ' + MB.T('Tipikus hibák', 'Common mistakes') + '</h3><ul>' +
-        c.mistakes.map(function (m) { return '<li>' + m + '</li>'; }).join('') + '</ul></div></section>';
+        c.mistakes.map(function (m) { return '<li>' + MB.decorateTerms(m) + '</li>'; }).join('') + '</ul></div></section>';
     }
 
     /* 5 — exercises */
@@ -285,6 +315,20 @@
     h += '<div class="ex-wrap"><div class="ex-head"><span class="hint">' + MB.T('Írd be az eredményt, majd kattints az ellenőrzésre. A megoldás csak útmutató.', 'Type the result, then click Check. The solution is only a guide.') + '</span></div>';
     exs.forEach(function (q, i) { h += exerciseHTML(q, i, c); });
     h += '</div></section>';
+
+    /* 5b — chapter checks + recap */
+    if (c.checks && c.checks.length) {
+      h += '<section class="book-section"><h2 class="section-label">' + MB.T('Ellenőrizd magad', 'Check yourself') + '</h2>' + checksHTML(c.checks) + '</section>';
+    }
+    if (c.recap) {
+      h += '<section class="book-section"><h2 class="section-label">' + MB.T('Összefoglalás', 'Recap') + '</h2>' +
+        ((c.terms && c.terms.length) ? '<div class="term-chips">' + c.terms.map(function (t) {
+          return '<button type="button" class="term chip-term" data-term="' + MB.esc(t.id) + '">' + MB.esc(t.term) + '</button>';
+        }).join('') + '</div>' : '') +
+        (c.recap.points && c.recap.points.length ? '<ul>' + c.recap.points.map(function (p) { return '<li>' + MB.decorateTerms(p) + '</li>'; }).join('') + '</ul>' : '') +
+        (c.recap.next ? '<p class="next-step"><b>' + MB.T('Mi jön most?', "What's next") + '</b> ' + MB.decorateTerms(c.recap.next) + '</p>' : '') +
+        '</section>';
+    }
 
     /* 6 — explain it */
     if (MB.teachHTML) h += MB.teachHTML(c, s);
@@ -323,7 +367,8 @@
     h += '<div class="eyebrow">' + MB.T('BME VIK · Mérnökinformatikus · Felkészítő', 'BME VIK · Computer Engineering · Preparation') + '</div>';
     h += '<h1>' + MB.T('Az első félév alapjai.<br>Könyvformában.', 'The basics of the first semester.<br>In book form.') + '</h1>';
     h += '<p class="lead">' + MB.T('Nem a teljes tananyag. Az a biztos alap, amivel az első hetek nem az alapok pótlásáról szólnak: algebra, logika, komplex számok, sorozatok, határérték, deriválás, integrálás. A haladóbb részek külön, opcionális előretekintésként szerepelnek.', 'Not the whole syllabus. The solid foundation that makes the first weeks about new material instead of patching old gaps: algebra, logic, complex numbers, sequences, limits, derivatives, integrals. The advanced parts are separate, optional previews.') + '</p>';
-    h += '<div class="hero-actions"><a class="btn primary" href="#/chapter/alapok/algebra">' + MB.T('Kezdd az alapoknál ', 'Start with the foundations ') + MB.icon('arrowRight') + '</a>' +
+    h += '<div class="hero-actions"><a class="btn primary" href="#/today">' + MB.T('Mai terv indítása', "Start today's plan") + '</a>' +
+      '<a class="btn ghost" href="#/chapter/alapok/algebra">' + MB.T('Kezdd az alapoknál ', 'Start with the foundations ') + MB.icon('arrowRight') + '</a>' +
       '<a class="btn ghost" href="#/section/alapok">' + MB.T('Mit hozz magaddal?', 'What you should already know') + '</a>' +
       '<a class="btn ghost" href="#/exam">' + MB.T('ZH-szimulátor', 'Exam simulator') + '</a></div>';
     h += '<div class="hero-foot"><span><b>' + core.length + '</b> ' + MB.T('alaprész', 'core parts') + '</span><span><b>' + extra.length + '</b> ' + MB.T('előretekintés', 'optional previews') + '</span><span><b>' + allChapters.length + '</b> ' + MB.T('fejezet', 'chapters') + '</span><span><b>' + totalEx + '</b> ' + MB.T('feladat', 'exercises') + '</span><span><b>' + pct + '%</b> ' + MB.T('kész', 'complete') + '</span></div>';
@@ -335,6 +380,7 @@
       '<div class="stat"><b>' + MB.videos.length + '</b><span>' + MB.T('Ajánlott videó', 'Recommended videos') + '</span></div>' +
       '<div class="stat"><b>' + Object.keys(state.tests).length + '</b><span>' + MB.T('Kitöltött teszt', 'Tests completed') + '</span></div>' +
       '</div>';
+    h += (MB.habit && MB.habit.homeHTML) ? MB.habit.homeHTML() : '';
     h += (MB.coach && MB.coach.homeHTML) ? MB.coach.homeHTML() : '';
     h += (MB.fun && MB.fun.homeHTML) ? MB.fun.homeHTML() : '';
     h += '<div class="note-box" style="margin:0 0 12px"><h4>' + MB.T('Miből indulunk ki?', 'What we assume') + '</h4><p style="margin:0 0 8px">' + MB.T('Feltételezem, hogy <b>középszintű érettségi</b> szinten tanultál matematikát, de sok mindent elfelejtettél. Az <b>1. rész</b> ezért ismétlés, nem nulláról kezdés: a „Miért?” blokkok a régi szabályokat elevenítik fel, a feladatok pedig visszamérnek. Ha valami ismerős, ugorj a feladatokra; ha nem, olvasd el a magyarázatot.', 'I assume you studied mathematics at the level of the Hungarian secondary-school leaving exam (standard level) but have forgotten much of it. Part 1 is therefore revision, not a from-zero course: the “Why?” boxes rebuild the old rules, and the exercises check them. If something is familiar, skip to the exercises; if not, read the explanation.') + '</p><p style="margin:0">' + MB.T('Ez <b>felkészítő</b>, nem a teljes félév anyaga. A 08–13. részek opcionális előretekintések: csak akkor vedd őket elő, ha a magabiztos alap megvan.', 'This is a <b>preparation</b> book, not the complete semester. Parts 08–13 are optional previews: open them only after the core is solid.') + '</p></div>';
@@ -405,6 +451,10 @@
         s.prereq.map(function (pid) { const p = getSection(pid); return p ? '<a href="#/section/' + p.id + '">' + p.num + ' · ' + MB.esc(MB.sTitle(p)) + '</a>' : pid; }).join(', ') +
         '. ' + MB.T('Ha valamelyik hiányos, előbb azt vedd át.', 'If any of them is shaky, review it first.') + '</p></div>';
     }
+    if (s.conceptMap && s.conceptMap.length) {
+      h += '<div class="note-box"><h4>' + MB.T('Hogyan kapcsolódnak?', 'How they connect') + '</h4><ol style="margin:0;padding-left:1.2rem">' +
+        s.conceptMap.map(function (x) { return '<li>' + MB.decorateTerms(x) + '</li>'; }).join('') + '</ol></div>';
+    }
     h += '<div class="chapter-list">';
     s.chapters.forEach(function (c) {
       h += '<a class="chapter-row' + (isRead(c) ? ' done' : '') + '" href="#/chapter/' + s.id + '/' + c.id + '">' +
@@ -412,8 +462,68 @@
         '<span class="state">' + (isRead(c) ? '✓' : '→') + '</span></a>';
     });
     h += '</div>';
+    if (s.summary) h += '<div class="note-box"><h4>' + MB.T('A rész összefoglalása', 'Section summary') + '</h4><p style="margin:0">' + MB.decorateTerms(s.summary) + '</p></div>';
     return h;
   }
+
+  /* ---------- glossary ---------- */
+  function viewGlossary(focusId) {
+    document.title = MB.T('Fogalomtár — MatekBázis', 'Glossary — MatekBázis');
+    const entries = (MB.glossary || []).slice().sort(function (a, b) {
+      return MB.termLabel(a).localeCompare(MB.termLabel(b));
+    });
+    let h = '<div class="page-head"><div class="kicker">' + MB.T('Függelék B', 'Appendix B') + '</div><h1>' + MB.T('Fogalomtár és tárgymutató', 'Glossary and term index') + '</h1>' +
+      '<p class="lead">' + MB.T('Minden fogalom egyszer van definiálva; a fejezetek innen hivatkoznak rá. Kattints egy kifejezésre a szövegben, és itt nyílik meg.', 'Every term is defined once; chapters link here. Tap a term in the text and its entry opens here.') + '</p>' +
+      '<div class="formula-search"><input class="input" id="glossSearch" type="search" placeholder="' + MB.T('Fogalom keresése…', 'Search terms…') + '" style="width:100%"></div></div>';
+    if (!entries.length) return h + '<div class="note-box"><p style="margin:0">' + MB.T('Ehhez a könyvhöz még nincs fogalomtár.', 'This book has no glossary yet.') + '</p></div>';
+    h += '<div class="term-index">' + entries.map(function (g) {
+      return '<a href="#/glossary/' + g.id + '">' + MB.esc(MB.termLabel(g)) + '</a>';
+    }).join('') + '</div>';
+    h += '<div class="glossary">' + entries.map(function (g) {
+      const plain = MB.lang === 'en' ? (g.plain.en || g.plain.hu) : (g.plain.hu || g.plain.en);
+      const precise = MB.lang === 'en' ? (g.precise.en || g.precise.hu) : (g.precise.hu || g.precise.en);
+      return '<article class="gloss-entry' + (focusId === g.id ? ' focus' : '') + '" id="gloss-' + MB.esc(g.id) + '">' +
+        '<div class="gloss-head"><h2>' + MB.esc(MB.termLabel(g)) + '</h2>' +
+        (g.chapter ? '<a class="meta-pill" href="#/chapter/' + g.chapter.section + '/' + g.chapter.chapter + '">' + MB.T('Fejezet', 'Chapter') + '</a>' : '') + '</div>' +
+        '<p class="plain-words"><span class="tag-label">' + MB.T('Egyszerű szavakkal', 'In plain words') + '</span> ' + plain + '</p>' +
+        '<p class="precise-line"><span class="tag-label">' + MB.T('Pontosan', 'Precisely') + '</span> ' + precise + '</p></article>';
+    }).join('') + '</div>';
+    return h;
+  }
+
+  function termTip() {
+    let tip = document.getElementById('termTip');
+    if (tip) return tip;
+    tip = document.createElement('div');
+    tip.id = 'termTip';
+    tip.className = 'term-tip';
+    tip.hidden = true;
+    document.body.appendChild(tip);
+    return tip;
+  }
+  function showTermTip(btn) {
+    const g = MB.termById(btn.dataset.term);
+    if (!g) return;
+    const tip = termTip();
+    const plain = MB.lang === 'en' ? (g.plain.en || g.plain.hu) : (g.plain.hu || g.plain.en);
+    tip.innerHTML = '<b>' + MB.esc(MB.termLabel(g)) + '</b><p>' + plain + '</p><a href="#/glossary/' + g.id + '">' + MB.T('Fogalomtár bejegyzés', 'Glossary entry') + '</a>';
+    tip.hidden = false;
+    const r = btn.getBoundingClientRect();
+    const width = Math.min(320, window.innerWidth - 24);
+    tip.style.maxWidth = width + 'px';
+    tip.style.left = Math.max(12, Math.min(r.left, window.innerWidth - width - 12)) + 'px';
+    tip.style.top = (r.bottom + 8 + 180 > window.innerHeight ? Math.max(12, r.top - 188) : r.bottom + 8) + 'px';
+  }
+  function hideTermTip() { const tip = document.getElementById('termTip'); if (tip) tip.hidden = true; }
+  document.addEventListener('click', function (e) {
+    const b = e.target.closest && e.target.closest('.term');
+    if (b) { e.preventDefault(); showTermTip(b); return; }
+    if (!e.target.closest || !e.target.closest('#termTip')) hideTermTip();
+  });
+  document.addEventListener('focusin', function (e) {
+    if (e.target && e.target.matches && e.target.matches('.term')) showTermTip(e.target);
+  });
+  window.addEventListener('hashchange', hideTermTip);
 
   /* ---------- formulas ---------- */
   function viewFormulas() {
@@ -558,6 +668,8 @@
     if (parts[0] === 'hunt') return { name: 'hunt', id: parts[1] };
     if (parts[0] === 'progress') return { name: 'progress' };
     if (parts[0] === 'coach') return { name: 'coach' };
+    if (parts[0] === 'today') return { name: 'today' };
+    if (parts[0] === 'glossary') return { name: 'glossary', term: parts[1] };
     if (parts[0] === 'map') return { name: 'map' };
     if (parts[0] === 'diagnostic') return { name: 'diagnostic', section: parts[1] };
     if (parts[0] === 'launch') return { name: 'learn', minutes: 10, section: parts[1] };
@@ -616,6 +728,12 @@
     } else if (r.name === 'progress') {
       html = MB.progressView ? MB.progressView() : '';
       setCrumbs([{ label: MB.T('Haladás', 'Progress') }]);
+    } else if (r.name === 'today') {
+      html = MB.habit && MB.habit.todayView ? MB.habit.todayView() : '';
+      setCrumbs([{ label: MB.T('Mai terv', "Today's plan") }]);
+    } else if (r.name === 'glossary') {
+      html = viewGlossary(r.term);
+      setCrumbs([{ label: MB.T('Fogalomtár', 'Glossary') }]);
     } else if (r.name === 'coach') {
       html = MB.coachView ? MB.coachView() : '';
       setCrumbs([{ label: MB.T('Fókusz', 'Focus') }]);
@@ -645,6 +763,7 @@
     if (r.name === 'formulas') initFormulaSearch();
     if (MB.fun && MB.fun.afterRender) MB.fun.afterRender(r);
     if (MB.coach && MB.coach.afterRender) MB.coach.afterRender(r);
+    if (MB.habit && MB.habit.afterRender) MB.habit.afterRender(r);
   }
 
   /* ---------- interactions ---------- */
@@ -801,6 +920,9 @@
   MB.videos.forEach(function (v) {
     pushEntry('hu', 'videó', v.title, v.channel, '#/videos', v.title + ' ' + v.channel + ' ' + (v.note || '') + ' ' + v.cat);
   });
+  (MB.glossary || []).forEach(function (g) {
+    pushEntry('hu', 'fogalom', MB.termLabel(g), MB.T('fogalomtár', 'glossary'), '#/glossary/' + g.id, g.term.hu + ' ' + g.term.en + ' ' + g.plain.hu + ' ' + g.precise.hu);
+  });
   /* English entries: the pickers only translate while MB.lang is 'en', so switch for the build. */
   (function buildEnglishIndex() {
     const prevLang = MB.lang;
@@ -824,6 +946,9 @@
         const e = MB.pickVideo(v, i);
         pushEntry('en', 'video', e.title, e.channel, '#/videos',
           e.title + ' ' + e.channel + ' ' + (e.note || '') + ' ' + e.cat);
+      });
+      (MB.glossary || []).forEach(function (g) {
+        pushEntry('en', 'term', MB.termLabel(g), 'Glossary', '#/glossary/' + g.id, g.term.en + ' ' + g.term.hu + ' ' + g.plain.en + ' ' + g.precise.en);
       });
     } finally {
       MB.lang = prevLang;

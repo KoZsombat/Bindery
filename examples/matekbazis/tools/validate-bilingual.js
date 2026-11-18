@@ -3,17 +3,19 @@
    Exits non-zero on missing overlays, shape mismatches, changed answers or Hungarian prose. */
 'use strict';
 
-const fs = require('fs');
-const path = require('path');
-const vm = require('vm');
+import fs from 'node:fs';
+import path from 'node:path';
+import vm from 'node:vm';
+import { fileURLToPath } from 'node:url';
 
-const root = path.resolve(__dirname, '..');
+const here = path.dirname(fileURLToPath(import.meta.url));
+const root = path.resolve(here, '..');
 const contentDir = path.join(root, 'content');
 const enDir = path.join(contentDir, '_en');
 
 function makeMB() {
   const MB = {
-    sections: [], formulas: [], videos: [], examBank: [], enContent: {},
+    sections: [], formulas: [], videos: [], examBank: [], enContent: {}, glossary: [],
     section: s => MB.sections.push(s),
     def: (title, body) => ({ t: 'def', title, body }),
     thm: (title, body) => ({ t: 'thm', title, body }),
@@ -39,7 +41,7 @@ function numbered(dir, re) {
 
 const MB = makeMB();
 load(numbered(contentDir, /^\d{2}-.*\.js$/).map(f => path.join(contentDir, f)), MB);
-load([path.join(contentDir, '_formulas.js'), path.join(contentDir, '_videos.js')], MB);
+load([path.join(contentDir, '_glossary.js'), path.join(contentDir, '_formulas.js'), path.join(contentDir, '_videos.js')].filter(fs.existsSync), MB);
 load(numbered(enDir, /^\d{2}-.*\.js$/).map(f => path.join(enDir, f)), MB);
 load([path.join(enDir, '_formulas.js'), path.join(enDir, '_videos.js')].filter(fs.existsSync), MB);
 
@@ -84,6 +86,32 @@ for (const s of MB.sections) {
     const e = MB.enContent[key];
     if (!e) { fail('missing overlay: ' + key); continue; }
     for (const k of ['title', 'lead', 'summary', 'when']) checkField(key + '.' + k, c[k], e[k]);
+    /* Optional depth fields (generated books and future example content). */
+    if (c.terms) {
+      if (!e.terms || e.terms.length !== c.terms.length) fail('terms length: ' + key);
+      (c.terms || []).forEach((t, i) => {
+        const x = (e.terms || [])[i] || {};
+        checkField(key + '.terms[' + i + '].term', t.term, x.term || t.term);
+        checkField(key + '.terms[' + i + '].plain', t.plain, x.plain || t.plain);
+        checkField(key + '.terms[' + i + '].precise', t.precise, x.precise || t.precise);
+      });
+    }
+    if (c.refresher) {
+      if (!e.refresher || e.refresher.length !== c.refresher.length) fail('refresher length: ' + key);
+      (c.refresher || []).forEach((r, i) => checkField(key + '.refresher[' + i + ']', r.label, (e.refresher || [])[i] && e.refresher[i].label));
+    }
+    if (c.recap) {
+      if (!e.recap || !e.recap.points || e.recap.points.length !== ((c.recap.points || []).length)) fail('recap length: ' + key);
+      checkField(key + '.recap.next', c.recap.next, e.recap && e.recap.next);
+    }
+    if (c.checks) {
+      if (!e.checks || e.checks.length !== c.checks.length) fail('checks length: ' + key);
+      (c.checks || []).forEach((q, i) => {
+        const x = (e.checks || [])[i] || {};
+        checkField(key + '.checks[' + i + '].q', q.q, x.q || q.q);
+        checkField(key + '.checks[' + i + '].a', q.a, x.a || q.a);
+      });
+    }
     if ((c.why || []).length && (!e.why || e.why.length !== (c.why || []).length)) fail('why length: ' + key);
     (e.why || []).forEach((x, i) => checkField(key + '.why[' + i + ']', (c.why || [])[i], x));
 
@@ -143,6 +171,21 @@ for (const s of MB.sections) {
   }
 }
 
+/* Glossary: bilingual definitions and chapter links that resolve. */
+const chapterKeys = new Set(MB.sections.flatMap(s => s.chapters.map(c => s.id + '/' + c.id)));
+const glossaryIds = new Set();
+(MB.glossary || []).forEach((g, i) => {
+  const where = 'glossary[' + i + ']';
+  if (!g.id || glossaryIds.has(g.id)) fail('duplicate or missing glossary id: ' + g.id);
+  glossaryIds.add(g.id);
+  checkField(where + '.term', g.term && g.term.hu, g.term && g.term.en);
+  checkField(where + '.plain', g.plain && g.plain.hu, g.plain && g.plain.en);
+  checkField(where + '.precise', g.precise && g.precise.hu, g.precise && g.precise.en);
+  const key = g.chapter && g.chapter.section + '/' + g.chapter.chapter;
+  if (!key || !chapterKeys.has(key)) fail(where + ': unresolved chapter link ' + key);
+});
+if (!(MB.glossary || []).length) warn('no glossary entries');
+
 if (!MB.enFormulas || MB.enFormulas.length !== MB.formulas.length) fail('formula overlay count ' + (MB.enFormulas || []).length + ' != ' + MB.formulas.length);
 (MB.enFormulas || []).forEach((x, i) => {
   const f = MB.formulas[i];
@@ -171,6 +214,7 @@ if (catCount !== titleEn || catCount !== descEn) fail('generator category metada
 console.log('chapters:', chapters, 'exercises:', exercises);
 console.log('formulas:', MB.formulas.length, MB.enFormulas && MB.enFormulas.length);
 console.log('videos:', MB.videos.length, MB.enVideos && MB.enVideos.length);
+console.log('glossary:', (MB.glossary || []).length);
 console.log('generator items:', itemCalls, 'with en:', enCalls, 'categories:', catCount);
 if (warnings.length) {
   console.log('\nWARNINGS (' + warnings.length + ')');

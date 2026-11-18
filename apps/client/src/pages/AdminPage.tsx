@@ -236,7 +236,7 @@ export function AdminPage() {
                 onChange={event => setSettingsForm({ ...settingsForm, chapterBatchSize: event.target.value })}
               />
             </Field>
-            <Field label={t('Output tokens per request')} htmlFor="set-max-tokens">
+            <Field label={t('Output tokens per chapter pass')} htmlFor="set-max-tokens">
               <Input
                 id="set-max-tokens"
                 type="number"

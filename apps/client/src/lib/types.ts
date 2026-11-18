@@ -21,11 +21,27 @@ export interface Site {
   reusable: boolean;
 }
 
+export interface JobActivity {
+  chars: number;
+  elapsedMs: number;
+  updatedAt: string;
+}
+
+export interface JobProgress {
+  phase: string;
+  done: number;
+  total: number;
+  chapter: string;
+  activity?: JobActivity | null;
+}
+
 export interface Job {
   status: string;
   log: string;
   attempts: number;
   lastError: string;
+  progress: JobProgress | null;
+  heartbeatAt: string;
   updatedAt: string;
 }
 

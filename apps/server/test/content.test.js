@@ -22,7 +22,9 @@ test('mock site survives normalization and schema validation', () => {
   const site = normalizeSite(mockSite(req), req);
   const result = validateSite(site);
   assert.equal(result.ok, true, result.error);
-  assert.equal(site.sections[0].chapters[0].exercises[0].a, '4');
+  assert.equal(site.version, 2);
+  assert.ok(site.glossary.length > 0);
+  assert.equal(site.sections[0].chapters[0].exercises.find(q => q.type === 'number').a, '4');
 });
 
 test('schema rejects a chapter with no exercises', () => {
