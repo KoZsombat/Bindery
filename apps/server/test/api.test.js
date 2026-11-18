@@ -16,7 +16,8 @@ process.env.LLM_MOCK = '1';
 
 const { migrateAuth } = await import('../src/auth.js');
 const { app } = await import('../src/app.js');
-const { closeDb } = await import('../src/db/index.js');
+const { closeDb, sqlite } = await import('../src/db/index.js');
+const { SITES_DIR } = await import('../src/config.js');
 const { startWorker, stopWorker } = await import('../src/services/generation.js');
 
 await migrateAuth();
@@ -88,4 +89,27 @@ test('unknown API routes stay JSON', async () => {
   const res = await request('/api/does-not-exist');
   assert.equal(res.status, 404);
   assert.equal((await res.json()).error, 'not_found');
+});
+
+test('published generated sites are public, private ones require login', async () => {
+  const t = new Date().toISOString();
+  const insert = sqlite.prepare(`INSERT INTO sites
+      (owner_id,slug,title,description,topic,audience,language,status,published,source_text,created_at,updated_at)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`);
+  for (const [slug, published] of [['public-test-site', 1], ['private-test-site', 0]]) {
+    fs.mkdirSync(path.join(SITES_DIR, slug), { recursive: true });
+    fs.writeFileSync(path.join(SITES_DIR, slug, 'site.json'), JSON.stringify({
+      version: 2, title: 'Public test ' + slug,
+      subtitle: { hu: '', en: '' }, summary: { hu: '', en: '' }, sections: [], glossary: []
+    }));
+    insert.run('test-owner', slug, 'Public test ' + slug, '', '', '', 'both', 'ready', published, '', t, t);
+  }
+
+  const pub = await request('/s/public-test-site/');
+  assert.equal(pub.status, 200);
+  assert.match(await pub.text(), /Public test public-test-site/);
+
+  const priv = await request('/s/private-test-site/');
+  assert.equal(priv.status, 302);
+  assert.match(priv.headers.get('location') || '', /\/login/);
 });

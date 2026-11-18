@@ -4,18 +4,19 @@ import fsp from 'node:fs/promises';
 import path from 'node:path';
 import { TEMPLATE_DIR, BETTER_AUTH_URL } from '../config.js';
 import { sqlite, siteJsonPath } from '../db/index.js';
-import { requireUser } from '../middleware/session.js';
+
 
 const router = express.Router();
 
 async function serveGenerated(req, res, slug, sub) {
-  if (!req.user) {
-    return res.redirect(BETTER_AUTH_URL + '/login?next=' + encodeURIComponent(req.originalUrl || '/'));
-  }
   const site = sqlite.prepare('SELECT * FROM sites WHERE slug=?').get(slug);
   if (!site || site.archived) return res.status(404).send('This site is not available.');
   if (site.example) return res.redirect('/example/matekbazis/');
-  if (!site.published && site.owner_id !== req.user.id && req.user.role !== 'admin') {
+  const allowed = req.user && (site.owner_id === req.user.id || req.user.role === 'admin');
+  if (!site.published && !allowed) {
+    if (!req.user) {
+      return res.redirect(BETTER_AUTH_URL + '/login?next=' + encodeURIComponent(req.originalUrl || '/'));
+    }
     return res.status(404).send('This site is private.');
   }
   const clean = String(sub || '').replace(/^\/+/, '');
@@ -61,7 +62,7 @@ router.get('/s/:slug', (req, res, next) => {
   if (req.path.endsWith('/')) return next();
   res.redirect('/s/' + encodeURIComponent(req.params.slug) + '/');
 });
-router.get('/s/:slug/', requireUser, (req, res, next) => serveGenerated(req, res, req.params.slug, '').catch(next));
-router.get('/s/:slug/:asset', requireUser, (req, res, next) => serveGenerated(req, res, req.params.slug, req.params.asset).catch(next));
+router.get('/s/:slug/', (req, res, next) => serveGenerated(req, res, req.params.slug, '').catch(next));
+router.get('/s/:slug/:asset', (req, res, next) => serveGenerated(req, res, req.params.slug, req.params.asset).catch(next));
 
 export default router;

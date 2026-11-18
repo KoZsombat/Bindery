@@ -19,6 +19,8 @@ export interface Site {
   url: string;
   archived: boolean;
   reusable: boolean;
+  /** Admin-only: owner email on the all-sites list. */
+  ownerEmail?: string;
 }
 
 export interface JobActivity {

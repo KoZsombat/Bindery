@@ -33,6 +33,12 @@ export function SiteCard({
         <span className="font-mono">{site.slug}</span>
         <span aria-hidden="true">·</span>
         <span>{formatDateShort(site.createdAt, lang)}</span>
+        {site.ownerEmail ? (
+          <>
+            <span aria-hidden="true">·</span>
+            <span>{site.ownerEmail}</span>
+          </>
+        ) : null}
         <SiteFlags site={site} />
       </div>
 

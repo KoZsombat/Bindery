@@ -1048,6 +1048,10 @@ export async function buildBook({
       units.push({ section: s, batch: pending.slice(i, i + batchSize) });
     }
   }
+  if (units.length) {
+    chapterEtaAt = new Date(Date.now() + (units.length * LIMITS.model.chapterEstimateMs) / concurrency).toISOString();
+    onProgress({ phase: 'chapters', done, total, etaAt: chapterEtaAt, message: `Writing ${total - done} chapters in ${units.length} pass(es)…` });
+  }
   const writeUnit = async ({ section: s, batch }) => {
     const selected = selectSourceChunks(source, {
       ...batch[0],
@@ -1117,7 +1121,9 @@ export async function buildBook({
       const repairStart = Date.now();
       const repairTotal = byChapter.size;
       let repairDone = 0;
-      let repairEtaAt = null;
+      let repairEtaAt = repairTotal
+        ? new Date(Date.now() + (repairTotal * LIMITS.model.chapterEstimateMs) / concurrency).toISOString()
+        : null;
       await poolMap([...byChapter], concurrency, async ([cid, issues]) => {
         const entry = flat.find(x => x.c.id === cid);
         if (!entry) return;

@@ -116,7 +116,7 @@ export function SitePage() {
   const etaSeconds = progress?.etaAt ? Math.max(0, (new Date(progress.etaAt).getTime() - now) / 1000) : null;
   const etaLabel = etaSeconds != null
     ? `${t('Estimated time remaining:')} ~${formatDuration(etaSeconds)}`
-    : progress?.phase === 'outline' ? t('Estimating time…') : '';
+    : t('Estimating time…');
 
   return (
     <div className="space-y-6">

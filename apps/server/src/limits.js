@@ -62,6 +62,8 @@ export const LIMITS = {
     validationRetries: 1,
     /** Attempts for the outline pass. */
     outlineAttempts: 2,
+    /** Rough per-pass time used only for the very first ETA before one completes. */
+    chapterEstimateMs: 150_000,
     /** Skill text characters per prompt. Depth rules are appended separately. */
     promptSkillChars: 140_000
   },

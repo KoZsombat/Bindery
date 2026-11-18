@@ -17,7 +17,7 @@ process.env.LLM_MOCK = '0';
 
 const { migrateAuth, seedAdmin } = await import('../src/auth.js');
 const { app } = await import('../src/app.js');
-const { closeDb, ensureProfile } = await import('../src/db/index.js');
+const { closeDb, ensureProfile, sqlite } = await import('../src/db/index.js');
 const { effectiveProfile, keySource, llmConfig } = await import('../src/services/generation.js');
 
 await migrateAuth();
@@ -171,4 +171,30 @@ test('an own key wins over any shared key', async () => {
   const cfg = llmConfig(effectiveProfile(ensureProfile(ownId)));
   assert.equal(cfg.key, 'sk-own-key-0123456789');
   assert.equal(cfg.model, 'own-model');
+});
+
+test('admins list every site with its owner', async () => {
+  const admin = await login('admin@test.local', 'test-password-12345');
+  const created = await fetch(base + '/api/admin/users', {
+    method: 'POST',
+    headers: headers(admin),
+    body: JSON.stringify({ email: 'list@test.local', password: 'list-password-12345' }),
+  });
+  assert.equal(created.status, 201);
+  const userId = (await created.json()).user.id;
+  const t = new Date().toISOString();
+  sqlite.prepare(`INSERT INTO sites
+      (owner_id,slug,title,description,topic,audience,language,status,published,source_text,created_at,updated_at)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`)
+    .run(userId, 'admin-list-check', 'Other user site', '', '', '', 'both', 'ready', 0, '', t, t);
+
+  const adminSites = await (await fetch(base + '/api/sites', { headers: { cookie: admin } })).json();
+  const row = adminSites.sites.find(site => site.slug === 'admin-list-check');
+  assert.ok(row, 'admin sees another user site');
+  assert.equal(row.ownerEmail, 'list@test.local');
+
+  const user = await login('list@test.local', 'list-password-12345');
+  const userSites = await (await fetch(base + '/api/sites', { headers: { cookie: user } })).json();
+  assert.ok(userSites.sites.some(site => site.slug === 'admin-list-check'));
+  assert.equal(userSites.sites.find(site => site.slug === 'admin-list-check').ownerEmail, undefined);
 });

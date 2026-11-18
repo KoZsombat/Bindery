@@ -155,6 +155,13 @@ router.get('/limits', requireAuthApi, (req, res) => {
 });
 
 router.get('/sites', requireAuthApi, (req, res) => {
+  if (req.user.role === 'admin') {
+    const sites = sqlite
+      .prepare('SELECT s.*, u.email AS owner_email FROM sites s LEFT JOIN user u ON u.id = s.owner_id WHERE s.archived=0 ORDER BY s.created_at DESC')
+      .all()
+      .map(s => ({ ...publicSite(s), ownerEmail: s.owner_email || '' }));
+    return res.json({ sites });
+  }
   const sites = sqlite
     .prepare('SELECT * FROM sites WHERE (owner_id=? OR example=1) AND archived=0 ORDER BY created_at DESC')
     .all(req.user.id)
@@ -310,7 +317,7 @@ router.post('/sites/:id/clone', requireAuthApi, (req, res) => {
 
 router.post('/sites/:id/cancel', requireAuthApi, (req, res) => {
   const site = siteRow(parseId(req.params.id));
-  if (!site || site.owner_id !== req.user.id || site.archived) return fail(res, 404, 'not_found', 'Site not found.');
+  if (!site || (site.owner_id !== req.user.id && req.user.role !== 'admin') || site.archived) return fail(res, 404, 'not_found', 'Site not found.');
   const t = now();
   sqlite.prepare("UPDATE jobs SET cancel_requested=1,updated_at=? WHERE site_id=? AND status IN ('queued','running')").run(t, site.id);
   sqlite.prepare("UPDATE jobs SET status='cancelled',locked_at=NULL,updated_at=? WHERE site_id=? AND status='queued'").run(t, site.id);
@@ -320,7 +327,7 @@ router.post('/sites/:id/cancel', requireAuthApi, (req, res) => {
 
 router.post('/sites/:id/regenerate', requireAuthApi, rateLimit({ windowMs: 60 * 1000, max: 8, key: req => req.user.id }), (req, res) => {
   const site = siteRow(parseId(req.params.id));
-  if (!site || site.owner_id !== req.user.id || site.archived) return fail(res, 404, 'not_found', 'Site not found.');
+  if (!site || (site.owner_id !== req.user.id && req.user.role !== 'admin') || site.archived) return fail(res, 404, 'not_found', 'Site not found.');
   const t = now();
   try {
     sqlite.transaction(() => {

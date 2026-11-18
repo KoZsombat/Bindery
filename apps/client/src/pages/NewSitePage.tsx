@@ -6,7 +6,7 @@ import { SparkIcon } from '../components/icons';
 import { Alert } from '../components/ui/Alert';
 import { Button } from '../components/ui/Button';
 import { Card, PageHeader } from '../components/ui/Card';
-import { Checkbox, Field, Input, Select, Textarea } from '../components/ui/Form';
+import { Field, Input, Select, Textarea } from '../components/ui/Form';
 import { useAuth } from '../context/AuthContext';
 import { useI18n } from '../context/I18nContext';
 import { useToast } from '../context/ToastContext';
@@ -275,11 +275,16 @@ export function NewSitePage() {
               />
             </Field>
 
-            <Checkbox
-              checked={form.published}
-              onChange={event => set('published', event.target.checked)}
-              label={t('Show this site in the shared catalog')}
-            />
+            <Field label={t('Visibility')} htmlFor="visibility">
+              <Select
+                id="visibility"
+                value={form.published ? 'public' : 'private'}
+                onChange={event => set('published', event.target.value === 'public')}
+              >
+                <option value="public">{t('Public — listed in the catalog')}</option>
+                <option value="private">{t('Private — only me and admins')}</option>
+              </Select>
+            </Field>
 
             <div className="flex flex-wrap items-center gap-2 pt-2">
               <Button type="submit" loading={submitting} disabled={uploading || needsKey} icon={<SparkIcon className="h-4 w-4" />}>
