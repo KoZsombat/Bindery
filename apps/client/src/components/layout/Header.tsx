@@ -5,12 +5,13 @@ import { useTheme } from '../../context/ThemeContext';
 import { cn } from '../../lib/cn';
 import { GridIcon, LogOutIcon, MoonIcon, PlusIcon, SearchIcon, SettingsIcon, SunIcon, UsersIcon } from '../icons';
 import { Logo } from './Logo';
+import { LanguageSelect } from './LanguageSelect';
 
 const baseLink = 'inline-flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors whitespace-nowrap';
 
 export function Header() {
   const { me, logout } = useAuth();
-  const { t, lang, setLang } = useI18n();
+  const { t } = useI18n();
   const { theme, toggleTheme } = useTheme();
   const navigate = useNavigate();
 
@@ -57,16 +58,7 @@ export function Header() {
           >
             {theme === 'dark' ? <SunIcon className="h-4 w-4" /> : <MoonIcon className="h-4 w-4" />}
           </button>
-          <select
-            value={lang}
-            onChange={event => setLang(event.target.value === 'hu' ? 'hu' : 'en')}
-            className="select-chevron h-9 rounded-md border border-border bg-background px-2 font-mono text-xs font-semibold text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-            aria-label={t('Language')}
-            title={t('Language')}
-          >
-            <option value="hu">HU</option>
-            <option value="en">EN</option>
-          </select>
+          <LanguageSelect />
 
           {me ? (
             <div className="ml-1 flex items-center gap-2 border-l border-border pl-2">

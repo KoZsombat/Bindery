@@ -10,7 +10,7 @@ import { useI18n } from '../context/I18nContext';
 import { useToast } from '../context/ToastContext';
 import { api, describeError } from '../lib/api';
 import { formatDateShort } from '../lib/format';
-import type { AdminSettings, AdminSettingLimits, AdminUser } from '../lib/types';
+import type { AdminAccountRequest, AdminSettings, AdminSettingLimits, AdminUser } from '../lib/types';
 
 function UserRow({ user, onChanged }: { user: AdminUser; onChanged: () => Promise<void> }) {
   const { t, lang } = useI18n();
@@ -126,10 +126,13 @@ function UserRow({ user, onChanged }: { user: AdminUser; onChanged: () => Promis
 
 export function AdminPage() {
   const { refresh } = useAuth();
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const { push } = useToast();
 
   const [users, setUsers] = useState<AdminUser[]>([]);
+  const [requests, setRequests] = useState<AdminAccountRequest[]>([]);
+  const [pendingRequests, setPendingRequests] = useState(0);
+  const [requestBusy, setRequestBusy] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [creating, setCreating] = useState(false);
@@ -149,6 +152,41 @@ export function AdminPage() {
       setLoading(false);
     }
   }, [t]);
+
+  const loadRequests = useCallback(async () => {
+    try {
+      const data = await api.get<{ requests: AdminAccountRequest[]; pendingCount: number }>('/api/admin/account-requests');
+      setRequests(data.requests);
+      setPendingRequests(data.pendingCount);
+    } catch (e) {
+      setError(describeError(t, e));
+    }
+  }, [t]);
+
+  async function setRequestStatus(request: AdminAccountRequest, status: AdminAccountRequest['status']) {
+    setRequestBusy(request.id);
+    try {
+      await api.patch(`/api/admin/account-requests/${request.id}`, { status });
+      await loadRequests();
+    } catch (e) {
+      push('error', describeError(t, e));
+    } finally {
+      setRequestBusy(0);
+    }
+  }
+
+  async function deleteRequest(request: AdminAccountRequest) {
+    setRequestBusy(request.id);
+    try {
+      await api.delete(`/api/admin/account-requests/${request.id}`);
+      await loadRequests();
+      push('success', t('Request deleted.'));
+    } catch (e) {
+      push('error', describeError(t, e));
+    } finally {
+      setRequestBusy(0);
+    }
+  }
 
   const loadSettings = useCallback(async () => {
     try {
@@ -171,6 +209,10 @@ export function AdminPage() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    void loadRequests();
+  }, [loadRequests]);
 
   useEffect(() => {
     void loadSettings();
@@ -244,6 +286,62 @@ export function AdminPage() {
       />
 
       {error ? <Alert tone="error">{error}</Alert> : null}
+
+      <Card className="overflow-hidden p-0">
+        <div className="border-b border-border p-4 sm:p-6">
+          <div className="flex flex-wrap items-center gap-3">
+            <h2 className="text-lg font-semibold text-foreground">{t('Account requests')}</h2>
+            <Badge tone={pendingRequests > 0 ? 'warning' : 'neutral'}>
+              {pendingRequests} {t('pending')}
+            </Badge>
+          </div>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {t('People asking for an account from the sign-in page, with who they are and how to reach them.')}
+          </p>
+        </div>
+        {requests.length === 0 ? (
+          <p className="p-4 text-sm text-muted-foreground sm:px-6">{t('No account requests yet.')}</p>
+        ) : (
+          <div className="divide-y divide-border">
+            {requests.map(request => (
+              <div key={request.id} className="p-4 sm:px-6">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="truncate text-sm font-medium text-foreground">{request.name}</span>
+                  <Badge tone={request.status === 'pending' ? 'warning' : 'success'}>{t(request.status)}</Badge>
+                  <span className="text-xs text-muted-foreground">
+                    {t('Requested')} {formatDateShort(request.createdAt, lang)}
+                  </span>
+                </div>
+                <p className="mt-2 whitespace-pre-wrap text-sm text-foreground">{request.about}</p>
+                <div className="mt-2 flex flex-wrap items-center gap-3">
+                  <span className="text-xs text-muted-foreground">{t('Contact')}:</span>
+                  <code className="break-all rounded-md border border-border bg-muted px-2 py-1 font-mono text-xs text-foreground">
+                    {request.contact}
+                  </code>
+                  <div className="ml-auto flex flex-wrap gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      loading={requestBusy === request.id}
+                      onClick={() => void setRequestStatus(request, request.status === 'pending' ? 'handled' : 'pending')}
+                    >
+                      {request.status === 'pending' ? t('Mark handled') : t('Reopen')}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="danger"
+                      disabled={requestBusy === request.id}
+                      onClick={() => void deleteRequest(request)}
+                    >
+                      {t('Delete')}
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </Card>
 
       {limits ? (
         <Card>

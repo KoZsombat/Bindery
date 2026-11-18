@@ -152,10 +152,22 @@ CREATE TABLE IF NOT EXISTS login_links (
   expires_at TEXT NOT NULL,
   used_at TEXT
 );
+-- Access requests from the sign-in page. about is the "who are you and where
+-- do I know you from" note; contact is free-form (Discord, email, Telegram…).
+CREATE TABLE IF NOT EXISTS account_requests (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  about TEXT NOT NULL,
+  contact TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'pending',
+  created_at TEXT NOT NULL,
+  reviewed_at TEXT
+);
 CREATE INDEX IF NOT EXISTS idx_jobs_queue ON jobs(status, next_attempt_at);
 CREATE INDEX IF NOT EXISTS idx_jobs_site ON jobs(site_id);
 CREATE INDEX IF NOT EXISTS idx_uploads_created ON uploads(created_at);
 CREATE INDEX IF NOT EXISTS idx_login_links_hash ON login_links(token_hash);
+CREATE INDEX IF NOT EXISTS idx_account_requests_status ON account_requests(status, created_at);
 `);
 
 export const now = () => new Date().toISOString();

@@ -69,6 +69,28 @@ function userJson(row, profile) {
   };
 }
 
+/* --------------------------------------------------------- access requests */
+
+const AccountRequestSchema = z.object({
+  name: z.string().trim().min(1, 'Tell me your name.').max(80),
+  about: z.string().trim().min(1, 'Say who you are and where I know you from.').max(2000),
+  contact: z.string().trim().min(1, 'Add a way to reach you.').max(200),
+});
+
+/** Public: the sign-in page's "Request account" form. */
+router.post('/account-requests', rateLimit({ windowMs: 15 * 60 * 1000, max: 5 }), (req, res) => {
+  const parsed = AccountRequestSchema.safeParse(req.body || {});
+  if (!parsed.success) return badRequest(res, parsed.error);
+  const body = parsed.data;
+  const existing = sqlite.prepare(
+    "SELECT 1 FROM account_requests WHERE status='pending' AND lower(contact)=lower(?) AND lower(name)=lower(?)"
+  ).get(body.contact, body.name);
+  if (existing) return res.status(201).json({ ok: true });
+  sqlite.prepare('INSERT INTO account_requests (name,about,contact,created_at) VALUES (?,?,?,?)')
+    .run(body.name, body.about, body.contact, now());
+  res.status(201).json({ ok: true });
+});
+
 /* ------------------------------------------------------------------ session */
 
 router.get('/me', requireAuthApi, (req, res) => {
@@ -537,6 +559,38 @@ router.patch('/admin/settings', requireAdminApi, (req, res) => {
   const parsed = GenerationSettingsSchema.safeParse(req.body || {});
   if (!parsed.success) return badRequest(res, parsed.error);
   res.json({ settings: updateSettings(parsed.data), limits: settingsMeta() });
+});
+
+router.get('/admin/account-requests', requireAdminApi, (req, res) => {
+  const requests = sqlite.prepare(`
+    SELECT id,name,about,contact,status,created_at AS createdAt,reviewed_at AS reviewedAt
+    FROM account_requests
+    ORDER BY CASE WHEN status='pending' THEN 0 ELSE 1 END, created_at DESC
+  `).all();
+  res.json({ requests, pendingCount: requests.filter(r => r.status === 'pending').length });
+});
+
+const AccountRequestStatusSchema = z.object({
+  status: z.enum(['pending', 'handled']),
+});
+
+router.patch('/admin/account-requests/:id', requireAdminApi, (req, res) => {
+  const id = parseId(req.params.id);
+  const parsed = AccountRequestStatusSchema.safeParse(req.body || {});
+  if (!parsed.success) return badRequest(res, parsed.error);
+  const request = id ? sqlite.prepare('SELECT id FROM account_requests WHERE id=?').get(id) : null;
+  if (!request) return fail(res, 404, 'not_found', 'Request not found.');
+  sqlite.prepare('UPDATE account_requests SET status=?,reviewed_at=? WHERE id=?')
+    .run(parsed.data.status, parsed.data.status === 'handled' ? now() : null, id);
+  res.json({ ok: true });
+});
+
+router.delete('/admin/account-requests/:id', requireAdminApi, (req, res) => {
+  const id = parseId(req.params.id);
+  const request = id ? sqlite.prepare('SELECT id FROM account_requests WHERE id=?').get(id) : null;
+  if (!request) return fail(res, 404, 'not_found', 'Request not found.');
+  sqlite.prepare('DELETE FROM account_requests WHERE id=?').run(id);
+  res.json({ ok: true });
 });
 
 const NewUserSchema = z.object({

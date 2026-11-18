@@ -4,10 +4,13 @@ import { useAuth } from '../context/AuthContext';
 import { useI18n } from '../context/I18nContext';
 import { useTheme } from '../context/ThemeContext';
 import { authClient } from '../lib/auth-client';
+import { api, describeError } from '../lib/api';
 import { Logo } from '../components/layout/Logo';
+import { LanguageSelect } from '../components/layout/LanguageSelect';
 import { Alert } from '../components/ui/Alert';
 import { Button } from '../components/ui/Button';
-import { Field, Input } from '../components/ui/Form';
+import { Dialog } from '../components/ui/Dialog';
+import { Field, Input, Textarea } from '../components/ui/Form';
 import { PageSpinner } from '../components/ui/Spinner';
 import { MoonIcon, SunIcon } from '../components/icons';
 
@@ -15,9 +18,105 @@ function safeNext(value: string | null): string {
   return value && value.startsWith('/') && !value.startsWith('//') ? value : '/app';
 }
 
+function RequestAccountDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const { t } = useI18n();
+  const [form, setForm] = useState({ name: '', about: '', contact: '' });
+  const [error, setError] = useState('');
+  const [sent, setSent] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+
+  function close() {
+    if (submitting) return;
+    onClose();
+    setError('');
+    setSent(false);
+    setForm({ name: '', about: '', contact: '' });
+  }
+
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    setSubmitting(true);
+    setError('');
+    try {
+      await api.post('/api/account-requests', form);
+      setSent(true);
+      setForm({ name: '', about: '', contact: '' });
+    } catch (e) {
+      setError(describeError(t, e));
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <Dialog
+      open={open}
+      onClose={close}
+      title={t('Request an account')}
+      description={t('There is no public sign-up. Tell the administrator who you are and the request will appear on the admin page.')}
+    >
+      {sent ? (
+        <div className="space-y-4">
+          <Alert tone="success">{t('Request sent. The administrator will reach out on the contact you gave.')}</Alert>
+          <div className="flex justify-end">
+            <Button onClick={close}>{t('Close')}</Button>
+          </div>
+        </div>
+      ) : (
+        <form className="space-y-4" onSubmit={submit}>
+          {error ? <Alert tone="error">{error}</Alert> : null}
+          <Field label={t('Your name')} htmlFor="req-name" required>
+            <Input
+              id="req-name"
+              required
+              maxLength={80}
+              autoFocus
+              value={form.name}
+              onChange={event => setForm({ ...form, name: event.target.value })}
+            />
+          </Field>
+          <Field
+            label={t('Who are you, and where do I know you from?')}
+            htmlFor="req-about"
+            hint={t('e.g. “Bence from the BME calculus study group, we met at the library.”')}
+            required
+          >
+            <Textarea
+              id="req-about"
+              required
+              maxLength={2000}
+              value={form.about}
+              onChange={event => setForm({ ...form, about: event.target.value })}
+            />
+          </Field>
+          <Field
+            label={t('How can I reach you?')}
+            htmlFor="req-contact"
+            hint={t('Discord handle, Telegram, email — anything that works.')}
+            required
+          >
+            <Input
+              id="req-contact"
+              required
+              maxLength={200}
+              placeholder={t('e.g. discord: bence_42')}
+              value={form.contact}
+              onChange={event => setForm({ ...form, contact: event.target.value })}
+            />
+          </Field>
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={close} disabled={submitting}>{t('Cancel')}</Button>
+            <Button type="submit" loading={submitting}>{t('Send request')}</Button>
+          </div>
+        </form>
+      )}
+    </Dialog>
+  );
+}
+
 export function LoginPage() {
   const { me, loading: authLoading, refresh, error: authError } = useAuth();
-  const { t, lang, toggleLang } = useI18n();
+  const { t } = useI18n();
   const { theme, toggleTheme } = useTheme();
   const navigate = useNavigate();
   const [params] = useSearchParams();
@@ -27,6 +126,7 @@ export function LoginPage() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [requestOpen, setRequestOpen] = useState(false);
 
   useEffect(() => {
     if (authError) setError(authError);
@@ -65,14 +165,7 @@ export function LoginPage() {
         >
           {theme === 'dark' ? <SunIcon className="h-4 w-4" /> : <MoonIcon className="h-4 w-4" />}
         </button>
-        <button
-          type="button"
-          onClick={toggleLang}
-          className="inline-flex h-9 items-center justify-center rounded-md border border-border px-2 font-mono text-xs font-semibold text-muted-foreground hover:bg-muted hover:text-foreground"
-          aria-label={t('Language')}
-        >
-          {lang === 'hu' ? 'EN' : 'HU'}
-        </button>
+        <LanguageSelect />
       </div>
 
       <div className="mx-auto grid w-full max-w-5xl items-center gap-8 lg:grid-cols-2">
@@ -138,11 +231,16 @@ export function LoginPage() {
           </form>
 
           <p className="mt-4 text-xs leading-5 text-muted-foreground">{t('No public sign-up. Ask the administrator for an account.')}</p>
+          <Button variant="outline" className="mt-3 w-full" onClick={() => setRequestOpen(true)}>
+            {t('Request account')}
+          </Button>
           {import.meta.env.DEV ? (
             <p className="mt-2 font-mono text-xs text-accent">{t('Development login: admin@example.com / admin12345')}</p>
           ) : null}
         </section>
       </div>
+
+      <RequestAccountDialog open={requestOpen} onClose={() => setRequestOpen(false)} />
     </div>
   );
 }

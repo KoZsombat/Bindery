@@ -8,9 +8,8 @@ Felkészítő tanulókönyv a BME VIK mérnökinformatikus első félévének **
 
 ## Megnyitás — 3 lépés
 
-1. Kattints duplán az **`index.html`** fájlra. Megnyílik a böngésződben.
-2. Ha ez nem működik (ritka böngésző-beállítás), indítsd el a **`start.bat`**-ot Windows-on, a **`start.command`**-ot macOS-en, vagy a **`start.sh`**-t Linuxon. Ezek egy helyi szervert indítanak, és megnyitják az oldalt.
-3. Ha a böngésző kérdezi, engedélyezd a helyi fájl megnyitását. Chrome, Edge vagy Firefox ajánlott.
+1. Nyisd meg a Bindery katalógusából, vagy indíts egy egyszerű helyi szervert a mappában.
+2. Ha a böngésző kérdezi, engedélyezd a helyi fájl megnyitását. Chrome, Edge vagy Firefox ajánlott.
 
 > A videók kivételével minden helyben működik, internet nélkül is. A YouTube-videókhoz internet kell.
 
@@ -53,9 +52,6 @@ Feltételezem, hogy **középszintű érettségi** szinten tanultál matematiká
 
 ```
 index.html            ← ezt nyisd meg
-start.bat             ← Windows egykattintásos indító
-start.command         ← macOS indító
-start.sh              ← Linux indító
 assets/               ← kinézet és működés (nem kell nyúlni hozzá)
 content/              ← a tananyag fejezetei
 resources/            ← jegyzetek, ZH-k, vizsgák PDF-ben
@@ -65,7 +61,7 @@ README.md             ← ez a fájl
 
 ## Ha valami nem működik
 
-- **Üres az oldal**: nyisd meg a `start.bat`-tal (helyi szerver), ne közvetlenül a fájlt.
+- **Üres az oldal**: nyisd meg a Bindery katalógusából, vagy szolgáld ki a mappát egy helyi szerverrel.
 - **Nincsenek képletek**: ellenőrizd, hogy a `vendor/katex/` mappa megvan.
 - **Nem indul a videó**: a videók internetet igényelnek; kattints a „Több videó” linkre.
 - **Eltűnt a haladás**: ne privát/inkognitó ablakban használd.

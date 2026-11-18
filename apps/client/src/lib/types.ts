@@ -110,3 +110,13 @@ export interface AdminSettingLimit {
 }
 
 export type AdminSettingLimits = Record<keyof AdminSettings, AdminSettingLimit>;
+
+export interface AdminAccountRequest {
+  id: number;
+  name: string;
+  about: string;
+  contact: string;
+  status: 'pending' | 'handled';
+  createdAt: string;
+  reviewedAt: string | null;
+}

@@ -5,7 +5,7 @@
   const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const scope = location.host + location.pathname;
   let site = null;
-  let lang = localStorage.getItem('lbs.lang') || 'hu';
+  let lang = localStorage.getItem('bindery.lang') || localStorage.getItem('lbs.lang') || 'en';
   let theme = localStorage.getItem('lbs.theme') === 'dark' ? 'dark' : 'light';
   let current = null;
   let runTimer = null;
@@ -1392,7 +1392,13 @@
     setChrome(); renderModes(); renderTOC();
     const themeBtn = $('#themeBtn');
     if (themeBtn) themeBtn.addEventListener('click', () => { theme = theme === 'dark' ? 'light' : 'dark'; localStorage.setItem('lbs.theme', theme); applyTheme(); });
-    $('#langSelect').addEventListener('change', event => { lang = event.target.value === 'en' ? 'en' : 'hu'; localStorage.setItem('lbs.lang', lang); setChrome(); renderModes(); renderTOC(); route(); });
+    $('#langSelect').addEventListener('change', event => {
+      lang = event.target.value === 'en' ? 'en' : 'hu';
+      // Shared with the platform so one preference applies everywhere.
+      localStorage.setItem('bindery.lang', lang);
+      localStorage.setItem('lbs.lang', lang);
+      setChrome(); renderModes(); renderTOC(); route();
+    });
     $('#brandLink').addEventListener('click', e => { e.preventDefault(); location.hash = '#/'; });
     $('#searchInput').addEventListener('keydown', e => {
       if (e.key !== 'Enter') return;

@@ -8,7 +8,7 @@
   state.ex = state.ex || {};
   state.tests = state.tests || {};
   state.theme = state.theme || 'light';
-  state.lang = state.lang || 'hu';
+  state.lang = state.lang || localStorage.getItem('bindery.lang') || 'en';
   MB.lang = state.lang;
 
   /* ---------- data indexes ---------- */
@@ -897,6 +897,7 @@
   });
   document.getElementById('langBtn').addEventListener('click', function () {
     state.lang = state.lang === 'en' ? 'hu' : 'en';
+    try { localStorage.setItem('bindery.lang', state.lang); } catch (e) {}
     save(); applyLang(); render();
   });
 
