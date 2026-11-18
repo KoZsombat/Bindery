@@ -358,6 +358,6 @@
   else applyAttrLabels();
   document.addEventListener('click', function (e) {
     const t = e.target;
-    if (t && t.closest && t.closest('#langBtn')) setTimeout(applyAttrLabels, 0);
+    if (t && t.closest && t.closest('#langSelect')) setTimeout(applyAttrLabels, 0);
   }, true);
 })();

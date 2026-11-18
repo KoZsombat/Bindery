@@ -78,7 +78,7 @@ function chapter(id, num, title) {
 }
 
 const outline = {
-  title: 'BME first year programming', subtitle: { hu: 'Alcím', en: 'Subtitle' },
+  title: { hu: 'BME első év programozás', en: 'BME first year programming' }, subtitle: { hu: 'Alcím', en: 'Subtitle' },
   summary: { hu: 'Összefoglaló.', en: 'A summary.' },
   sections: [
     {
@@ -133,6 +133,7 @@ test('buildBook writes an outline, then chapters in batches', async () => {
   assert.equal(book.sections.length, 2);
   assert.equal(book.sections.flatMap(s => s.chapters).length, 6);
   assert.equal(calls.length, 1 + 4, 'one outline call plus two batches per section');
+  assert.deepEqual(book.title, { hu: 'BME első év programozás', en: 'BME first year programming' }, 'the book title stays bilingual');
   assert.deepEqual(book.sections[0].chapters.map(c => c.id), ['types', 'functions', 'pointers']);
   assert.equal(book.sections[1].chapters.at(-1).id, 'stl');
   const code = book.sections[0].chapters[0].theory.find(t => t.type === 'code');

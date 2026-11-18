@@ -10,10 +10,15 @@ interface I18nValue {
 
 const I18nContext = createContext<I18nValue | null>(null);
 const LANG_KEY = 'bindery.lang';
+const LANG_CHOSEN_KEY = 'bindery.lang.chosen';
 
-/** English unless the visitor explicitly picked another language before. */
+/**
+ * English by default. A saved language only counts after the visitor picked one
+ * explicitly, so values left behind by older automatic detection do not stick.
+ */
 function initialLang(): Lang {
   try {
+    if (localStorage.getItem(LANG_CHOSEN_KEY) !== '1') return 'en';
     const saved = localStorage.getItem(LANG_KEY);
     if (saved === 'hu' || saved === 'en') return saved;
   } catch {
@@ -27,10 +32,17 @@ export function I18nProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     document.documentElement.lang = lang;
-    try { localStorage.setItem(LANG_KEY, lang); } catch { /* ignore */ }
   }, [lang]);
 
-  const setLang = useCallback((next: Lang) => setLangState(next), []);
+  const setLang = useCallback((next: Lang) => {
+    setLangState(next);
+    try {
+      localStorage.setItem(LANG_KEY, next);
+      localStorage.setItem(LANG_CHOSEN_KEY, '1');
+    } catch {
+      /* storage can be blocked */
+    }
+  }, []);
   const t = useCallback((key: string, vars?: Record<string, string | number>) => translate(lang, key, vars), [lang]);
   const value = useMemo(() => ({ lang, setLang, t }), [lang, setLang, t]);
 

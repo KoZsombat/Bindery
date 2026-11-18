@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="theme-color" content="#052a4b">
-<title><%= site.title %> — Learning book</title>
+<title><%= typeof site.title === "object" ? (site.title.hu || site.title.en || "") : site.title %> — Learning book</title>
 <link rel="icon" href="favicon.svg?v=3" type="image/svg+xml">
 <script nonce="<%= nonce %>">try{document.documentElement.dataset.theme=localStorage.getItem("lbs.theme")==="dark"?"dark":"light"}catch(e){}</script>
 <link rel="stylesheet" href="/shared/katex/katex.min.css">
@@ -16,7 +16,7 @@
     <span class="brand-mark" aria-hidden="true"><img src="favicon.svg" alt="" width="36" height="36"></span>
     <span class="brand-text">
       <span class="brand-kicker">Learning book</span>
-      <b id="siteTitle"><%= site.title %></b>
+      <b id="siteTitle"><%= typeof site.title === "object" ? (site.title.hu || site.title.en || "") : site.title %></b>
       <small id="siteSubtitle"></small>
     </span>
   </a>

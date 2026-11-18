@@ -108,7 +108,7 @@ export function normalizeSite(raw, req = {}, limits = {}) {
   if (!sections.length) throw new Error('The generated site has no sections.');
   const out = {
     version: SCHEMA_VERSION,
-    title: String(raw.title || req.title || req.topic || 'Learning site').slice(0, 160),
+    title: biv(raw.title || req.title || req.topic || 'Learning site'),
     subtitle: biv(raw.subtitle || req.description || ''),
     summary: biv(raw.summary || req.description || ''),
     sections: []
@@ -244,7 +244,7 @@ export function mockOutline(req, maxChapters = LIMITS.chapters.defaultMax) {
     });
   }
   return {
-    title: req.title || 'Mock learning book',
+    title: { hu: req.title || 'Minta tanulókönyv', en: req.title || 'Mock learning book' },
     subtitle: { hu: 'Generált minta', en: 'Generated sample' },
     summary: { hu: req.description || 'Minta könyv a folyamat ellenőrzéséhez.', en: req.description || 'A sample book for pipeline checks.' },
     sections
@@ -732,7 +732,7 @@ function normalizeOutline(raw, req, maxChapters) {
   }
   if (!total) throw new Error('The outline has no chapters.');
   return {
-    title: String(raw.title || req.title || 'Learning book').slice(0, 160),
+    title: biv(raw.title || req.title || 'Learning book'),
     subtitle: biv(raw.subtitle || req.description || ''),
     summary: biv(raw.summary || req.description || ''),
     sections, total
@@ -817,7 +817,7 @@ async function generateOutline(cfg, req, skill, call, maxChapters, onProgress) {
   const digest = sourceDigest(req.long_text || '');
   const messages = [
     { role: 'system', content: 'You design the outline and term registry of a bilingual learning book. Return only valid JSON.' },
-    { role: 'user', content: `${DEPTH_RULES}\n\nSKILL (condensed scope rules):\n${skill.slice(0, LIMITS.model.promptSkillChars)}\n\nREQUEST:\n${requestText(req)}\n\nSOURCE HEADINGS / SCOPE:\n${digest}\n\nDesign the COMPLETE outline and the term registry first; chapters are written separately. Every chapter needs its own new terms so definitions are not duplicated.\nReturn ONE JSON object:\n{"title":"...","subtitle":{"hu":"...","en":"..."},"summary":{"hu":"...","en":"..."},"sections":[{"id":"slug","num":"01","title":{"hu":"...","en":"..."},"subtitle":{"hu":"...","en":"..."},"intro":{"hu":"...","en":"..."},"conceptMap":{"hu":["..."],"en":["..."]},"summary":{"hu":"...","en":"..."},"chapters":[{"id":"slug","num":"1.1","title":{"hu":"...","en":"..."},"focus":"one sentence","newTerms":[{"id":"term-slug","term":{"hu":"...","en":"..."},"requires":["earlier-term-id"]}]}]}]}\nRules:\n- 8-${maxChapters} chapters total (topic count suggests ${targetChapterCount({ ...req, sourceText: req.long_text }, maxChapters)}). Split a chapter instead of thinning it.\n- Cover EVERY topic in the source. Never silently drop a listed topic.\n- 1-6 sections; unique lowercase ASCII slugs; sequential nums.\n- At most 3 new terms per chapter block later; list 2-5 newTerms per chapter here.\n- Term ids unique across the book; prerequisites point only to earlier terms.\n- Complete valid JSON; shorten the focus text rather than truncating the object.` }
+    { role: 'user', content: `${DEPTH_RULES}\n\nSKILL (condensed scope rules):\n${skill.slice(0, LIMITS.model.promptSkillChars)}\n\nREQUEST:\n${requestText(req)}\n\nSOURCE HEADINGS / SCOPE:\n${digest}\n\nDesign the COMPLETE outline and the term registry first; chapters are written separately. Every chapter needs its own new terms so definitions are not duplicated.\nReturn ONE JSON object:\n{"title":{"hu":"...","en":"..."},"subtitle":{"hu":"...","en":"..."},"summary":{"hu":"...","en":"..."},"sections":[{"id":"slug","num":"01","title":{"hu":"...","en":"..."},"subtitle":{"hu":"...","en":"..."},"intro":{"hu":"...","en":"..."},"conceptMap":{"hu":["..."],"en":["..."]},"summary":{"hu":"...","en":"..."},"chapters":[{"id":"slug","num":"1.1","title":{"hu":"...","en":"..."},"focus":"one sentence","newTerms":[{"id":"term-slug","term":{"hu":"...","en":"..."},"requires":["earlier-term-id"]}]}]}]}\nRules:\n- 8-${maxChapters} chapters total (topic count suggests ${targetChapterCount({ ...req, sourceText: req.long_text }, maxChapters)}). Split a chapter instead of thinning it.\n- Cover EVERY topic in the source. Never silently drop a listed topic.\n- 1-6 sections; unique lowercase ASCII slugs; sequential nums.\n- At most 3 new terms per chapter block later; list 2-5 newTerms per chapter here.\n- Term ids unique across the book; prerequisites point only to earlier terms.\n- Complete valid JSON; shorten the focus text rather than truncating the object.` }
   ];
   let lastError = 'No outline.';
   for (let attempt = 0; attempt < LIMITS.model.outlineAttempts; attempt++) {
@@ -1212,7 +1212,7 @@ const Section = z.object({
   chapters: z.array(Chapter).min(1)
 });
 export const SiteSchema = z.object({
-  version: z.number(), title: z.string().min(1), subtitle: B, summary: B,
+  version: z.number(), title: B, subtitle: B, summary: B,
   sections: z.array(Section).min(1),
   glossary: z.array(z.object({
     id: z.string().min(1), term: B, plain: BOpt, precise: BOpt,

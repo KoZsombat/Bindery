@@ -5,7 +5,8 @@
   const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const scope = location.host + location.pathname;
   let site = null;
-  let lang = localStorage.getItem('bindery.lang') || localStorage.getItem('lbs.lang') || 'en';
+  let lang = (localStorage.getItem('bindery.lang.chosen') === '1' && localStorage.getItem('bindery.lang'))
+    || localStorage.getItem('lbs.lang') || 'en';
   let theme = localStorage.getItem('lbs.theme') === 'dark' ? 'dark' : 'light';
   let current = null;
   let runTimer = null;
@@ -1396,6 +1397,7 @@
       lang = event.target.value === 'en' ? 'en' : 'hu';
       // Shared with the platform so one preference applies everywhere.
       localStorage.setItem('bindery.lang', lang);
+      localStorage.setItem('bindery.lang.chosen', '1');
       localStorage.setItem('lbs.lang', lang);
       setChrome(); renderModes(); renderTOC(); route();
     });

@@ -8,7 +8,7 @@
   state.ex = state.ex || {};
   state.tests = state.tests || {};
   state.theme = state.theme || 'light';
-  state.lang = state.lang || localStorage.getItem('bindery.lang') || 'en';
+  state.lang = state.lang || (localStorage.getItem('bindery.lang.chosen') === '1' && localStorage.getItem('bindery.lang')) || 'en';
   MB.lang = state.lang;
 
   /* ---------- data indexes ---------- */
@@ -75,8 +75,8 @@
   function applyLang() {
     MB.lang = state.lang;
     document.documentElement.lang = state.lang;
-    const btn = document.getElementById('langBtn');
-    if (btn) btn.textContent = state.lang === 'en' ? 'HU' : 'EN';
+    const select = document.getElementById('langSelect');
+    if (select) select.value = state.lang;
     MB.qsa('[data-i18n]').forEach(function (el) { el.textContent = MB.t(el.dataset.i18n); });
     const nav = document.getElementById('nav');
     if (nav) { nav.innerHTML = navHTML(); MB.translateDOM(nav); }
@@ -895,9 +895,12 @@
     state.theme = state.theme === 'dark' ? 'light' : 'dark';
     save(); applyTheme();
   });
-  document.getElementById('langBtn').addEventListener('click', function () {
-    state.lang = state.lang === 'en' ? 'hu' : 'en';
-    try { localStorage.setItem('bindery.lang', state.lang); } catch (e) {}
+  document.getElementById('langSelect').addEventListener('change', function (event) {
+    state.lang = event.target.value === 'en' ? 'en' : 'hu';
+    try {
+      localStorage.setItem('bindery.lang', state.lang);
+      localStorage.setItem('bindery.lang.chosen', '1');
+    } catch (e) {}
     save(); applyLang(); render();
   });
 
