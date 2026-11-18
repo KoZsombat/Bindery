@@ -270,6 +270,7 @@ router.get('/sites/:id', requireAuthApi, (req, res) => {
   const siteJson = publicSite(site);
   if (!owner) siteJson.error = '';
   res.json({
+    canManage: !!owner,
     site: siteJson,
     job: job ? {
       status: job.status,

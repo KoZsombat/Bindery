@@ -197,6 +197,11 @@ const HU: Dict = {
   'Sites per day': 'Könyvgenerálás naponta',
   'Create user': 'Felhasználó létrehozása',
   'Existing users': 'Meglévő felhasználók',
+  Generation: 'Generálás',
+  'Token and source limits': 'Token- és forráskorlátok',
+  'Only the creator and admins can change this site.': 'Csak a készítő és az adminok módosíthatják ezt az oldalt.',
+  'Daily limits, passwords and one-time login links per account.':
+    'Napi keret, jelszó és egyszer használatos bejelentkező link felhasználónként.',
   'Copy login link': 'Bejelentkező link másolása',
   'Login link copied. It works once, for 10 minutes, only when signed out.':
     'Bejelentkező link másolva. Egyszer, 10 percig működik, és csak kijelentkezett állapotban.',

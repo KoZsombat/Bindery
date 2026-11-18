@@ -50,37 +50,42 @@ function UserRow({ user, onChanged }: { user: AdminUser; onChanged: () => Promis
   }
 
   return (
-    <tr className="border-b border-border last:border-0">
-      <td className="px-3 py-3 align-top">
-        <div className="flex flex-col gap-1">
-          <span className="text-sm font-medium text-foreground">{user.email}</span>
-          <span className="text-xs text-muted-foreground">{user.name}</span>
-          <div className="flex flex-wrap gap-1">
+    <div className="p-4 sm:p-6">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div className="min-w-0">
+          <div className="truncate text-sm font-medium text-foreground">{user.email}</div>
+          <div className="text-xs text-muted-foreground">{user.name || '—'}</div>
+          <div className="mt-2 flex flex-wrap gap-1">
             <Badge tone={user.role === 'admin' ? 'accent' : 'neutral'}>{t(user.role)}</Badge>
             <Badge tone={user.disabled ? 'danger' : 'success'}>{user.disabled ? t('disabled') : t('active')}</Badge>
           </div>
         </div>
-      </td>
-      <td className="px-3 py-3 align-top text-xs text-muted-foreground">{formatDateShort(user.createdAt, lang)}</td>
-      <td className="px-3 py-3 align-top">
-        <div className="flex items-center gap-2">
-          <Input
-            type="number"
-            min={0}
-            max={1000}
-            value={limit}
-            onChange={event => setLimit(event.target.value)}
-            className="h-8 w-20 px-2 text-xs"
-            aria-label={t('Sites per day')}
-          />
-          <Button size="sm" variant="outline" loading={busy === 'limit'} onClick={() => void patch({ dailyLimit: Number(limit) }, 'limit')}>
-            {t('Save')}
-          </Button>
+        <div className="text-right text-xs text-muted-foreground">
+          <div><b className="font-mono text-sm text-foreground">{user.usedToday}</b> {t('Used today')}</div>
+          <div className="mt-1">{t('Created')} {formatDateShort(user.createdAt, lang)}</div>
         </div>
-      </td>
-      <td className="px-3 py-3 align-top font-mono text-sm text-foreground">{user.usedToday}</td>
-      <td className="px-3 py-3 align-top">
-        <div className="flex flex-col gap-2">
+      </div>
+
+      <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        <div className="space-y-2">
+          <div className="text-xs font-medium text-foreground">{t('Sites per day')}</div>
+          <div className="flex items-center gap-2">
+            <Input
+              type="number"
+              min={0}
+              max={1000}
+              value={limit}
+              onChange={event => setLimit(event.target.value)}
+              className="h-9 w-full max-w-28"
+              aria-label={t('Sites per day')}
+            />
+            <Button size="sm" variant="outline" loading={busy === 'limit'} onClick={() => void patch({ dailyLimit: Number(limit) }, 'limit')}>
+              {t('Save')}
+            </Button>
+          </div>
+        </div>
+        <div className="space-y-2">
+          <div className="text-xs font-medium text-foreground">{t('New password (10+)')}</div>
           <div className="flex items-center gap-2">
             <Input
               type="password"
@@ -88,7 +93,7 @@ function UserRow({ user, onChanged }: { user: AdminUser; onChanged: () => Promis
               value={password}
               onChange={event => setPassword(event.target.value)}
               placeholder={t('New password (10+)')}
-              className="h-8 w-44 px-2 text-xs"
+              className="h-9 w-full"
               autoComplete="new-password"
             />
             <Button
@@ -101,6 +106,11 @@ function UserRow({ user, onChanged }: { user: AdminUser; onChanged: () => Promis
               {t('Reset')}
             </Button>
           </div>
+        </div>
+        <div className="flex flex-wrap items-end gap-2 md:col-span-2 xl:col-span-1">
+          <Button size="sm" variant="secondary" loading={busy === 'link'} onClick={() => void loginLink()}>
+            {t('Copy login link')}
+          </Button>
           {user.role !== 'admin' ? (
             <Button
               size="sm"
@@ -111,12 +121,9 @@ function UserRow({ user, onChanged }: { user: AdminUser; onChanged: () => Promis
               {user.disabled ? t('Enable') : t('Disable')}
             </Button>
           ) : null}
-          <Button size="sm" variant="secondary" loading={busy === 'link'} onClick={() => void loginLink()}>
-            {t('Copy login link')}
-          </Button>
         </div>
-      </td>
-    </tr>
+      </div>
+    </div>
   );
 }
 
@@ -377,24 +384,14 @@ export function AdminPage() {
       <Card className="overflow-hidden p-0">
         <div className="border-b border-border p-4 sm:p-6">
           <h2 className="text-lg font-semibold text-foreground">{t('Existing users')}</h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {t('Daily limits, passwords and one-time login links per account.')}
+          </p>
         </div>
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[900px] border-collapse text-left">
-            <thead className="bg-muted/60">
-              <tr className="text-xs uppercase tracking-wide text-muted-foreground">
-                <th className="px-3 py-2 font-medium">{t('Email')}</th>
-                <th className="px-3 py-2 font-medium">{t('Created')}</th>
-                <th className="px-3 py-2 font-medium">{t('Limit')}</th>
-                <th className="px-3 py-2 font-medium">{t('Used today')}</th>
-                <th className="px-3 py-2 font-medium">{t('Actions')}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {users.map(user => (
-                <UserRow key={user.id} user={user} onChanged={changed} />
-              ))}
-            </tbody>
-          </table>
+        <div className="divide-y divide-border">
+          {users.map(user => (
+            <UserRow key={user.id} user={user} onChanged={changed} />
+          ))}
         </div>
       </Card>
     </div>

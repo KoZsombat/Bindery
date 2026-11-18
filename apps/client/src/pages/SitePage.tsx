@@ -28,13 +28,15 @@ export function SitePage() {
   const [busy, setBusy] = useState('');
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [now, setNow] = useState(() => Date.now());
+  const [canManage, setCanManage] = useState(false);
 
   const load = useCallback(async () => {
     if (!id) return;
     try {
-      const data = await api.get<{ site: Site; job: Job | null }>(`/api/sites/${id}`);
+      const data = await api.get<{ site: Site; job: Job | null; canManage?: boolean }>(`/api/sites/${id}`);
       setSite(data.site);
       setJob(data.job);
+      setCanManage(!!data.canManage);
       setError('');
     } catch (e) {
       setError(describeError(t, e));
@@ -185,19 +187,24 @@ export function SitePage() {
                 {t('Reuse in my workspace')}
               </Button>
             ) : null}
-            {polling ? (
+            {polling && canManage ? (
               <Button variant="outline" onClick={() => void action('cancel', () => api.post(`/api/sites/${site.id}/cancel`))} loading={busy === 'cancel'} icon={<XIcon className="h-4 w-4" />}>
                 {t('Cancel')}
               </Button>
             ) : null}
-            {site.status === 'ready' || site.status === 'failed' || site.status === 'cancelled' ? (
+            {canManage && (site.status === 'ready' || site.status === 'failed' || site.status === 'cancelled') ? (
               <Button variant="outline" onClick={() => void action('regenerate', () => api.post(`/api/sites/${site.id}/regenerate`))} loading={busy === 'regenerate'} icon={<RefreshIcon className="h-4 w-4" />}>
                 {t('Regenerate')}
               </Button>
             ) : null}
             <Button variant="ghost" onClick={() => navigate('/app')} icon={<ArrowLeftIcon className="h-4 w-4" />}>{t('Back to sites')}</Button>
-            <Button variant="danger" onClick={() => setConfirmDelete(true)} icon={<TrashIcon className="h-4 w-4" />}>{t('Delete')}</Button>
+            {canManage ? (
+              <Button variant="danger" onClick={() => setConfirmDelete(true)} icon={<TrashIcon className="h-4 w-4" />}>{t('Delete')}</Button>
+            ) : null}
           </div>
+          {!canManage ? (
+            <p className="text-xs text-muted-foreground">{t('Only the creator and admins can change this site.')}</p>
+          ) : null}
         </Card>
       </div>
 
@@ -221,12 +228,14 @@ export function SitePage() {
         </Card>
       ) : null}
 
-      <Card className="space-y-3">
-        <h2 className="text-lg font-semibold text-foreground">{t('Job log')}</h2>
-        <pre className="max-h-80 overflow-auto whitespace-pre-wrap rounded-md bg-brand p-4 font-mono text-xs leading-6 text-brand-foreground">
-          {job ? `${t(job.status)}\n\n${job.log || ''}` : t('No job recorded.')}
-        </pre>
-      </Card>
+      {canManage ? (
+        <Card className="space-y-3">
+          <h2 className="text-lg font-semibold text-foreground">{t('Job log')}</h2>
+          <pre className="max-h-80 overflow-auto whitespace-pre-wrap rounded-md bg-brand p-4 font-mono text-xs leading-6 text-brand-foreground">
+            {job ? `${t(job.status)}\n\n${job.log || ''}` : t('No job recorded.')}
+          </pre>
+        </Card>
+      ) : null}
 
       <ConfirmDialog
         open={confirmDelete}

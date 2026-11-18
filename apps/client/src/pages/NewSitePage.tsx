@@ -200,7 +200,7 @@ export function NewSitePage() {
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1.6fr)_minmax(300px,1fr)]">
         <Card>
-          <form className="space-y-4" onSubmit={event => { event.preventDefault(); void submit(false); }}>
+          <form id="new-site-form" className="space-y-4" onSubmit={event => { event.preventDefault(); void submit(false); }}>
             <Field label={t('Title')} htmlFor="title">
               <Input
                 id="title"
@@ -286,78 +286,83 @@ export function NewSitePage() {
               </Select>
             </Field>
 
-            <div className="flex flex-wrap items-center gap-2 pt-2">
-              <Button type="submit" loading={submitting} disabled={uploading || needsKey} icon={<SparkIcon className="h-4 w-4" />}>
-                {t('Generate site')}
-              </Button>
-              {suggestions.length ? (
-                <Button
-                  type="button"
-                  variant="outline"
-                  disabled={submitting || uploading || needsKey}
-                  onClick={() => void submit(true)}
-                >
-                  {t('Generate a new one anyway')}
-                </Button>
-              ) : null}
-              <span className="text-xs text-muted-foreground">
-                {t('Remaining today:')} <b className="font-mono text-foreground">{remaining}</b>. {t('Uploads are saved as context; the generated site is routed, never downloadable.')}
-              </span>
-            </div>
           </form>
         </Card>
 
         <div className="space-y-4">
           <Card className="space-y-3">
-            <h2 className="text-lg font-semibold text-foreground">{t('Active limits')}</h2>
+            <h2 className="text-lg font-semibold text-foreground">{t('Generation')}</h2>
             <p className="text-xs text-muted-foreground">{t('These numbers come from the server before anything is queued.')}</p>
             {limits ? (
               <>
-                <dl className="grid grid-cols-2 gap-x-3 gap-y-2 text-sm">
+                <dl className="grid grid-cols-2 gap-x-3 gap-y-2 rounded-md bg-muted/40 p-3 text-sm">
                   <dt className="text-muted-foreground">{t('Chapter target')}</dt>
-                  <dd className="font-mono text-foreground">{limits.target}</dd>
-                  <dt className="text-muted-foreground">{t('words per chapter')}</dt>
-                  <dd className="font-mono text-foreground">{limits.limits.wordsPerChapter.min}{t(' plus per new term')} +{limits.limits.wordsPerChapter.perNewTerm}</dd>
-                  <dt className="text-muted-foreground">{t('tokens per chapter')}</dt>
-                  <dd className="font-mono text-foreground">{limits.limits.tokensPerChapter}</dd>
-                  <dt className="text-muted-foreground">{t('source characters')}</dt>
-                  <dd className="font-mono text-foreground">{limits.sourceChars} / {limits.limits.sourceChars}</dd>
+                  <dd className="text-right font-mono text-foreground">{limits.target}</dd>
                   <dt className="text-muted-foreground">{t('Estimated time')}</dt>
-                  <dd className="font-mono text-foreground">~{Math.max(2, Math.ceil(limits.target * 1.1))} min</dd>
+                  <dd className="text-right font-mono text-foreground">~{Math.max(2, Math.ceil(limits.target * 1.1))} min</dd>
+                  <dt className="text-muted-foreground">{t('Daily quota:')}</dt>
+                  <dd className="text-right font-mono text-foreground">{remaining}</dd>
                 </dl>
+                <details className="rounded-md border border-border px-3 py-2">
+                  <summary className="cursor-pointer text-xs font-medium text-foreground">{t('Token and source limits')}</summary>
+                  <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
+                    <dt className="text-muted-foreground">{t('words per chapter')}</dt>
+                    <dd className="text-right font-mono text-foreground">{limits.limits.wordsPerChapter.min} + {limits.limits.wordsPerChapter.perNewTerm}</dd>
+                    <dt className="text-muted-foreground">{t('tokens per chapter')}</dt>
+                    <dd className="text-right font-mono text-foreground">{limits.limits.tokensPerChapter}</dd>
+                    <dt className="text-muted-foreground">{t('source characters')}</dt>
+                    <dd className="text-right font-mono text-foreground">{limits.sourceChars} / {limits.limits.sourceChars}</dd>
+                  </dl>
+                </details>
                 {limits.overCap ? <Alert tone="warning">{t('This request is large. Split it, or raise the chapter target.')}</Alert> : null}
-                <Field label={t('Chapter target')} htmlFor="maxChapters" hint={t('Leave empty to derive it from the source topic count.')}>
-                  <Input
-                    id="maxChapters"
-                    type="number"
-                    min={limits.limits.chapters.min}
-                    max={limits.limits.chapters.max}
-                    value={form.maxChapters}
-                    placeholder={String(limits.target)}
-                    onChange={event => set('maxChapters', event.target.value)}
-                  />
-                </Field>
-                <Field label={t('Split the source into parts')} htmlFor="parts">
-                  <Select id="parts" value={String(form.parts)} onChange={event => set('parts', Number(event.target.value))}>
-                    {[1, 2, 3, 4, 5, 6].map(n => (
-                      <option key={n} value={n}>{n === 1 ? t('One part') : `${n} × ${t('One part')}`}</option>
-                    ))}
-                  </Select>
-                </Field>
-                <p className="text-xs text-muted-foreground">
-                  {t('Each generation is one book unit: chapter passes are free.')} {t('Daily quota:')} <b className="font-mono text-foreground">{remaining}</b>
-                </p>
               </>
             ) : (
               <p className="text-sm text-muted-foreground">{t('Add a topic or notes to see the estimate.')}</p>
             )}
+            <Field label={t('Chapter target')} htmlFor="maxChapters" hint={t('Leave empty to derive it from the source topic count.')}>
+              <Input
+                id="maxChapters"
+                type="number"
+                min={limits?.limits.chapters.min ?? 6}
+                max={limits?.limits.chapters.max ?? 180}
+                value={form.maxChapters}
+                placeholder={limits ? String(limits.target) : ''}
+                onChange={event => set('maxChapters', event.target.value)}
+              />
+            </Field>
+            <Field label={t('Split the source into parts')} htmlFor="parts">
+              <Select id="parts" value={String(form.parts)} onChange={event => set('parts', Number(event.target.value))}>
+                {[1, 2, 3, 4, 5, 6].map(n => (
+                  <option key={n} value={n}>{n === 1 ? t('One part') : `${n} × ${t('One part')}`}</option>
+                ))}
+              </Select>
+            </Field>
+            <Button type="submit" form="new-site-form" className="w-full" loading={submitting} disabled={uploading || needsKey} icon={<SparkIcon className="h-4 w-4" />}>
+              {t('Generate site')}
+            </Button>
+            {suggestions.length ? (
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full"
+                disabled={submitting || uploading || needsKey}
+                onClick={() => void submit(true)}
+              >
+                {t('Generate a new one anyway')}
+              </Button>
+            ) : null}
+            <p className="text-xs text-muted-foreground">
+              {t('Remaining today:')} <b className="font-mono text-foreground">{remaining}</b>. {t('Each generation is one book unit: chapter passes are free.')}
+            </p>
+            <p className="text-xs text-muted-foreground">{t('Uploads are saved as context; the generated site is routed, never downloadable.')}</p>
           </Card>
 
-          <Card className="space-y-2">
+          <Card className="space-y-3">
             <h2 className="text-lg font-semibold text-foreground">{t('Reuse before generating')}</h2>
             <p className="text-sm leading-6 text-muted-foreground">
               {t('The catalog is searched first. If an existing site already covers the need, open it or reuse it without spending a generation.')}
             </p>
+            <Button variant="secondary" onClick={() => navigate('/catalog')}>{t('Open catalog')}</Button>
           </Card>
 
           {suggestions.length ? (
@@ -367,14 +372,6 @@ export function NewSitePage() {
               <SuggestionList sites={suggestions} onReuse={reuse} reusingId={reusingId} />
             </Card>
           ) : null}
-
-          <Card className="space-y-3">
-            <h2 className="text-lg font-semibold text-foreground">{t('Browse catalog')}</h2>
-            <p className="text-sm text-muted-foreground">
-              {t('Search published sites before creating a new one. Reuse copies a site into your workspace without calling the model.')}
-            </p>
-            <Button variant="secondary" onClick={() => navigate('/catalog')}>{t('Open catalog')}</Button>
-          </Card>
         </div>
       </div>
     </div>
