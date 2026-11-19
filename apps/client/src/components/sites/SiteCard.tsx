@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom';
 import { useI18n } from '../../context/I18nContext';
 import { formatDateShort } from '../../lib/format';
+import { siteErrorText } from '../../lib/siteError';
 import type { Site } from '../../lib/types';
 import { ArrowRightIcon, CopyIcon, ExternalIcon } from '../icons';
 import { Button, ButtonLink, buttonStyles } from '../ui/Button';
@@ -46,7 +47,7 @@ export function SiteCard({
 
       {site.error && site.status === 'failed' ? (
         <p className="mt-3 line-clamp-2 rounded-md border border-destructive/30 bg-destructive/10 px-2 py-1 text-xs text-destructive">
-          {site.error}
+          {siteErrorText(t, site)}
         </p>
       ) : null}
 

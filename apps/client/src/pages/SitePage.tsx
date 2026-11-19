@@ -12,6 +12,7 @@ import { useI18n } from '../context/I18nContext';
 import { useToast } from '../context/ToastContext';
 import { api, describeError } from '../lib/api';
 import { formatDate, formatDuration } from '../lib/format';
+import { siteErrorText } from '../lib/siteError';
 import type { Job, Site } from '../lib/types';
 
 export function SitePage() {
@@ -151,7 +152,7 @@ export function SitePage() {
           <div className="flex flex-wrap gap-2">
             <SiteFlags site={site} />
           </div>
-          {site.error ? <Alert tone="error">{site.error}</Alert> : null}
+          {site.error ? <Alert tone="error">{siteErrorText(t, site)}</Alert> : null}
           {polling ? (
             <div className="space-y-2 rounded-md border border-border bg-muted/40 p-3">
               <div className="flex items-center gap-2 text-sm font-medium text-foreground">

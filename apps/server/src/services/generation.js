@@ -10,6 +10,7 @@ import {
 import { LIMITS, SCHEMA_VERSION, targetChapterCount, countTopics, chapterWordBudget } from '../limits.js';
 import { decrypt } from '../crypto.js';
 import { assertSafeLlmBase } from './url-safety.js';
+import { friendlyGenerationError } from './generation-errors.js';
 import { validateDepth, assembleGlossary, wordsOf } from './depth.js';
 import { sqlite, ensureProfile, now, slugify, siteRow, siteJsonPath, siteUrl, sharedKeySource, getSettings, loadDraft, saveDraft, clearDraft } from '../db/index.js';
 
@@ -871,10 +872,12 @@ async function writeChapterBatch(cfg, req, skill, outline, section, batch, call,
     { role: 'user', content: chapterPrompt(req, skill, outline, section, batch, registry, source, issues, limits.wordMargin) }
   ];
   let lastError = 'No output.';
+  /** A cut-off reply usually means the output budget, not the prompt, was short. */
+  let tokenScale = 1;
   for (let attempt = 0; attempt < LIMITS.model.chapterRetries; attempt++) {
     let text;
     try {
-      text = await call(cfg, messages);
+      text = await call(cfg, messages, tokenScale);
     } catch (e) {
       // A resolver/socket blip must not cost a whole job attempt: retry here.
       if (!isTransientCallError(e) || attempt === LIMITS.model.chapterRetries - 1) throw e;
@@ -886,6 +889,7 @@ async function writeChapterBatch(cfg, req, skill, outline, section, batch, call,
     let raw;
     try { raw = extractJSON(text); } catch (e) {
       lastError = 'The reply was not valid JSON (likely truncated): ' + String(e.message || e).slice(0, 200);
+      tokenScale = Math.min(4, tokenScale * 2);
       messages.push({ role: 'user', content: 'Your previous reply was incomplete or invalid JSON. Return the complete JSON for the same chapters now. Shorten the prose if needed, but keep every required field.' });
       continue;
     }
@@ -1004,7 +1008,9 @@ export async function buildBook({
   const concurrency = Math.max(1, Math.min(8, Number(settings.chapterConcurrency) || CHAPTER_CONCURRENCY));
   const depthOptions = { budgetTolerance: settings.budgetTolerance, huBudgetRatio: settings.huBudgetRatio };
   const checkDepth = book => validateDepth(book, depthOptions);
-  const callModel = (c, m) => call(c, m, maxTokens, onActivity);
+  /** Scale 1 keeps the configured budget; truncation retries can raise it. */
+  const callModel = (c, m, scale = 1) =>
+    call(c, m, Math.min(200_000, Math.max(maxTokens, Math.round(maxTokens * scale))), onActivity);
   const limits = {
     maxChapters, maxPerSection: Math.min(LIMITS.chapters.perSection, maxChapters),
     wordMargin: settings.chapterWordMargin
@@ -1356,15 +1362,17 @@ async function runJob(job) {
     }
     const attempt = job.attempts || 1;
     const message = String(e.message || e).slice(0, 2000);
+    const friendly = friendlyGenerationError(message);
     if (attempt < MAX_JOB_ATTEMPTS) {
       const delay = Math.min(60000, 5000 * Math.pow(2, attempt - 1));
       const next = new Date(Date.now() + delay).toISOString();
       // The draft stays: the retry resumes instead of restarting the book.
-      sqlite.prepare("UPDATE jobs SET status='queued',locked_at=NULL,next_attempt_at=?,last_error=?,log=?,updated_at=? WHERE id=?").run(next, message, 'Resuming after: ' + message, now(), job.id);
+      sqlite.prepare("UPDATE jobs SET status='queued',locked_at=NULL,next_attempt_at=?,last_error=?,log=?,updated_at=? WHERE id=?").run(next, message, 'Retrying: ' + friendly, now(), job.id);
       sqlite.prepare("UPDATE sites SET status='queued',error=?,updated_at=? WHERE id=?").run(message, now(), site.id);
     } else {
       sqlite.prepare("UPDATE sites SET status='failed',error=?,updated_at=? WHERE id=?").run(message, now(), site.id);
-      sqlite.prepare("UPDATE jobs SET status='failed',locked_at=NULL,last_error=?,log=?,updated_at=? WHERE id=?").run(message, String(e.stack || e).slice(0, 4000), now(), job.id);
+      // The stack stays in last_error; the log is what the owner sees.
+      sqlite.prepare("UPDATE jobs SET status='failed',locked_at=NULL,last_error=?,log=?,updated_at=? WHERE id=?").run(message, friendly, now(), job.id);
     }
     console.error('Job failed:', e);
   }

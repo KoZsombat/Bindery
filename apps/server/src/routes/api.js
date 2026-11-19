@@ -19,6 +19,7 @@ import {
 import { kick, llmConfig, useMock, effectiveProfile, keySource } from '../services/generation.js';
 import { createLoginLink } from '../services/login-links.js';
 import { assertSafeLlmBase } from '../services/url-safety.js';
+import { friendlyGenerationError } from '../services/generation-errors.js';
 import { extractUpload } from '../services/uploads.js';
 import { encrypt } from '../crypto.js';
 import { requireAuthApi, requireAdminApi, tokenFrom, clearSessionCache } from '../middleware/session.js';
@@ -296,9 +297,10 @@ router.get('/sites/:id', requireAuthApi, (req, res) => {
     site: siteJson,
     job: job ? {
       status: job.status,
-      log: job.log,
+      // Owners see progress text; on failure they see the friendly sentence, not the stack.
+      log: job.status === 'failed' ? friendlyGenerationError(job.last_error || 'generation failed') : job.log,
       attempts: job.attempts || 0,
-      lastError: job.last_error || '',
+      lastError: friendlyGenerationError(job.last_error),
       heartbeatAt: job.locked_at || job.updated_at,
       progress: (() => { try { return job.progress ? JSON.parse(job.progress) : null; } catch { return null; } })(),
       updatedAt: job.updated_at,

@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import Database from 'better-sqlite3';
 import { DATA_DIR, DB_PATH, SITES_DIR, UPLOADS_DIR, DEFAULT_DAILY_LIMIT, MAX_BOOK_CHAPTERS, CHAPTER_BATCH_SIZE, CHAPTER_CONCURRENCY, CHAPTER_WORD_MARGIN, BUDGET_TOLERANCE, HU_BUDGET_RATIO, LLM_MAX_TOKENS } from '../config.js';
+import { friendlyGenerationError, generationErrorCode } from '../services/generation-errors.js';
 
 for (const dir of [DATA_DIR, SITES_DIR, UPLOADS_DIR]) fs.mkdirSync(dir, { recursive: true });
 
@@ -332,7 +333,9 @@ export function publicSite(s) {
     example: !!s.example,
     createdAt: s.created_at,
     updatedAt: s.updated_at,
-    error: s.error,
+    /** User-facing copy only; the raw failure stays server-side. */
+    error: friendlyGenerationError(s.error),
+    errorCode: generationErrorCode(s.error) || null,
     url: s.example ? '/example/matekbazis/' : siteUrl(s.slug),
     archived: !!s.archived,
     reusable: !s.example && fs.existsSync(siteJsonPath(s.slug)),

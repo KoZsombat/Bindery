@@ -19,6 +19,8 @@ export interface Site {
   createdAt: string;
   updatedAt: string;
   error: string;
+  /** Stable code for the failure; the UI translates it instead of showing server text. */
+  errorCode?: string | null;
   url: string;
   archived: boolean;
   reusable: boolean;

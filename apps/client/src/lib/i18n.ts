@@ -305,6 +305,14 @@ const HU: Dict = {
   'error.signup_disabled': 'A regisztráció le van tiltva.',
   'error.too_large': 'A kérés túl nagy.',
   'error.no_content': 'Ennek az oldalnak nincs generált tartalma.',
+  'generation.no_api_key': 'Nincs API-kulcs. Adj hozzá egyet a Beállításokban, majd indítsd újra.',
+  'generation.model_incomplete': 'A modell válasza félbeszakadt, mielőtt a fejezet elkészült volna. A piszkozat megmaradt; indítsd újra a generálást.',
+  'generation.model_auth': 'A szolgáltató elutasította az API-kulcsot. Ellenőrizd a Beállításokban.',
+  'generation.model_rate_limited': 'A szolgáltató átmenetileg korlátozza a kéréseket. Próbáld újra egy perc múlva.',
+  'generation.model_timeout': 'A szolgáltató túl sokáig nem válaszolt. Indítsd újra a generálást.',
+  'generation.model_unavailable': 'A szolgáltató nem érhető el. Próbáld újra később.',
+  'generation.quality_gate': 'A generált tartalom nem felelt meg a minőségi ellenőrzéseknek. A piszkozat megmaradt; indítsd újra.',
+  'generation.generation_failed': 'A generálás sikertelen. A piszkozat megmaradt; indítsd újra.',
 };
 
 export function translate(lang: Lang, key: string, vars?: Record<string, string | number>): string {
