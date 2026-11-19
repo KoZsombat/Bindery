@@ -262,7 +262,8 @@ export function SitePage() {
           <div className="flex items-center justify-between gap-3">
             <h2 className="text-lg font-semibold text-foreground">{t('Generation progress')}</h2>
             <span className="font-mono text-sm text-muted-foreground">
-              {job.progress.done} / {job.progress.total} · {t(job.progress.phase)}
+              {job.progress.done} / {job.progress.total} · {job.progress.phase === 'validate' ? t('repairs') : t('chapters')}
+              {job.attempts > 1 ? ` · ${t('attempt')} ${job.attempts}` : ''}
             </span>
           </div>
           <div className="h-2 overflow-hidden rounded-full bg-muted">

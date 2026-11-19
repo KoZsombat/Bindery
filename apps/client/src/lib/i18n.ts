@@ -358,6 +358,9 @@ const HU: Dict = {
   'Calibrated from earlier books on this server.': 'A szerver korábbi könyvei alapján kalibrálva.',
   'Running for': 'Futásidő:',
   'worker heartbeat': 'munkafolyamat-jelzés',
+  repairs: 'javítások',
+  attempt: 'próbálkozás',
+  'generation.time_budget': 'A generálás elérte az időkorlátot, mielőtt az ellenőrzések átmentek volna. A piszkozat megmaradt; indítsd újra a folytatáshoz.',
   'These override the skill where they can; the schema, depth checks and bilingual rule still apply.':
     'Ahol lehet, felülírják a készséget; a séma, a mélységi ellenőrzések és a kétnyelvűség továbbra is kötelező.',
   'e.g. Follow my professor’s notation; focus on the 2025 exam; no proofs, method plus one example per topic.':

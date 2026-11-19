@@ -5,6 +5,7 @@ import { z } from 'zod';
 import {
   LLM_BASE_URL, LLM_MODEL, LLM_MOCK, LLM_MAX_TOKENS, LLM_TIMEOUT_MS,
   MAX_CONCURRENT_JOBS, MAX_JOB_ATTEMPTS, JOB_LEASE_MS, SKILL_PATH,
+  MAX_JOB_RUNTIME_MS,
   CHAPTER_CONCURRENCY, CHAPTER_WORD_MARGIN, LLM_RETRY_BACKOFF_MAX_MS
 } from '../config.js';
 import { LIMITS, SCHEMA_VERSION, targetChapterCount, countTopics, chapterWordBudget } from '../limits.js';
@@ -1000,13 +1001,17 @@ function issuesForChapter(result, chapter) {
 export async function buildBook({
   cfg, req, skill = skillText(), call = callLLM, onProgress = () => {},
   maxChapters, batchSize, maxTokens, draft = null, saveDraft = null, onActivity = null,
-  source = req.long_text || '', options = null, regenerateChapter = null
+  source = req.long_text || '', options = null, regenerateChapter = null, deadlineAt = null
 } = {}) {
   const settings = getSettings();
   maxChapters = maxChapters ?? settings.maxBookChapters;
   batchSize = batchSize ?? settings.chapterBatchSize;
   maxTokens = maxTokens ?? settings.llmMaxTokens;
   const optionsText = optionsPrompt(options);
+  const checkTime = () => {
+    if (!deadlineAt || Date.now() < deadlineAt) return;
+    throw new Error(`Generation exceeded its ${Math.round(MAX_JOB_RUNTIME_MS / 60000)}-minute time budget. The draft is saved; retry to resume.`);
+  };
   const concurrency = Math.max(1, Math.min(8, Number(settings.chapterConcurrency) || CHAPTER_CONCURRENCY));
   const depthOptions = { budgetTolerance: settings.budgetTolerance, huBudgetRatio: settings.huBudgetRatio };
   const checkDepth = book => validateDepth(book, depthOptions);
@@ -1024,6 +1029,7 @@ export async function buildBook({
   let state = draft || { phase: 'outline', outline: null, chapters: {} };
 
   if (!outline) {
+    checkTime();
     outline = await generateOutline(cfg, req, skill, callModel, maxChapters, onProgress, optionsText);
     state = { phase: 'chapters', outline, chapters: written };
     persist(state);
@@ -1084,6 +1090,7 @@ export async function buildBook({
     onProgress({ phase: 'chapters', done, total, etaAt: chapterEtaAt, message: `Writing ${total - done} chapters in ${units.length} pass(es)…` });
   }
   const writeUnit = async ({ section: s, batch }) => {
+    checkTime();
     const unitStart = Date.now();
     const selected = selectSourceChunks(source, {
       ...batch[0],
@@ -1153,13 +1160,14 @@ export async function buildBook({
       byChapter.get(issue.cid).push(`${issue.code}: ${issue.message}`);
     }
     for (let round = 0; round < LIMITS.model.validationRetries; round++) {
+      checkTime();
       const repairTotal = byChapter.size;
       let repairDone = 0;
       let repairEtaAt = etaFor(repairTotal);
       await poolMap([...byChapter], concurrency, async ([cid, issues]) => {
         const entry = flat.find(x => x.c.id === cid);
         if (!entry) return;
-        onProgress({ phase: 'validate', done, total, chapter: cid, etaAt: repairEtaAt, message: `Validation round ${round + 1}: re-generating ${entry.c.num}.` });
+        onProgress({ phase: 'validate', done: repairDone, total: repairTotal, chapter: cid, etaAt: repairEtaAt, message: `Validation round ${round + 1}: re-generating ${entry.c.num}.` });
         const sourceSel = selectSourceChunks(source, entry.c, outline);
         const got = await writeChapterBatch(cfg, req, skill, outline, entry.s, [entry.c], callModel, limits, registry, sourceSel, issues.slice(0, 8), optionsText);
         written[cid] = got[0];
@@ -1167,7 +1175,7 @@ export async function buildBook({
         persist(state);
         repairDone++;
         repairEtaAt = etaFor(repairTotal - repairDone);
-        onProgress({ phase: 'validate', done, total, chapter: cid, etaAt: repairEtaAt, message: `Repaired ${repairDone}/${repairTotal} chapter(s)…` });
+        onProgress({ phase: 'validate', done: repairDone, total: repairTotal, chapter: cid, etaAt: repairEtaAt, message: `Repaired ${repairDone}/${repairTotal} chapter(s)…` });
       });
       const next = draftBook(outline, written);
       next.glossary = assembleGlossary(next);
@@ -1388,6 +1396,7 @@ async function runJob(job) {
       draft,
       options,
       regenerateChapter: job.chapter_id || null,
+      deadlineAt: Date.now() + MAX_JOB_RUNTIME_MS,
       saveDraft: state => saveDraft(site.id, state),
       source: site.source_text || '',
       onProgress: p => {
@@ -1431,7 +1440,10 @@ async function runJob(job) {
     const friendly = friendlyGenerationError(message);
     // A failed chapter rewrite must not take down an already published book.
     const keepsPublished = job.kind === 'chapter' && fs.existsSync(siteJsonPath(site.slug));
-    if (attempt < MAX_JOB_ATTEMPTS) {
+    // A depth-contract failure or an exhausted time budget will not improve by
+    // rewriting the same book again; keep the draft and stop.
+    const fatal = /time budget|depth contract|failed validation/i.test(message);
+    if (!fatal && attempt < MAX_JOB_ATTEMPTS) {
       const delay = Math.min(60000, 5000 * Math.pow(2, attempt - 1));
       const next = new Date(Date.now() + delay).toISOString();
       // The draft stays: the retry resumes instead of restarting the book.

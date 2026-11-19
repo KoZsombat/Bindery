@@ -68,6 +68,8 @@ export const ADMIN_DAILY_LIMIT = Math.max(0, Number(process.env.ADMIN_DAILY_LIMI
 export const MAX_CONCURRENT_JOBS = Math.max(1, Math.min(20, Number(process.env.MAX_CONCURRENT_JOBS || 3)));
 export const MAX_JOB_ATTEMPTS = Math.max(1, Math.min(6, Number(process.env.MAX_JOB_ATTEMPTS || 4)));
 export const JOB_LEASE_MS = Math.max(60000, Number(process.env.JOB_LEASE_MS || 600000));
+/** Hard wall-clock budget for one generation job, milliseconds (15 min – 4 h). */
+export const MAX_JOB_RUNTIME_MS = Math.max(15 * 60_000, Math.min(4 * 60 * 60_000, Number(process.env.MAX_JOB_RUNTIME_MS) || 90 * 60_000));
 /** Upper bound on chapters in one book. The outline target is derived from topic count (limits.js). */
 export const MAX_BOOK_CHAPTERS = Math.max(LIMITS.chapters.floor, Math.min(LIMITS.chapters.settingMax, Number(process.env.MAX_BOOK_CHAPTERS || LIMITS.chapters.defaultMax)));
 /** Chapters written per model request. Default 1: one deep chapter per call. */
