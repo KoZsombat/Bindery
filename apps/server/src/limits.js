@@ -153,29 +153,42 @@ export function limitsSummary(maxChapters = LIMITS.chapters.defaultMax) {
 }
 
 /**
- * Time estimate for a whole book run. Covers the outline, every chapter, and
- * one expected validation/repair pass — not just chapter writing.
+ * Time estimate for a whole book run, from now until the site is finished.
+ * Covers the outline, every chapter, one expected validation/repair pass and
+ * all parts of a split source.
  *
- * `perChapterWallMs` is an optional calibration from completed jobs in this
- * deployment; when present it already includes checks and concurrency.
+ * `perChapterWallMs` / `perChapterWallMaxMs` are optional calibration from
+ * completed jobs in this deployment; they already include checks and run in
+ * the deployment's concurrency.
  */
-export function estimateGeneration({ chapters, concurrency = 1, options = {}, perChapterWallMs = null } = {}) {
+export function estimateGeneration({
+  chapters, books = 1, bookWaves = null, concurrency = 1, options = {},
+  perChapterWallMs = null, perChapterWallMaxMs = null,
+} = {}) {
   const factor = optionTimeFactor(options);
   const workers = Math.max(1, Number(concurrency) || 1);
-  // Chapter estimate is generation time for one pass; write + one repair pass
-  // is what a book normally costs, split across concurrent workers.
+  // Chapter estimate is one pass; write + one repair pass is the normal cost.
   const theoretical = (LIMITS.model.chapterEstimateMs * 1.5) / workers;
-  const perChapter = Math.max(20_000, Math.min(15 * 60_000, perChapterWallMs || theoretical)) * factor;
+  const clamp = ms => Math.max(20_000, Math.min(15 * 60_000, ms));
+  const basePerChapter = clamp(perChapterWallMs || theoretical) * factor;
+  const highPerChapter = clamp(perChapterWallMaxMs || (perChapterWallMs ? perChapterWallMs * 1.6 : theoretical * 2.2)) * factor;
   const outlineMs = 120_000;
   const assemblyMs = 15_000;
-  const totalMs = outlineMs + Math.max(1, chapters) * perChapter + assemblyMs;
+  const perBook = outlineMs + Math.max(1, chapters) * basePerChapter + assemblyMs;
+  const perBookHigh = outlineMs + Math.max(1, chapters) * highPerChapter + assemblyMs;
+  // Parts are separate jobs; workers take them in waves.
+  const waves = Math.max(1, Number(bookWaves) || Math.ceil(Math.max(1, books) / workers));
+  const minMs = perBook * waves;
+  // +15% slack for provider variance and one extra repair on the high side.
+  const maxMs = perBookHigh * waves * 1.15;
   return {
-    totalMs,
-    minMs: Math.round(totalMs * 0.75),
-    maxMs: Math.round(totalMs * 1.35),
-    perChapterMs: Math.round(perChapter),
+    totalMs: Math.round((minMs + maxMs) / 2),
+    minMs: Math.round(minMs),
+    maxMs: Math.round(maxMs),
+    perChapterMs: Math.round(basePerChapter),
     calibrated: !!perChapterWallMs,
     includesChecks: true,
+    waves,
   };
 }
 

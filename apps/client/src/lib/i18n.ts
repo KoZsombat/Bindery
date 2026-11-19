@@ -356,6 +356,8 @@ const HU: Dict = {
   'Covers the outline, every chapter and one repair pass. Provider speed still changes it.':
     'Lefedi a vázlatot, az összes fejezetet és egy javítási kört. A szolgáltató sebessége továbbra is számít.',
   'Calibrated from earlier books on this server.': 'A szerver korábbi könyvei alapján kalibrálva.',
+  'Includes all {n} parts.': 'Mind a(z) {n} részt tartalmazza.',
+  'Includes about {n} min of queue.': 'Körülbelül {n} perc várakozást is tartalmaz.',
   'Running for': 'Futásidő:',
   'worker heartbeat': 'munkafolyamat-jelzés',
   repairs: 'javítások',

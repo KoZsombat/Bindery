@@ -8,7 +8,7 @@ import { z } from 'zod';
 import { fromNodeHeaders } from 'better-auth/node';
 import { auth } from '../auth.js';
 import {
-  MAX_SOURCE, MAX_LONG_TEXT, MAX_UPLOAD, MAX_FILES, MAX_CONCURRENT_UPLOADS,
+  MAX_SOURCE, MAX_LONG_TEXT, MAX_UPLOAD, MAX_FILES, MAX_CONCURRENT_UPLOADS, MAX_CONCURRENT_JOBS,
   UPLOADS_DIR, DEFAULT_DAILY_LIMIT, LLM_MOCK,
 } from '../config.js';
 import { LIMITS, limitsSummary, targetChapterCount, estimateGeneration } from '../limits.js';
@@ -174,25 +174,42 @@ router.get('/limits', requireAuthApi, (req, res) => {
   }, settings.maxBookChapters);
   let options = {};
   try { options = JSON.parse(String(req.query.options || '{}')); } catch { options = {}; }
-  // Calibrate from this deployment's finished books (median per-chapter wall time).
+  const parts = Math.max(1, Math.min(6, Number(req.query.parts) || 1));
+  // Calibrate from this deployment's finished books: median and p90 per chapter.
   const samples = sqlite.prepare(`
     SELECT j.created_at, j.updated_at, s.chapter_count
     FROM jobs j JOIN sites s ON s.id = j.site_id
     WHERE j.status = 'done' AND j.kind = 'generate' AND s.chapter_count > 0
-    ORDER BY j.id DESC LIMIT 15
+    ORDER BY j.id DESC LIMIT 20
   `).all();
   const perChapter = samples
     .map(row => (Date.parse(row.updated_at) - Date.parse(row.created_at)) / row.chapter_count)
     .filter(ms => ms > 20_000 && ms < 15 * 60_000)
     .sort((a, b) => a - b);
-  const calibratedMs = perChapter.length >= 2 ? perChapter[Math.floor(perChapter.length / 2)] : null;
+  const medianMs = perChapter.length >= 2 ? perChapter[Math.floor(perChapter.length * 0.5)] : null;
+  const p90Ms = perChapter.length >= 2 ? perChapter[Math.min(perChapter.length - 1, Math.floor(perChapter.length * 0.9))] : null;
+  const chaptersPerPart = Math.max(LIMITS.chapters.floor, Math.ceil(target / parts));
+  const bookWaves = Math.ceil(parts / Math.max(1, MAX_CONCURRENT_JOBS));
   const estimate = estimateGeneration({
-    chapters: target,
+    chapters: chaptersPerPart,
+    books: parts,
+    bookWaves,
     concurrency: Number(settings.chapterConcurrency) || 1,
     options,
-    perChapterWallMs: calibratedMs,
+    perChapterWallMs: medianMs,
+    perChapterWallMaxMs: p90Ms,
   });
-  const minutes = [Math.max(2, Math.round(estimate.minMs / 60000)), Math.max(2, Math.round(estimate.maxMs / 60000))];
+  // "From now": count whole books already queued or running ahead of this one.
+  const counts = sqlite.prepare("SELECT status, COUNT(*) AS n FROM jobs WHERE status IN ('queued','running') GROUP BY status").all();
+  const running = counts.find(row => row.status === 'running')?.n || 0;
+  const queued = counts.find(row => row.status === 'queued')?.n || 0;
+  // The new job needs a slot too: jobs beyond the free capacity must finish first.
+  const needed = Math.max(0, running + queued + 1 - MAX_CONCURRENT_JOBS);
+  const avgBookMs = (estimate.minMs + estimate.maxMs) / 2;
+  const queueMs = needed > 0 ? Math.ceil(needed / Math.max(1, MAX_CONCURRENT_JOBS)) * avgBookMs : 0;
+  const minTotal = estimate.minMs + queueMs;
+  const maxTotal = estimate.maxMs + queueMs;
+  const minutes = [Math.max(2, Math.round(minTotal / 60000)), Math.max(2, Math.round(maxTotal / 60000))];
   res.json({
     limits: limitsSummary(settings.maxBookChapters),
     target,
@@ -201,8 +218,11 @@ router.get('/limits', requireAuthApi, (req, res) => {
     quotaUnit: LIMITS.quota.unit,
     estimate: {
       minutes,
+      queueMinutes: Math.round(queueMs / 60000),
       calibrated: estimate.calibrated,
+      samples: perChapter.length,
       includesChecks: true,
+      parts,
     },
   });
 });

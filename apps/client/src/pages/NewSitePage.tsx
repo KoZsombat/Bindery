@@ -39,7 +39,7 @@ interface LimitInfo {
   sourceChars: number;
   overCap: boolean;
   quotaUnit: string;
-  estimate: { minutes: [number, number]; calibrated: boolean; includesChecks: boolean };
+  estimate: { minutes: [number, number]; queueMinutes: number; calibrated: boolean; samples: number; includesChecks: boolean; parts: number };
 }
 
 const emptyForm: FormState = {
@@ -132,6 +132,7 @@ export function NewSitePage() {
           topic: form.topic,
           maxChapters: form.maxChapters,
           options: optionsKey,
+          parts: String(form.parts),
         });
         const data = await api.get<LimitInfo>(`/api/limits?${params}`);
         if (alive) setLimits(data);
@@ -140,7 +141,7 @@ export function NewSitePage() {
       }
     }, 400);
     return () => { alive = false; window.clearTimeout(timer); };
-  }, [form.longText, form.topic, form.maxChapters, optionsKey]);
+  }, [form.longText, form.topic, form.maxChapters, form.parts, optionsKey]);
   const needsKey = !!me && !me.profile.canGenerate;
 
   function set<K extends keyof FormState>(key: K, value: FormState[K]) {
@@ -474,6 +475,10 @@ export function NewSitePage() {
                 </dl>
                 <p className="text-xs text-muted-foreground">
                   {t('Covers the outline, every chapter and one repair pass. Provider speed still changes it.')}
+                  {limits.estimate.parts > 1 ? ` ${t('Includes all {n} parts.', { n: limits.estimate.parts })}` : ''}
+                  {limits.estimate.queueMinutes > 0
+                    ? ` ${t('Includes about {n} min of queue.', { n: limits.estimate.queueMinutes })}`
+                    : ''}
                   {limits.estimate.calibrated ? ` ${t('Calibrated from earlier books on this server.')}` : ''}
                 </p>
                 <details className="rounded-md border border-border px-3 py-2">
