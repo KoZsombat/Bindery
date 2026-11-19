@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { SiteCard } from '../components/sites/SiteCard';
 import { SearchIcon } from '../components/icons';
@@ -27,24 +27,43 @@ export function CatalogPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [reusing, setReusing] = useState<number | null>(null);
+  /** Ignores responses for a query the visitor has already typed past. */
+  const requestSeq = useRef(0);
+  /** The query the debounce just committed, so it does not overwrite newer typing. */
+  const committedQuery = useRef<string | null>(null);
 
   const load = useCallback(async (value: string) => {
+    const seq = ++requestSeq.current;
     setLoading(true);
     try {
       const data = await api.get<{ sites: Site[] }>(`/api/catalog?q=${encodeURIComponent(value)}`);
+      if (seq !== requestSeq.current) return;
       setSites(data.sites);
       setError('');
     } catch (e) {
+      if (seq !== requestSeq.current) return;
       setError(describeError(t, e));
     } finally {
-      setLoading(false);
+      if (seq === requestSeq.current) setLoading(false);
     }
   }, [t]);
 
   useEffect(() => {
     void load(query);
-    setInput(query);
+    if (committedQuery.current === query) committedQuery.current = null;
+    else setInput(query);
   }, [query, load]);
+
+  // Live filtering: one second after typing stops, commit the query to the URL.
+  useEffect(() => {
+    const value = input.trim();
+    if (value === query) return;
+    const timer = window.setTimeout(() => {
+      committedQuery.current = value;
+      setParams(value ? { q: value } : {}, { replace: true });
+    }, 1000);
+    return () => window.clearTimeout(timer);
+  }, [input, query, setParams]);
 
   function search(event: FormEvent) {
     event.preventDefault();
@@ -89,7 +108,7 @@ export function CatalogPage() {
 
       {error ? <Alert tone="error">{error}</Alert> : null}
 
-      {loading ? (
+      {loading && !sites.length ? (
         <PageSpinner />
       ) : sites.length ? (
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
