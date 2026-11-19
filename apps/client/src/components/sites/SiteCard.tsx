@@ -67,7 +67,7 @@ export function SiteCard({
             {t('Reuse')}
           </Button>
         ) : null}
-        <Link to={`/site/${site.id}`} className={buttonStyles('outline', 'sm')}>
+        <Link to={`/site/${site.id}`} className={buttonStyles('outline')}>
           <ArrowRightIcon className="h-3.5 w-3.5" />
           {t('Details')}
         </Link>
