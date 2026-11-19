@@ -78,11 +78,22 @@ function normalizeRefresher(list) {
   }).filter(r => r.label.hu || r.term);
 }
 
+/** Bare TeX only: the renderer supplies its own display delimiters. */
+const TEX_COMMAND_RE = /\\\\(quad|qquad|frac|dfrac|tfrac|sqrt|cdot|times|ge|geq|le|leq|ne|neq|dots|ldots|cdots|left|right|text|mathrm|mathbf|operatorname|pm|mp|approx|equiv|iff|implies|to|rightarrow|leftarrow|infty|alpha|beta|gamma|delta|theta|lambda|mu|pi|sigma|omega|sum|prod|int|lim|lg|ln|log|sin|cos|tan|cases|begin|end)\b/g;
+function cleanTex(value) {
+  let s = String(value == null ? '' : value).trim();
+  s = s.replace(TEX_COMMAND_RE, '\\$1');
+  s = s.replace(/(?<!\\)\$/g, '');
+  s = s.replace(/(?<!\\)\\\(/g, '').replace(/(?<!\\)\\\)/g, '');
+  s = s.replace(/(?<!\\)\\\[/g, '').replace(/(?<!\\)\\\]/g, '');
+  return s.trim();
+}
+
 function normalizeTheoryBlock(t) {
   const type = ['def', 'thm', 'note', 'warn', 'formula', 'p', 'list', 'code'].includes(t.type) ? t.type : 'p';
   const b = { type, title: biv(t.title || '') };
   if (type === 'formula') {
-    b.latex = String(t.latex || '');
+    b.latex = cleanTex(t.latex);
     b.note = optBiv(t.note || '');
   } else if (type === 'code') {
     b.lang = String(t.lang || 'text').slice(0, 20);
@@ -810,6 +821,7 @@ HARD RULES:
 - Define every term listed above, exactly once, in this chapter's "terms". Do not redefine terms already defined.
 - Each def/thm block introduces at most 3 terms and includes plain, why, precise, analogy, 1-2 checks.
 - Every example step has a matching reason. exercises: 6-10, checkable, mixed types.
+- A formula block's "latex" is bare TeX: no $...$, $$...$$, \\(...\\) or \\[...\\] delimiters and no prose. Put conditions or caveats in "note". Write commands with one backslash (\frac, \ge, \quad); use \\ only as a row break inside aligned/cases.
 - Length: between ${minWords} and ${maxWords} words of explanation per language in this pass. Both languages are counted separately; a chapter below the minimum is rejected and rewritten. Do not pad above the maximum; an overlong reply may be cut off.
 - Complete valid JSON. Return only this pass's chapters.`;
 }

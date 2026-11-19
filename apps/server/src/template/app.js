@@ -117,6 +117,8 @@
       blocks.push(code.replace(/\n$/, ''));
       return '\u0000' + (blocks.length - 1) + '\u0000';
     });
+    // Inline math in prose can carry the same double-escaped commands as latex fields.
+    s = s.replace(/\$([^$\n]+)\$/g, (all, math) => '$' + collapseTexCommands(math) + '$');
     s = esc(s);
     if (!(opts && opts.terms === false)) s = decorateTerms(s);
     s = s.replace(/`([^`\n]+)`/g, '<code>$1</code>');
@@ -313,9 +315,28 @@
       '<p><b>' + esc(biv(x.a)) + '</b> <span class="vs">' + T('vs', 'vs') + '</span> <b>' + esc(biv(x.b)) + '</b>' +
       (biv(x.note) ? '<br><span class="muted">' + rich(biv(x.note)) + '</span>' : '') + '</p>').join('') + '</div>';
   }
+  /** Some model replies double-escape TeX commands (\\quad). Collapse those. */
+  const TEX_COMMAND = /\\\\(quad|qquad|frac|dfrac|tfrac|sqrt|cdot|times|ge|geq|le|leq|ne|neq|dots|ldots|cdots|left|right|text|mathrm|mathbf|operatorname|pm|mp|approx|equiv|iff|implies|to|rightarrow|leftarrow|infty|alpha|beta|gamma|delta|theta|lambda|mu|pi|sigma|omega|sum|prod|int|lim|lg|ln|log|sin|cos|tan|cases|begin|end)\b/g;
+  function collapseTexCommands(value) {
+    return String(value).replace(TEX_COMMAND, '\\$1');
+  }
+  /**
+   * Model replies sometimes wrap TeX in $...$ or \(...\), use several inline
+   * segments, or double-escape commands. The template adds its own $$ delimiters,
+   * so normalise all of that here instead of letting KaTeX show raw TeX.
+   */
+  function texOf(value) {
+    let s = String(value == null ? '' : value).trim();
+    s = collapseTexCommands(s);
+    s = s.replace(/(?<!\\)\$/g, '');
+    s = s.replace(/(?<!\\)\\\(/g, '').replace(/(?<!\\)\\\)/g, '');
+    s = s.replace(/(?<!\\)\\\[/g, '').replace(/(?<!\\)\\\]/g, '');
+    return s.trim();
+  }
+
   function theoryHTML(t) {
     const type = t.type || 'p';
-    if (type === 'formula') return '<div class="callout formula"><div class="ct">' + T('Képlet', 'Formula') + (biv(t.title) ? ' · ' + esc(biv(t.title)) : '') + '</div><div class="fx">$$' + esc(String(t.latex || '')) + '$$</div>' + (biv(t.note) ? '<p class="muted">' + rich(biv(t.note)) + '</p>' : '') + '</div>';
+    if (type === 'formula') return '<div class="callout formula"><div class="ct">' + T('Képlet', 'Formula') + (biv(t.title) ? ' · ' + esc(biv(t.title)) : '') + '</div><div class="fx">$$' + esc(texOf(t.latex)) + '$$</div>' + (biv(t.note) ? '<p class="muted">' + rich(biv(t.note)) + '</p>' : '') + '</div>';
     if (type === 'code') return '<div class="callout code"><div class="ct">' + T('Kód', 'Code') + (biv(t.title) ? ' · ' + esc(biv(t.title)) : '') + '</div><pre><code>' + esc(String(t.code || '')) + '</code></pre></div>';
     if (type === 'list') return '<div class="callout note"><div class="ct">' + esc(biv(t.title, T('Lista', 'List'))) + '</div><ul>' + bivArr(t.items).map(x => '<li>' + rich(x) + '</li>').join('') + '</ul></div>';
     const labels = { def: T('Definíció', 'Definition'), thm: T('Tétel', 'Theorem'), note: T('Megjegyzés', 'Note'), warn: T('Vigyázat', 'Warning'), p: T('Szöveg', 'Note') };
@@ -768,7 +789,7 @@
     }
     $('#main').innerHTML = '<div class="kicker">' + T('Könyvtár', 'Library') + '</div><h1>' + T('Képletgyűjtemény', 'Formula sheet') + '</h1>' +
       '<p class="lead">' + T('A könyv összes képlete fejezetenként.', 'Every formula in the book, grouped by chapter.') + '</p>' +
-      (rows.length ? '<div class="formulas">' + rows.map(({ c, t }) => '<div class="formula"><div class="formula-meta">' + esc(c.num) + ' · ' + esc(biv(c.title)) + '</div><h3>' + esc(biv(t.title)) + '</h3><div class="fx">$$' + esc(String(t.latex)) + '$$</div>' +
+      (rows.length ? '<div class="formulas">' + rows.map(({ c, t }) => '<div class="formula"><div class="formula-meta">' + esc(c.num) + ' · ' + esc(biv(c.title)) + '</div><h3>' + esc(biv(t.title)) + '</h3><div class="fx">$$' + esc(texOf(t.latex)) + '$$</div>' +
         (biv(t.note) ? '<p class="muted">' + rich(biv(t.note)) + '</p>' : '') + '</div>').join('') + '</div>' :
         emptyState(T('Nincs képlet', 'No formulas'), T('Ez a könyv nem tartalmaz képletblokkokat. A programozási anyag kódpéldákra épül.', 'This book has no formula blocks. The programming material is built on code examples.')));
     renderMath();

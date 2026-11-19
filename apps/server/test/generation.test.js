@@ -272,3 +272,22 @@ test('a depth-failing chapter is repaired before the job gives up', async () => 
   const repaired = book.sections.flatMap(s => s.chapters).find(c => c.id === 'types');
   assert.equal(repaired.recap.points.hu.length, 3);
 });
+
+test('stored TeX loses stray delimiters and double-escaped commands', async () => {
+  const chapters = {};
+  for (const s of outline.sections) {
+    for (const c of s.chapters) chapters[c.id] = chapter(c.id, c.num, 'Chapter ' + c.id);
+  }
+  chapters.types.theory.push({
+    type: 'formula', title: { hu: 'Képlet', en: 'Formula' },
+    latex: '$a_1=1,\\\\quad a_2=1\\\\ (n\\\\ge 3)$',
+    note: { hu: '', en: '' }
+  });
+  const call = async () => { throw new Error('a complete draft must not call the model'); };
+  const book = await buildBook({
+    cfg: {}, req, skill: 'skill', call, maxChapters: 30, batchSize: 1,
+    draft: { phase: 'chapters', outline, chapters }
+  });
+  const formula = book.sections.flatMap(s => s.chapters).flatMap(c => c.theory || []).find(t => t.type === 'formula');
+  assert.equal(formula.latex, 'a_1=1,\\quad a_2=1\\\\ (n\\ge 3)');
+});
