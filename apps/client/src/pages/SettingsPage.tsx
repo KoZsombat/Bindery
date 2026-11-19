@@ -156,10 +156,12 @@ export function SettingsPage() {
 
       <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1.4fr)_minmax(320px,1fr)]">
       <Card>
-        <form className="space-y-4" onSubmit={save}>
+        <form className="space-y-4" autoComplete="off" onSubmit={save}>
           <Field label={t('API base URL')} htmlFor="apiBase" hint="https://api.commandcode.ai/provider/v1">
             <Input
               id="apiBase"
+              name="api-base-url"
+              autoComplete="off"
               value={apiBase}
               onChange={event => setApiBase(event.target.value)}
               placeholder="https://api.commandcode.ai/provider/v1"
@@ -170,6 +172,8 @@ export function SettingsPage() {
           <Field label={t('Model')} htmlFor="apiModel">
             <Input
               id="apiModel"
+              name="api-model"
+              autoComplete="off"
               value={apiModel}
               onChange={event => setApiModel(event.target.value)}
               placeholder="deepseek/deepseek-v4.1-flash"
@@ -187,8 +191,11 @@ export function SettingsPage() {
               </Badge>
               <Input
                 id="apiKey"
+                name="api-key"
                 type="password"
-                autoComplete="off"
+                autoComplete="new-password"
+                data-lpignore="true"
+                data-1p-ignore="true"
                 value={apiKey}
                 onChange={event => setApiKey(event.target.value)}
                 placeholder={t('Leave blank to keep the current key')}
@@ -276,12 +283,15 @@ export function SettingsPage() {
               </ul>
             )}
 
-            <form className="mt-4 flex flex-wrap items-end gap-3" onSubmit={shareKey}>
+            <form className="mt-4 flex flex-wrap items-end gap-3" autoComplete="off" onSubmit={shareKey}>
               <Field label={t('Email address')} htmlFor="shareEmail">
                 <Input
                   id="shareEmail"
+                  name="share-email"
                   type="email"
                   autoComplete="off"
+                  data-lpignore="true"
+                  data-1p-ignore="true"
                   value={shareEmail}
                   onChange={event => setShareEmail(event.target.value)}
                   placeholder="name@example.com"
