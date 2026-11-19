@@ -25,6 +25,7 @@ test('internal parse failures are classified and never sent to clients', () => {
   assert.equal(generationErrorCode(RAW_JSON), 'model_incomplete');
   assert.equal(generationErrorCode('LLM API 429: slow down'), 'model_rate_limited');
   assert.equal(generationErrorCode('No API key. Add one in Settings.'), 'no_api_key');
+  assert.equal(generationErrorCode('Generation exceeded its 90-minute time budget. The draft is saved; retry to resume.'), 'time_budget');
   assert.equal(generationErrorCode('something exploded in a very internal way'), 'generation_failed');
 
   const serialized = site(RAW_JSON);
