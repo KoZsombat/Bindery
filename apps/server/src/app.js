@@ -75,6 +75,9 @@ app.use(sessionMiddleware(auth));
 app.use((req, res, next) => {
   if (!['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method)) return next();
   if (req.path.startsWith('/api/auth/')) return next(); // Better Auth checks origins itself.
+  // The claim form is a static page; its one-time token is the credential, and
+  // WebKit sends `Origin: null` for that form post. Preview fetches never POST.
+  if (req.path.startsWith('/claim/')) return next();
   const origin = req.headers.origin;
   if (origin) {
     try {

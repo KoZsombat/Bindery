@@ -199,7 +199,7 @@ test('admins list every site with its owner', async () => {
   assert.equal(userSites.sites.find(site => site.slug === 'admin-list-check').ownerEmail, undefined);
 });
 
-test('an admin login link signs the recipient in once and any click burns it', async () => {
+test('an admin login link survives previews and signs the recipient in once', async () => {
   const admin = await login('admin@test.local', 'test-password-12345');
   const created = await fetch(base + '/api/admin/users', {
     method: 'POST',
@@ -219,18 +219,26 @@ test('an admin login link signs the recipient in once and any click burns it', a
     return new URL(url).pathname.split('/').pop();
   }
 
-  // A signed-in click is refused and still burns the link.
+  // Opening a link never burns it, signed in or not.
   const burnedToken = await issue();
-  const blocked = await fetch(base + '/claim/' + burnedToken, { headers: { cookie: admin }, redirect: 'manual' });
+  const preview = await fetch(base + '/claim/' + burnedToken, { redirect: 'manual' });
+  assert.equal(preview.status, 200);
+  assert.match(await preview.text(), /Sign in to Bindery/);
+  const prefetched = await fetch(base + '/claim/' + burnedToken, { redirect: 'manual' });
+  assert.equal(prefetched.status, 200);
+  assert.match(await prefetched.text(), /Sign in to Bindery/);
+
+  // The explicit claim is refused for a signed-in visitor and still burns the link.
+  const blocked = await fetch(base + '/claim/' + burnedToken, { method: 'POST', headers: { cookie: admin }, redirect: 'manual' });
   assert.equal(blocked.status, 409);
   assert.match(await blocked.text(), /already signed in/);
   const afterBlocked = await fetch(base + '/claim/' + burnedToken, { redirect: 'manual' });
   assert.equal(afterBlocked.status, 410);
   assert.match(await afterBlocked.text(), /already been used/);
 
-  // A fresh link signs a signed-out visitor in, then is dead.
+  // A fresh link signs a signed-out visitor in on POST, then is dead.
   const token = await issue();
-  const claim = await fetch(base + '/claim/' + token, { redirect: 'manual' });
+  const claim = await fetch(base + '/claim/' + token, { method: 'POST', redirect: 'manual' });
   assert.equal(claim.status, 302);
   const cookie = (claim.headers.getSetCookie ? claim.headers.getSetCookie() : [])
     .map(c => c.split(';')[0]).join('; ');

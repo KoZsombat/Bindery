@@ -17,6 +17,17 @@ export function createLoginLink(userId, createdBy = null) {
   return { token, url: `${BETTER_AUTH_URL}/claim/${token}`, expiresAt };
 }
 
+/** Check a token without burning it; link previews and prefetchers must not consume it. */
+export function inspectLoginLink(token) {
+  const row = sqlite.prepare(`SELECT l.used_at, l.expires_at, l.user_id, u.email
+      FROM login_links l LEFT JOIN user u ON u.id = l.user_id
+      WHERE l.token_hash=?`).get(hashToken(token));
+  if (!row) return { error: 'invalid' };
+  if (row.used_at) return { error: 'used' };
+  if (Date.parse(row.expires_at) < Date.now()) return { error: 'expired' };
+  return { userId: row.user_id, email: row.email || '' };
+}
+
 /** Claim the token exactly once. Never returns the token again. */
 export function consumeLoginLink(token) {
   const row = sqlite.prepare('SELECT * FROM login_links WHERE token_hash=?').get(hashToken(token));
