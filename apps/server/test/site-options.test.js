@@ -41,3 +41,21 @@ test('prompt carries the chosen options and user instructions last', () => {
   // The custom block comes after the structured options.
   assert.ok(text.indexOf('USER CUSTOM INSTRUCTIONS') > text.indexOf('- Domain:'));
 });
+
+test('time estimate covers checks and scales with chapters and options', async () => {
+  const { estimateGeneration } = await import('../src/limits.js');
+  const a = estimateGeneration({ chapters: 12, concurrency: 4, options: {} });
+  assert.ok(a.minMs > 0 && a.maxMs > a.minMs);
+  assert.ok(a.minutes === undefined);
+  assert.ok(a.includesChecks);
+  // 12 chapters at 4 workers should be tens of minutes, not "12 × 1 minute".
+  assert.ok(a.minMs / 60000 >= 8, `too small: ${a.minMs / 60000} min`);
+  assert.ok(a.maxMs / 60000 <= 60, `too large: ${a.maxMs / 60000} min`);
+
+  const heavy = estimateGeneration({ chapters: 12, concurrency: 4, options: { examples: 'three', balance: 'practice' } });
+  assert.ok(heavy.totalMs > a.totalMs);
+
+  const calibrated = estimateGeneration({ chapters: 20, concurrency: 4, perChapterWallMs: 240000 });
+  assert.ok(calibrated.calibrated);
+  assert.ok(calibrated.totalMs > estimateGeneration({ chapters: 10, concurrency: 4, perChapterWallMs: 240000 }).totalMs);
+});
