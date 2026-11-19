@@ -28,12 +28,11 @@ export function SuggestionList({
             <p className="truncate text-xs text-muted-foreground">{site.descriptionI18n?.[lang] || site.description || site.slug}</p>
           </div>
           <div className="flex shrink-0 items-center gap-2">
-            <ButtonLink href={site.url} target="_blank" rel="noreferrer" size="sm" variant="outline" icon={<ExternalIcon className="h-3.5 w-3.5" />}>
+            <ButtonLink href={site.url} target="_blank" rel="noreferrer" variant="outline" icon={<ExternalIcon className="h-3.5 w-3.5" />}>
               {t('Open')}
             </ButtonLink>
             {site.reusable ? (
               <Button
-                size="sm"
                 variant="secondary"
                 icon={<CopyIcon className="h-3.5 w-3.5" />}
                 loading={reusingId === site.id}

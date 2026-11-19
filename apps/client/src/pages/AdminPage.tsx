@@ -50,8 +50,8 @@ function UserRow({ user, onChanged }: { user: AdminUser; onChanged: () => Promis
   }
 
   return (
-    <div className="flex flex-wrap items-center gap-x-6 gap-y-3 p-4 sm:px-6">
-      <div className="min-w-56 flex-1">
+    <div className="grid grid-cols-1 gap-4 p-4 sm:px-6 lg:grid-cols-[2fr_3fr] lg:items-center">
+      <div className="min-w-0">
         <div className="flex flex-wrap items-center gap-2">
           <span className="truncate text-sm font-medium text-foreground">{user.email}</span>
           <Badge tone={user.role === 'admin' ? 'accent' : 'neutral'}>{t(user.role)}</Badge>
@@ -73,10 +73,10 @@ function UserRow({ user, onChanged }: { user: AdminUser; onChanged: () => Promis
               max={1000}
               value={limit}
               onChange={event => setLimit(event.target.value)}
-              className="h-8 w-20 px-2 text-xs"
+              className="w-20"
               aria-label={t('Sites per day')}
             />
-            <Button size="sm" variant="outline" loading={busy === 'limit'} onClick={() => void patch({ dailyLimit: Number(limit) }, 'limit')}>
+            <Button variant="outline" loading={busy === 'limit'} onClick={() => void patch({ dailyLimit: Number(limit) }, 'limit')}>
               {t('Save')}
             </Button>
           </div>
@@ -90,11 +90,10 @@ function UserRow({ user, onChanged }: { user: AdminUser; onChanged: () => Promis
               value={password}
               onChange={event => setPassword(event.target.value)}
               placeholder={t('New password (10+)')}
-              className="h-8 w-40 px-2 text-xs"
+              className="w-40"
               autoComplete="new-password"
             />
             <Button
-              size="sm"
               variant="outline"
               disabled={password.length < 10}
               loading={busy === 'password'}
@@ -105,12 +104,11 @@ function UserRow({ user, onChanged }: { user: AdminUser; onChanged: () => Promis
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <Button size="sm" variant="secondary" loading={busy === 'link'} onClick={() => void loginLink()}>
+          <Button variant="secondary" loading={busy === 'link'} onClick={() => void loginLink()}>
             {t('Copy login link')}
           </Button>
           {user.role !== 'admin' ? (
             <Button
-              size="sm"
               variant={user.disabled ? 'secondary' : 'danger'}
               loading={busy === 'toggle'}
               onClick={() => void patch({ disabled: !user.disabled }, 'toggle')}
@@ -320,7 +318,6 @@ export function AdminPage() {
                   </code>
                   <div className="ml-auto flex flex-wrap gap-2">
                     <Button
-                      size="sm"
                       variant="outline"
                       loading={requestBusy === request.id}
                       onClick={() => void setRequestStatus(request, request.status === 'pending' ? 'handled' : 'pending')}
@@ -328,7 +325,6 @@ export function AdminPage() {
                       {request.status === 'pending' ? t('Mark handled') : t('Reopen')}
                     </Button>
                     <Button
-                      size="sm"
                       variant="danger"
                       disabled={requestBusy === request.id}
                       onClick={() => void deleteRequest(request)}

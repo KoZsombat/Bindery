@@ -160,7 +160,7 @@ export function LoginPage() {
         <button
           type="button"
           onClick={toggleTheme}
-          className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-border text-muted-foreground hover:bg-muted hover:text-foreground"
+          className="inline-flex h-10 w-10 items-center justify-center rounded-md border border-border text-muted-foreground hover:bg-muted hover:text-foreground"
           aria-label={theme === 'dark' ? t('Light theme') : t('Dark theme')}
         >
           {theme === 'dark' ? <SunIcon className="h-4 w-4" /> : <MoonIcon className="h-4 w-4" />}
@@ -225,7 +225,7 @@ export function LoginPage() {
                 onChange={event => setPassword(event.target.value)}
               />
             </Field>
-            <Button type="submit" className="w-full" size="lg" loading={submitting}>
+            <Button type="submit" className="w-full" loading={submitting}>
               {t('Sign in')}
             </Button>
           </form>

@@ -3,7 +3,6 @@ import { cn } from '../../lib/cn';
 import { Spinner } from './Spinner';
 
 type Variant = 'primary' | 'secondary' | 'outline' | 'ghost' | 'danger' | 'accent' | 'brand';
-type Size = 'sm' | 'md' | 'lg';
 
 const variants: Record<Variant, string> = {
   primary: 'bg-primary text-primary-foreground border border-primary hover:opacity-90',
@@ -15,32 +14,25 @@ const variants: Record<Variant, string> = {
   brand: 'bg-transparent text-brand-foreground border border-brand-foreground/25 hover:bg-brand-foreground/10',
 };
 
-const sizes: Record<Size, string> = {
-  sm: 'h-8 px-3 text-xs',
-  md: 'h-10 px-4 text-sm',
-  lg: 'h-11 px-6 text-sm',
-};
-
-export function buttonStyles(variant: Variant = 'primary', size: Size = 'md', className?: string): string {
+/** One control height everywhere: every button matches Input and Select. */
+export function buttonStyles(variant: Variant = 'primary', className?: string): string {
   return cn(
-    'inline-flex select-none items-center justify-center gap-2 rounded-lg font-medium transition-colors',
+    'inline-flex h-10 select-none items-center justify-center gap-2 rounded-md px-4 text-sm font-medium transition-colors',
     'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background',
     'disabled:cursor-not-allowed disabled:opacity-50',
     variants[variant],
-    sizes[size],
     className
   );
 }
 
 export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: Variant;
-  size?: Size;
   loading?: boolean;
   icon?: ReactNode;
 }
 
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button(
-  { variant = 'primary', size = 'md', loading = false, icon, className, children, disabled, type = 'button', ...props },
+  { variant = 'primary', loading = false, icon, className, children, disabled, type = 'button', ...props },
   ref
 ) {
   return (
@@ -48,7 +40,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
       ref={ref}
       type={type}
       disabled={disabled || loading}
-      className={buttonStyles(variant, size, className)}
+      className={buttonStyles(variant, className)}
       {...props}
     >
       {loading ? <Spinner className="h-4 w-4" /> : icon}
@@ -59,14 +51,13 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
 
 export interface ButtonLinkProps extends AnchorHTMLAttributes<HTMLAnchorElement> {
   variant?: Variant;
-  size?: Size;
   icon?: ReactNode;
 }
 
 /** Anchor styled exactly like Button, without nesting interactive elements. */
-export function ButtonLink({ variant = 'primary', size = 'md', icon, className, children, ...props }: ButtonLinkProps) {
+export function ButtonLink({ variant = 'primary', icon, className, children, ...props }: ButtonLinkProps) {
   return (
-    <a className={buttonStyles(variant, size, className)} {...props}>
+    <a className={buttonStyles(variant, className)} {...props}>
       {icon}
       {children}
     </a>

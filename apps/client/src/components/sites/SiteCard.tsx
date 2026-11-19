@@ -56,7 +56,6 @@ export function SiteCard({
             href={site.url}
             target="_blank"
             rel="noreferrer"
-            size="sm"
             variant="primary"
             icon={<ExternalIcon className="h-3.5 w-3.5" />}
           >
@@ -64,7 +63,7 @@ export function SiteCard({
           </ButtonLink>
         ) : null}
         {onReuse && site.reusable ? (
-          <Button size="sm" variant="secondary" icon={<CopyIcon className="h-3.5 w-3.5" />} loading={reusing} onClick={() => onReuse(site)}>
+          <Button variant="secondary" icon={<CopyIcon className="h-3.5 w-3.5" />} loading={reusing} onClick={() => onReuse(site)}>
             {t('Reuse')}
           </Button>
         ) : null}

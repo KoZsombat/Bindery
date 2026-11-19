@@ -183,3 +183,10 @@ export function MenuIcon(props: Props) {
     </svg>
   );
 }
+export function ChevronDownIcon(props: Props) {
+  return (
+    <svg {...iconProps(props)}>
+      <path d="m6 9 6 6 6-6" />
+    </svg>
+  );
+}

@@ -119,7 +119,7 @@ export function DashboardPage() {
         <section className="space-y-3">
           <SectionTitle
             action={
-              <Button size="sm" variant="ghost" onClick={() => navigate('/new')} icon={<ArrowRightIcon className="h-3.5 w-3.5" />}>
+              <Button variant="ghost" onClick={() => navigate('/new')} icon={<ArrowRightIcon className="h-3.5 w-3.5" />}>
                 {t('Create a site')}
               </Button>
             }

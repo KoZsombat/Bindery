@@ -242,7 +242,6 @@ export function SettingsPage() {
                     </span>
                     <Button
                       variant="outline"
-                      size="sm"
                       loading={revoking === share.id}
                       onClick={() => revokeShare(share.id)}
                     >
@@ -267,7 +266,6 @@ export function SettingsPage() {
                     </span>
                     <Button
                       variant="outline"
-                      size="sm"
                       loading={revoking === share.id}
                       onClick={() => revokeShare(share.id)}
                     >

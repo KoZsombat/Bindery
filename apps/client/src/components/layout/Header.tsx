@@ -52,7 +52,7 @@ export function Header() {
           <button
             type="button"
             onClick={toggleTheme}
-            className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-border text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            className="inline-flex h-10 w-10 items-center justify-center rounded-md border border-border text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
             aria-label={theme === 'dark' ? t('Light theme') : t('Dark theme')}
             title={theme === 'dark' ? t('Light theme') : t('Dark theme')}
           >
@@ -68,7 +68,7 @@ export function Header() {
               <button
                 type="button"
                 onClick={signOut}
-                className="inline-flex h-9 w-9 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                className="inline-flex h-10 w-10 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                 aria-label={t('Sign out')}
                 title={t('Sign out')}
               >

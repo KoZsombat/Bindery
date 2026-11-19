@@ -50,7 +50,6 @@ export function UploadPicker({
         <Button
           type="button"
           variant="outline"
-          size="sm"
           icon={<UploadIcon className="h-4 w-4" />}
           onClick={() => inputRef.current?.click()}
           disabled={disabled || full}
