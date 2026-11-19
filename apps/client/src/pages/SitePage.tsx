@@ -153,18 +153,24 @@ export function SitePage() {
 
       {error ? <Alert tone="error">{error}</Alert> : null}
 
-      <div className="grid items-start gap-4 lg:grid-cols-2">
+      {job?.progress ? (
         <Card className="space-y-3">
-          <h2 className="text-lg font-semibold text-foreground">{t('Routing')}</h2>
-          <p className="text-sm text-muted-foreground">{t('The site is served at this path. There is no ZIP or download.')}</p>
-          <code className="block overflow-x-auto rounded-md bg-muted px-3 py-2 font-mono text-sm text-foreground">{site.url}</code>
-          <p className="text-xs text-muted-foreground">
-            {t('Status:')} {t(site.status)} · {t('Updated:')} {formatDate(site.updatedAt, lang)}
-          </p>
-          <div className="flex flex-wrap gap-2">
-            <SiteFlags site={site} />
+          <div className="flex items-center justify-between gap-3">
+            <h2 className="text-lg font-semibold text-foreground">{t('Generation progress')}</h2>
+            <span className="font-mono text-sm text-muted-foreground">
+              {job.progress.done} / {job.progress.total} · {job.progress.phase === 'validate' ? t('repairs') : t('chapters')}
+              {job.attempts > 1 ? ` · ${t('attempt')} ${job.attempts}` : ''}
+            </span>
           </div>
-          {site.error ? <Alert tone="error">{siteErrorText(t, site)}</Alert> : null}
+          <div className="h-2 overflow-hidden rounded-full bg-muted">
+            <div
+              className={'h-full rounded-full bg-foreground transition-all' + (polling ? ' progress-live' : '')}
+              style={{ width: `${job.progress.total ? Math.round(job.progress.done / job.progress.total * 100) : 0}%` }}
+            />
+          </div>
+          {job.progress.chapter ? (
+            <p className="text-xs text-muted-foreground">{t('Current chapter:')} <code className="font-mono">{job.progress.chapter}</code></p>
+          ) : null}
           {polling ? (
             <div className="space-y-2 rounded-md border border-border bg-muted/40 p-3">
               <div className="flex items-center gap-2 text-sm font-medium text-foreground">
@@ -187,6 +193,21 @@ export function SitePage() {
               <p className="text-xs text-muted-foreground">{t('A resumed job keeps its finished chapters.')}</p>
             </div>
           ) : null}
+        </Card>
+      ) : null}
+
+      <div className="grid items-start gap-4 lg:grid-cols-2">
+        <Card className="space-y-3">
+          <h2 className="text-lg font-semibold text-foreground">{t('Routing')}</h2>
+          <p className="text-sm text-muted-foreground">{t('The site is served at this path. There is no ZIP or download.')}</p>
+          <code className="block overflow-x-auto rounded-md bg-muted px-3 py-2 font-mono text-sm text-foreground">{site.url}</code>
+          <p className="text-xs text-muted-foreground">
+            {t('Status:')} {t(site.status)} · {t('Updated:')} {formatDate(site.updatedAt, lang)}
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <SiteFlags site={site} />
+          </div>
+          {site.error ? <Alert tone="error">{siteErrorText(t, site)}</Alert> : null}
         </Card>
 
         <Card className="space-y-3">
@@ -254,27 +275,6 @@ export function SitePage() {
             })}
           </ul>
           <p className="text-xs text-muted-foreground">{t('A chapter rewrite does not use a daily generation.')}</p>
-        </Card>
-      ) : null}
-
-      {job?.progress ? (
-        <Card className="space-y-3">
-          <div className="flex items-center justify-between gap-3">
-            <h2 className="text-lg font-semibold text-foreground">{t('Generation progress')}</h2>
-            <span className="font-mono text-sm text-muted-foreground">
-              {job.progress.done} / {job.progress.total} · {job.progress.phase === 'validate' ? t('repairs') : t('chapters')}
-              {job.attempts > 1 ? ` · ${t('attempt')} ${job.attempts}` : ''}
-            </span>
-          </div>
-          <div className="h-2 overflow-hidden rounded-full bg-muted">
-            <div
-              className={'h-full rounded-full bg-foreground transition-all' + (polling ? ' progress-live' : '')}
-              style={{ width: `${job.progress.total ? Math.round(job.progress.done / job.progress.total * 100) : 0}%` }}
-            />
-          </div>
-          {job.progress.chapter ? (
-            <p className="text-xs text-muted-foreground">{t('Current chapter:')} <code className="font-mono">{job.progress.chapter}</code></p>
-          ) : null}
         </Card>
       ) : null}
 
