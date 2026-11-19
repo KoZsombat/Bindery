@@ -1227,6 +1227,8 @@ export function validateSite(site) {
 
 /* ------------------------------------------------------------------ worker */
 const activeJobs = new Set();
+/** True between SIGTERM and exit: in-flight jobs must not overwrite the requeue. */
+let stopping = false;
 let kickTimer = null;
 export function kick(delay = 0) {
   if (activeJobs.size >= MAX_CONCURRENT_JOBS) return;
@@ -1251,16 +1253,22 @@ function nextWakeDelay() {
   const row = sqlite.prepare("SELECT MIN(next_attempt_at) AS t FROM jobs WHERE status='queued'").get();
   return row?.t ? Math.max(0, new Date(row.t).getTime() - Date.now()) : 0;
 }
-export function recoverJobs(leaseMs = JOB_LEASE_MS) {
+/**
+ * Requeue jobs whose worker died. A deploy is not a generation failure, so
+ * `resetAttempts` (used at startup) keeps the retry budget intact and never
+ * fails a site just because the container was replaced mid-book.
+ */
+export function recoverJobs(leaseMs = JOB_LEASE_MS, { resetAttempts = false } = {}) {
   const stale = new Date(Date.now() - leaseMs).toISOString();
   const rows = sqlite.prepare("SELECT * FROM jobs WHERE status='running' AND (locked_at IS NULL OR locked_at<?)").all(stale);
   for (const row of rows) {
     if (activeJobs.has(row.id)) continue;
-    if ((row.attempts || 0) >= MAX_JOB_ATTEMPTS) {
+    if (!resetAttempts && (row.attempts || 0) >= MAX_JOB_ATTEMPTS) {
       sqlite.prepare("UPDATE jobs SET status='failed',last_error='Worker lease expired',locked_at=NULL,updated_at=? WHERE id=?").run(now(), row.id);
       sqlite.prepare("UPDATE sites SET status='failed',error='Generation worker stopped before completion. Try again.',updated_at=? WHERE id=?").run(now(), row.site_id);
     } else {
-      sqlite.prepare("UPDATE jobs SET status='queued',locked_at=NULL,next_attempt_at=?,updated_at=? WHERE id=?").run(now(), now(), row.id);
+      sqlite.prepare("UPDATE jobs SET status='queued',attempts=?,locked_at=NULL,next_attempt_at=?,updated_at=? WHERE id=?")
+        .run(resetAttempts ? 0 : (row.attempts || 0), now(), now(), row.id);
       sqlite.prepare("UPDATE sites SET status='queued',error='',updated_at=? WHERE id=?").run(now(), row.site_id);
     }
   }
@@ -1326,6 +1334,7 @@ async function runJob(job) {
         writeLive(`Writing ${live.chapter || 'the current chapter'} — ${Number(a.chars).toLocaleString('en-US')} characters received (${Math.round(a.elapsedMs / 1000)} s)`);
       }
     });
+    if (stopping) return; // stopWorker already requeued it; the next start resumes.
     if (sqlite.prepare('SELECT cancel_requested FROM jobs WHERE id=?').get(job.id)?.cancel_requested) {
       sqlite.prepare("UPDATE jobs SET status='cancelled',locked_at=NULL,updated_at=? WHERE id=?").run(now(), job.id);
       sqlite.prepare("UPDATE sites SET status='cancelled',error='Cancelled by user.',updated_at=? WHERE id=?").run(now(), site.id);
@@ -1341,6 +1350,10 @@ async function runJob(job) {
       .run(parsed.title?.hu || site.title, parsed.title?.en || site.title, parsed.summary?.hu || '', parsed.summary?.en || '', now(), site.id);
     sqlite.prepare("UPDATE jobs SET status='done',log=?,last_error='',locked_at=NULL,next_attempt_at=NULL,progress=NULL,updated_at=? WHERE id=?").run('Generated and routed at ' + siteUrl(site.slug), now(), job.id);
   } catch (e) {
+    if (stopping) {
+      console.warn('Generation interrupted by shutdown; job left queued for the next start.');
+      return;
+    }
     const attempt = job.attempts || 1;
     const message = String(e.message || e).slice(0, 2000);
     if (attempt < MAX_JOB_ATTEMPTS) {
@@ -1372,7 +1385,10 @@ export function workerSnapshot() {
 export function startWorker() {
   // Single-instance deployment: any job still marked running at startup is
   // orphaned by the previous process, so do not wait for the full lease.
-  recoverJobs(0);
+  // A deploy must not consume a retry either: requeue with a fresh budget.
+  stopping = false;
+  const resumed = recoverJobs(0, { resetAttempts: true });
+  if (resumed) console.log(`Resuming ${resumed} interrupted generation job(s).`);
   heartbeat = Date.now();
   if (!heartbeatTimer) {
     heartbeatTimer = setInterval(() => {
@@ -1398,6 +1414,7 @@ export function startWorker() {
 }
 
 export function stopWorker() {
+  stopping = true;
   clearInterval(heartbeatTimer);
   clearInterval(maintenanceTimer);
   clearTimeout(kickTimer);
