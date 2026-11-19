@@ -868,11 +868,17 @@ async function poolMap(items, limit, fn) {
   if (failure) throw failure;
 }
 
-async function writeChapterBatch(cfg, req, skill, outline, section, batch, call, limits, registry, source, issues, optionsText = '') {
+async function writeChapterBatch(cfg, req, skill, outline, section, batch, call, limits, registry, source, issues, optionsText = '', repairRound = 0) {
   const messages = [
     { role: 'system', content: 'You write chapters for a bilingual learning book. Return only valid JSON.' },
     { role: 'user', content: chapterPrompt(req, skill, outline, section, batch, registry, source, issues, limits.wordMargin, optionsText) }
   ];
+  if (repairRound > 0) {
+    messages.push({
+      role: 'user',
+      content: `This is repair attempt ${repairRound + 1} for the same chapter. The previous rewrite still failed the checks. Change the content materially — add the missing explanation, checks or examples — not just the wording. Keep the exact same ids. Return only the complete JSON.`
+    });
+  }
   let lastError = 'No output.';
   /** A cut-off reply usually means the output budget, not the prompt, was short. */
   let tokenScale = 1;
@@ -1127,7 +1133,10 @@ export async function buildBook({
           selectSourceChunks(source, outlineChapter, outline), issues.slice(0, 8), optionsText);
         written[chapter.id] = retry[0];
         const after = issuesForChapter(checkDepth(draftBook(outline, written)), retry[0]);
-        if (after.length) throw new Error(`Chapter ${chapter.num} (${chapter.id}) still fails the depth contract: ${after.slice(0, 4).join(' | ')}`);
+        if (after.length) {
+          // Keep the attempt; the validation pass below retries it with its own rounds.
+          console.warn(`Chapter ${chapter.id} still has ${after.length} depth issue(s) after the inline repair.`);
+        }
       }
       done++;
       state = { phase: 'chapters', outline, chapters: written };
@@ -1150,38 +1159,42 @@ export async function buildBook({
   book.glossary = assembleGlossary(book);
   onProgress({ phase: 'glossary', done: total, total, message: `Glossary assembled: ${book.glossary.length} terms.` });
 
-  // 4 — validation pass with one targeted regeneration round.
-  let depth = checkDepth(book);
-  if (!depth.ok) {
+  // 4 — validation pass: deterministic cleanup first, then targeted repairs.
+  // Only chapters that still fail are rewritten, with a fresh issue list each round.
+  const refreshDepth = next => {
+    dropForwardRequires(next); // forward/unknown term links are fixable without the model
+    next.glossary = assembleGlossary(next);
+    return checkDepth(next);
+  };
+  let depth = refreshDepth(book);
+  for (let round = 0; !depth.ok && round < LIMITS.model.validationRetries; round++) {
     const byChapter = new Map();
     for (const issue of depth.blocking) {
       if (!issue.cid) continue;
       if (!byChapter.has(issue.cid)) byChapter.set(issue.cid, []);
       byChapter.get(issue.cid).push(`${issue.code}: ${issue.message}`);
     }
-    for (let round = 0; round < LIMITS.model.validationRetries; round++) {
-      checkTime();
-      const repairTotal = byChapter.size;
-      let repairDone = 0;
-      let repairEtaAt = etaFor(repairTotal);
-      await poolMap([...byChapter], concurrency, async ([cid, issues]) => {
-        const entry = flat.find(x => x.c.id === cid);
-        if (!entry) return;
-        onProgress({ phase: 'validate', done: repairDone, total: repairTotal, chapter: cid, etaAt: repairEtaAt, message: `Validation round ${round + 1}: re-generating ${entry.c.num}.` });
-        const sourceSel = selectSourceChunks(source, entry.c, outline);
-        const got = await writeChapterBatch(cfg, req, skill, outline, entry.s, [entry.c], callModel, limits, registry, sourceSel, issues.slice(0, 8), optionsText);
-        written[cid] = got[0];
-        state = { phase: 'validate', outline, chapters: written };
-        persist(state);
-        repairDone++;
-        repairEtaAt = etaFor(repairTotal - repairDone);
-        onProgress({ phase: 'validate', done: repairDone, total: repairTotal, chapter: cid, etaAt: repairEtaAt, message: `Repaired ${repairDone}/${repairTotal} chapter(s)…` });
-      });
-      const next = draftBook(outline, written);
-      next.glossary = assembleGlossary(next);
-      depth = checkDepth(next);
-      if (depth.ok) { Object.assign(book, next); break; }
-    }
+    if (!byChapter.size) break;
+    checkTime();
+    const repairTotal = byChapter.size;
+    let repairDone = 0;
+    let repairEtaAt = etaFor(repairTotal);
+    await poolMap([...byChapter], concurrency, async ([cid, issues]) => {
+      const entry = flat.find(x => x.c.id === cid);
+      if (!entry) return;
+      onProgress({ phase: 'validate', done: repairDone, total: repairTotal, chapter: cid, etaAt: repairEtaAt, message: `Validation round ${round + 1}: re-generating ${entry.c.num}.` });
+      const sourceSel = selectSourceChunks(source, entry.c, outline);
+      const got = await writeChapterBatch(cfg, req, skill, outline, entry.s, [entry.c], callModel, limits, registry, sourceSel, issues.slice(0, 8), optionsText, round);
+      written[cid] = got[0];
+      state = { phase: 'validate', outline, chapters: written };
+      persist(state);
+      repairDone++;
+      repairEtaAt = etaFor(repairTotal - repairDone);
+      onProgress({ phase: 'validate', done: repairDone, total: repairTotal, chapter: cid, etaAt: repairEtaAt, message: `Repaired ${repairDone}/${repairTotal} chapter(s)…` });
+    });
+    const next = draftBook(outline, written);
+    depth = refreshDepth(next);
+    Object.assign(book, next);
   }
   if (!depth.ok) {
     const first = depth.blocking.slice(0, 6).map(i => i.message).join(' | ');

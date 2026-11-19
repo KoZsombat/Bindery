@@ -59,7 +59,7 @@ export const LIMITS = {
     /** Attempts per chapter before the validation pass takes over. */
     chapterRetries: 2,
     /** Extra regeneration rounds driven by the validation pass. */
-    validationRetries: 1,
+    validationRetries: 3,
     /** Attempts for the outline pass. */
     outlineAttempts: 2,
     /** Rough per-pass time used only for the very first ETA before one completes. */

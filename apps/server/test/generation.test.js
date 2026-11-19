@@ -248,3 +248,27 @@ test('chapter progress carries an ETA deadline', async () => {
   assert.ok(completed.length > 0, 'a chapter completion reports etaAt');
   assert.ok(completed.every(event => Number.isFinite(Date.parse(event.etaAt))));
 });
+
+test('a depth-failing chapter is repaired before the job gives up', async () => {
+  const chapters = {};
+  for (const s of outline.sections) {
+    for (const c of s.chapters) chapters[c.id] = chapter(c.id, c.num, 'Chapter ' + c.id);
+  }
+  // One required field broken: only a targeted regeneration can fix this.
+  chapters.types.recap.points = { hu: [], en: [] };
+  let repairs = 0;
+  const call = async (_cfg, messages) => {
+    const prompt = messages.at(-1)?.content || '';
+    if (!prompt.includes('WRITE EXACTLY THESE CHAPTERS')) throw new Error('unexpected prompt');
+    repairs++;
+    const ids = targetIds(messages);
+    return JSON.stringify({ chapters: ids.map(id => chapter(id, '1.1', 'Chapter ' + id)) });
+  };
+  const book = await buildBook({
+    cfg: {}, req, skill: 'skill', call, maxChapters: 30, batchSize: 1,
+    draft: { phase: 'chapters', outline, chapters }
+  });
+  assert.ok(repairs >= 1, 'validation asked the model for a repair');
+  const repaired = book.sections.flatMap(s => s.chapters).find(c => c.id === 'types');
+  assert.equal(repaired.recap.points.hu.length, 3);
+});
