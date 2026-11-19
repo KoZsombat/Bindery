@@ -282,6 +282,8 @@ const HU: Dict = {
   'Light theme': 'Világos téma',
   'Dark theme': 'Sötét téma',
   'Language': 'Nyelv',
+  'sites are routed, not downloaded.': 'az oldalak útvonalon érhetők el, nem letölthetők.',
+  'Skip to content': 'Ugrás a tartalomra',
   'Open menu': 'Menü megnyitása',
   'Close menu': 'Menü bezárása',
   'error.unauthorized': 'Bejelentkezés szükséges.',
