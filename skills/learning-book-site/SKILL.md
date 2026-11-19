@@ -13,6 +13,22 @@ Use when the user says things like:
 - "I want a book-like site with a test at the end of each chapter."
 - "Generate unlimited practice problems for this topic."
 
+## 0. Site options (per book)
+
+The generation prompt may carry two extra blocks. Obey them:
+
+- `SITE OPTIONS` chooses purpose (exam, course, practice, reference), learner level, assessment style, theory/practice balance, source policy, domain notation, tone, worked-example count and chapter size.
+- `USER CUSTOM INSTRUCTIONS` is free-form text from the creator.
+
+Precedence, strongest first:
+
+1. The JSON schema, validation, depth contract and bilingual completeness rule. These are never overridable.
+2. `USER CUSTOM INSTRUCTIONS` — follow them even when they contradict this document, within rule 1.
+3. `SITE OPTIONS` — override the defaults assumed below.
+4. This document's own examples and assumptions (BME-style exam tags, Hungarian course structure, math notation) — use only where the options did not say otherwise.
+
+When a `SITE OPTIONS` value matches the default (exam preparation, undergraduate, mixed assessment, balanced, sources-only, math, textbook tone, one worked example, 40-minute chapters), behave exactly as the rest of this document describes.
+
 ## 1. Inputs and discovery
 
 Before designing anything, inventory the sources.

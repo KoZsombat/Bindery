@@ -24,6 +24,7 @@ export function SitePage() {
 
   const [site, setSite] = useState<Site | null>(null);
   const [job, setJob] = useState<Job | null>(null);
+  const [chapters, setChapters] = useState<Array<{ id: string; num: string; title: string | { hu: string; en: string } }>>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState('');
@@ -34,9 +35,10 @@ export function SitePage() {
   const load = useCallback(async () => {
     if (!id) return;
     try {
-      const data = await api.get<{ site: Site; job: Job | null; canManage?: boolean }>(`/api/sites/${id}`);
+      const data = await api.get<{ site: Site; job: Job | null; canManage?: boolean; chapters?: Array<{ id: string; num: string; title: string | { hu: string; en: string } }> }>(`/api/sites/${id}`);
       setSite(data.site);
       setJob(data.job);
+      setChapters(data.chapters || []);
       setCanManage(!!data.canManage);
       setError('');
     } catch (e) {
@@ -91,6 +93,14 @@ export function SitePage() {
       await api.delete(`/api/sites/${site.id}`);
       push('success', t('Site deleted.'));
       navigate('/app');
+    });
+  }
+
+  function rewriteChapter(chapterId: string) {
+    if (!site) return;
+    void action(`chapter:${chapterId}`, async () => {
+      await api.post(`/api/sites/${site.id}/chapters/${encodeURIComponent(chapterId)}/regenerate`);
+      push('success', t('Chapter rewrite queued.'));
     });
   }
 
@@ -208,6 +218,40 @@ export function SitePage() {
           ) : null}
         </Card>
       </div>
+
+      {canManage && chapters.length ? (
+        <Card className="space-y-3">
+          <div>
+            <h2 className="text-lg font-semibold text-foreground">{t('Chapters')}</h2>
+            <p className="text-sm text-muted-foreground">{t('Rewrite one chapter without touching the rest of the book.')}</p>
+          </div>
+          <ul className="divide-y divide-border">
+            {chapters.map(chapter => {
+              const title = typeof chapter.title === 'string'
+                ? chapter.title
+                : chapter.title?.[lang] || chapter.title?.en || chapter.title?.hu || '';
+              const key = `chapter:${chapter.id}`;
+              return (
+                <li key={chapter.id} className="flex flex-wrap items-center gap-3 py-2">
+                  <span className="font-mono text-xs text-muted-foreground">{chapter.num}</span>
+                  <span className="min-w-0 flex-1 truncate text-sm text-foreground">{title}</span>
+                  <Button
+                    compact
+                    variant="outline"
+                    disabled={polling}
+                    loading={busy === key}
+                    onClick={() => rewriteChapter(chapter.id)}
+                    icon={<RefreshIcon className="h-4 w-4" />}
+                  >
+                    {t('Rewrite chapter')}
+                  </Button>
+                </li>
+              );
+            })}
+          </ul>
+          <p className="text-xs text-muted-foreground">{t('A chapter rewrite does not use a daily generation.')}</p>
+        </Card>
+      ) : null}
 
       {job?.progress ? (
         <Card className="space-y-3">

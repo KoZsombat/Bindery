@@ -11,7 +11,8 @@ import { useAuth } from '../context/AuthContext';
 import { useI18n } from '../context/I18nContext';
 import { useToast } from '../context/ToastContext';
 import { api, describeError } from '../lib/api';
-import type { Site } from '../lib/types';
+import type { Site, SiteOptions } from '../lib/types';
+import { DEFAULT_SITE_OPTIONS } from '../lib/types';
 
 interface FormState {
   title: string;
@@ -58,6 +59,7 @@ const DRAFT_PREFIX = 'bindery.new-site-draft';
 interface StoredDraft {
   form: FormState;
   files: PickedFile[];
+  options?: SiteOptions;
 }
 
 function readDraft(key: string): StoredDraft | null {
@@ -72,6 +74,7 @@ function readDraft(key: string): StoredDraft | null {
     return {
       form: { ...emptyForm, ...parsed.form },
       files: files.map(file => ({ key: file.key, name: file.name, id: file.id, chars: file.chars, uploading: false })),
+      options: { ...DEFAULT_SITE_OPTIONS, ...(parsed.options || {}) },
     };
   } catch {
     return null;
@@ -94,6 +97,7 @@ export function NewSitePage() {
 
   const [restored] = useState(() => readDraft(`${DRAFT_PREFIX}:${me?.user.id ?? 'anonymous'}`));
   const [form, setForm] = useState<FormState>(restored?.form ?? emptyForm);
+  const [options, setOptions] = useState<SiteOptions>(restored?.options ?? DEFAULT_SITE_OPTIONS);
   const [files, setFiles] = useState<PickedFile[]>(restored?.files ?? []);
   const [uploading, setUploading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -108,12 +112,13 @@ export function NewSitePage() {
     try {
       sessionStorage.setItem(`${DRAFT_PREFIX}:${me?.user.id ?? 'anonymous'}`, JSON.stringify({
         form,
+        options,
         files: files
           .filter(file => file.id && !file.uploading)
           .map(({ key, name, id, chars }) => ({ key, name, id, chars })),
       }));
     } catch { /* sessionStorage can be unavailable */ }
-  }, [form, files, me?.user.id]);
+  }, [form, options, files, me?.user.id]);
 
   useEffect(() => {
     let alive = true;
@@ -132,6 +137,10 @@ export function NewSitePage() {
 
   function set<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm(current => ({ ...current, [key]: value }));
+  }
+
+  function setOption<K extends keyof SiteOptions>(key: K, value: SiteOptions[K]) {
+    setOptions(current => ({ ...current, [key]: value }));
   }
 
   async function addFiles(picked: File[]) {
@@ -209,6 +218,7 @@ export function NewSitePage() {
     try {
       const data = await api.post<{ site: Site | null; suggestions: Site[] }>('/api/sites', {
         ...form,
+        options,
         uploadIds: files.flatMap(file => (file.id ? [file.id] : [])),
         maxChapters: form.maxChapters ? Number(form.maxChapters) : undefined,
         parts: form.parts,
@@ -333,6 +343,105 @@ export function NewSitePage() {
                 <option value="private">{t('Private — only me and admins')}</option>
               </Select>
             </Field>
+
+            <div className="space-y-4 rounded-md border border-border p-4">
+              <div>
+                <h2 className="text-sm font-semibold text-foreground">{t('Book style')}</h2>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {t('The defaults are the current skill. Change only what your learners need.')}
+                </p>
+              </div>
+
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Field label={t('Purpose')} htmlFor="opt-purpose">
+                  <Select id="opt-purpose" value={options.purpose} onChange={event => setOption('purpose', event.target.value as SiteOptions['purpose'])}>
+                    <option value="exam">{t('Exam preparation (default)')}</option>
+                    <option value="course">{t('Course companion')}</option>
+                    <option value="practice">{t('Practice drills')}</option>
+                    <option value="reference">{t('Reference companion')}</option>
+                  </Select>
+                </Field>
+
+                <Field label={t('Learner level')} htmlFor="opt-level">
+                  <Select id="opt-level" value={options.level} onChange={event => setOption('level', event.target.value as SiteOptions['level'])}>
+                    <option value="undergrad">{t('Undergraduate (default)')}</option>
+                    <option value="beginner">{t('Beginner')}</option>
+                    <option value="graduate">{t('Graduate')}</option>
+                    <option value="professional">{t('Professional')}</option>
+                  </Select>
+                </Field>
+
+                <Field label={t('Assessment style')} htmlFor="opt-assessment">
+                  <Select id="opt-assessment" value={options.assessment} onChange={event => setOption('assessment', event.target.value as SiteOptions['assessment'])}>
+                    <option value="mixed">{t('Mixed — MCQ + written (default)')}</option>
+                    <option value="mcq">{t('Multiple choice only')}</option>
+                    <option value="written">{t('Written / proofs only')}</option>
+                    <option value="none">{t('Short checks only')}</option>
+                  </Select>
+                </Field>
+
+                <Field label={t('Theory vs practice')} htmlFor="opt-balance">
+                  <Select id="opt-balance" value={options.balance} onChange={event => setOption('balance', event.target.value as SiteOptions['balance'])}>
+                    <option value="balanced">{t('Balanced (default)')}</option>
+                    <option value="theory">{t('Theory-heavy')}</option>
+                    <option value="practice">{t('Practice-heavy')}</option>
+                  </Select>
+                </Field>
+
+                <Field label={t('Sources')} htmlFor="opt-sources">
+                  <Select id="opt-sources" value={options.sources} onChange={event => setOption('sources', event.target.value as SiteOptions['sources'])}>
+                    <option value="only">{t('Only my material (default)')}</option>
+                    <option value="open">{t('Allow general background')}</option>
+                  </Select>
+                </Field>
+
+                <Field label={t('Domain')} htmlFor="opt-domain">
+                  <Select id="opt-domain" value={options.domain} onChange={event => setOption('domain', event.target.value as SiteOptions['domain'])}>
+                    <option value="math">{t('Math & science (default)')}</option>
+                    <option value="general">{t('General')}</option>
+                    <option value="programming">{t('Programming')}</option>
+                  </Select>
+                </Field>
+
+                <Field label={t('Tone')} htmlFor="opt-tone">
+                  <Select id="opt-tone" value={options.tone} onChange={event => setOption('tone', event.target.value as SiteOptions['tone'])}>
+                    <option value="textbook">{t('Textbook (default)')}</option>
+                    <option value="coach">{t('Coaching')}</option>
+                  </Select>
+                </Field>
+
+                <Field label={t('Worked examples')} htmlFor="opt-examples">
+                  <Select id="opt-examples" value={options.examples} onChange={event => setOption('examples', event.target.value as SiteOptions['examples'])}>
+                    <option value="one">{t('One per chapter (default)')}</option>
+                    <option value="two">{t('Two per chapter')}</option>
+                    <option value="three">{t('Three per chapter')}</option>
+                  </Select>
+                </Field>
+
+                <Field label={t('Chapter size')} htmlFor="opt-minutes">
+                  <Select id="opt-minutes" value={String(options.minutes)} onChange={event => setOption('minutes', Number(event.target.value))}>
+                    <option value="40">{t('40 minutes (default)')}</option>
+                    <option value="25">{t('25 minutes')}</option>
+                    <option value="60">{t('60 minutes')}</option>
+                  </Select>
+                </Field>
+              </div>
+
+              <Field
+                label={t('Custom instructions (optional)')}
+                htmlFor="opt-instructions"
+                hint={t('These override the skill where they can; the schema, depth checks and bilingual rule still apply.')}
+              >
+                <Textarea
+                  id="opt-instructions"
+                  value={options.customInstructions}
+                  maxLength={4000}
+                  rows={3}
+                  placeholder={t('e.g. Follow my professor’s notation; focus on the 2025 exam; no proofs, method plus one example per topic.')}
+                  onChange={event => setOption('customInstructions', event.target.value)}
+                />
+              </Field>
+            </div>
 
           </form>
         </Card>

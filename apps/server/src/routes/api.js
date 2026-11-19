@@ -14,8 +14,9 @@ import {
 import { LIMITS, limitsSummary, targetChapterCount } from '../limits.js';
 import {
   sqlite, quotaUsed, uniqueSlug, siteRow, siteJsonPath, publicSite, now, slugify, ensureProfile,
-  getSettings, updateSettings, settingsMeta,
+  getSettings, updateSettings, settingsMeta, loadDraft,
 } from '../db/index.js';
+import { SiteOptionsSchema } from '../site-options.js';
 import { kick, llmConfig, useMock, effectiveProfile, keySource } from '../services/generation.js';
 import { createLoginLink } from '../services/login-links.js';
 import { assertSafeLlmBase } from '../services/url-safety.js';
@@ -139,6 +140,8 @@ const CreateSchema = z.object({
   maxChapters: z.coerce.number().int().min(LIMITS.chapters.floor).max(LIMITS.chapters.settingMax).optional(),
   /** Split the source into N separate books. Each part is one quota unit. */
   parts: z.coerce.number().int().min(1).max(6).default(1),
+  /** Book style choices; omitted = the current skill defaults. */
+  options: SiteOptionsSchema.optional(),
 });
 
 /** Split source text into N roughly equal parts at paragraph boundaries. */
@@ -250,10 +253,11 @@ router.post('/sites', requireAuthApi, rateLimit({ windowMs: 60 * 1000, max: 8, k
         const partTitle = body.parts > 1 ? `${title} · ${part + 1}/${body.parts}` : title;
         const slug = uniqueSlug(partTitle);
         const result = sqlite.prepare(
-          `INSERT INTO sites (owner_id,slug,title,description,topic,audience,language,status,published,source_text,max_chapters,created_at,updated_at)
-           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`
+          `INSERT INTO sites (owner_id,slug,title,description,topic,audience,language,status,published,source_text,max_chapters,options,created_at,updated_at)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
         ).run(req.user.id, slug, partTitle, body.description, body.topic, body.audience, body.language,
-          'queued', body.published ? 1 : 0, slices[part], body.maxChapters || null, t, t);
+          'queued', body.published ? 1 : 0, slices[part], body.maxChapters || null,
+          JSON.stringify(body.options || SiteOptionsSchema.parse({})), t, t);
         const siteId = Number(result.lastInsertRowid);
         sqlite.prepare('INSERT INTO jobs (site_id,status,log,created_at,updated_at) VALUES (?,?,?,?,?)')
           .run(siteId, 'queued', body.parts > 1 ? `Queued part ${part + 1}/${body.parts}.` : 'Queued.', t, t);
@@ -285,6 +289,20 @@ function accessibleSite(req) {
   return site;
 }
 
+/** Chapter ids and labels from the published book or the in-progress draft. */
+function chapterList(site) {
+  const fromBook = book => (book.sections || []).flatMap(s =>
+    (s.chapters || []).map(c => ({ id: c.id, num: c.num, title: c.title }))
+  );
+  try {
+    return fromBook(JSON.parse(fs.readFileSync(siteJsonPath(site.slug), 'utf8')));
+  } catch {
+    const draft = loadDraft(site.id);
+    if (draft?.outline?.sections) return fromBook(draft.outline);
+    return [];
+  }
+}
+
 router.get('/sites/:id', requireAuthApi, (req, res) => {
   const site = accessibleSite(req);
   if (!site) return fail(res, 404, 'not_found', 'Site not found.');
@@ -295,8 +313,11 @@ router.get('/sites/:id', requireAuthApi, (req, res) => {
   res.json({
     canManage: !!owner,
     site: siteJson,
+    chapters: owner ? chapterList(site) : [],
     job: job ? {
       status: job.status,
+      kind: job.kind || 'generate',
+      chapterId: job.chapter_id || null,
       // Owners see progress text; on failure they see the friendly sentence, not the stack.
       log: job.status === 'failed' ? friendlyGenerationError(job.last_error || 'generation failed') : job.log,
       attempts: job.attempts || 0,
@@ -345,9 +366,11 @@ router.post('/sites/:id/cancel', requireAuthApi, (req, res) => {
   const site = siteRow(parseId(req.params.id));
   if (!site || (site.owner_id !== req.user.id && req.user.role !== 'admin') || site.archived) return fail(res, 404, 'not_found', 'Site not found.');
   const t = now();
+  const hasBook = fs.existsSync(siteJsonPath(site.slug));
   sqlite.prepare("UPDATE jobs SET cancel_requested=1,updated_at=? WHERE site_id=? AND status IN ('queued','running')").run(t, site.id);
   sqlite.prepare("UPDATE jobs SET status='cancelled',locked_at=NULL,updated_at=? WHERE site_id=? AND status='queued'").run(t, site.id);
-  sqlite.prepare("UPDATE sites SET status='cancelled',error='Cancelled by user.',updated_at=? WHERE id=? AND status='queued'").run(t, site.id);
+  sqlite.prepare("UPDATE sites SET status=?,error=?,updated_at=? WHERE id=? AND status='queued'")
+    .run(hasBook ? 'ready' : 'cancelled', hasBook ? '' : 'Cancelled by user.', t, site.id);
   res.json({ site: publicSite(siteRow(site.id)) });
 });
 
@@ -370,6 +393,27 @@ router.post('/sites/:id/regenerate', requireAuthApi, rateLimit({ windowMs: 60 * 
   }
   kick(0);
   res.json({ site: publicSite(siteRow(site.id)) });
+});
+
+/** Rewrite one chapter in place; the rest of the book and the draft stay. */
+router.post('/sites/:id/chapters/:chapterId/regenerate', requireAuthApi, rateLimit({ windowMs: 60 * 1000, max: 30, key: req => req.user.id }), (req, res) => {
+  const site = accessibleSite(req);
+  if (!site || (site.owner_id !== req.user.id && req.user.role !== 'admin')) return fail(res, 404, 'not_found', 'Site not found.');
+  const active = sqlite.prepare("SELECT 1 FROM jobs WHERE site_id=? AND status IN ('queued','running') LIMIT 1").get(site.id);
+  if (active) return fail(res, 409, 'busy', 'This site already has a running job.');
+  const chapterId = String(req.params.chapterId || '').trim().slice(0, 120);
+  if (!chapterId || !chapterList(site).some(c => c.id === chapterId)) {
+    return fail(res, 404, 'chapter_not_found', 'Chapter not found.');
+  }
+  if (!fs.existsSync(siteJsonPath(site.slug)) && !loadDraft(site.id)) {
+    return fail(res, 409, 'no_content', 'This site has no generated content yet.');
+  }
+  const t = now();
+  sqlite.prepare("UPDATE sites SET status='queued',error='',updated_at=? WHERE id=?").run(t, site.id);
+  sqlite.prepare('INSERT INTO jobs (site_id,status,log,kind,chapter_id,created_at,updated_at) VALUES (?,?,?,?,?,?,?)')
+    .run(site.id, 'queued', 'Queued chapter rewrite.', 'chapter', chapterId, t, t);
+  kick(0);
+  res.status(202).json({ site: publicSite(siteRow(site.id)) });
 });
 
 router.delete('/sites/:id', requireAuthApi, async (req, res, next) => {

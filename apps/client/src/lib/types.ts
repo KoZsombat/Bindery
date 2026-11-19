@@ -2,6 +2,33 @@ export type Lang = 'hu' | 'en';
 
 export type SiteStatus = 'queued' | 'running' | 'ready' | 'failed' | 'cancelled' | 'deleted';
 
+export interface SiteOptions {
+  purpose: 'exam' | 'course' | 'practice' | 'reference';
+  level: 'undergrad' | 'beginner' | 'graduate' | 'professional';
+  assessment: 'mixed' | 'mcq' | 'written' | 'none';
+  balance: 'balanced' | 'theory' | 'practice';
+  sources: 'only' | 'open';
+  domain: 'math' | 'general' | 'programming';
+  tone: 'textbook' | 'coach';
+  examples: 'one' | 'two' | 'three';
+  minutes: number;
+  customInstructions: string;
+}
+
+/** Must match the server defaults: the current skill's behaviour. */
+export const DEFAULT_SITE_OPTIONS: SiteOptions = {
+  purpose: 'exam',
+  level: 'undergrad',
+  assessment: 'mixed',
+  balance: 'balanced',
+  sources: 'only',
+  domain: 'math',
+  tone: 'textbook',
+  examples: 'one',
+  minutes: 40,
+  customInstructions: '',
+};
+
 export interface Site {
   id: number;
   slug: string;
@@ -13,6 +40,7 @@ export interface Site {
   topic: string;
   audience: string;
   language: 'hu' | 'en' | 'both';
+  options?: SiteOptions;
   status: SiteStatus;
   published: boolean;
   example: boolean;
@@ -46,6 +74,8 @@ export interface JobProgress {
 
 export interface Job {
   status: string;
+  kind?: 'generate' | 'chapter';
+  chapterId?: string | null;
   log: string;
   attempts: number;
   lastError: string;

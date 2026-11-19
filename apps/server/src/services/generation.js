@@ -11,6 +11,7 @@ import { LIMITS, SCHEMA_VERSION, targetChapterCount, countTopics, chapterWordBud
 import { decrypt } from '../crypto.js';
 import { assertSafeLlmBase } from './url-safety.js';
 import { friendlyGenerationError } from './generation-errors.js';
+import { optionsPrompt, parseSiteOptions } from '../site-options.js';
 import { validateDepth, assembleGlossary, wordsOf } from './depth.js';
 import { sqlite, ensureProfile, now, slugify, siteRow, siteJsonPath, siteUrl, sharedKeySource, getSettings, loadDraft, saveDraft, clearDraft } from '../db/index.js';
 
@@ -762,7 +763,7 @@ function buildTermRegistry(outline) {
   return registry;
 }
 
-function chapterPrompt(req, skill, outline, section, batch, registry, source, issues = [], wordMargin = CHAPTER_WORD_MARGIN) {
+function chapterPrompt(req, skill, outline, section, batch, registry, source, issues = [], wordMargin = CHAPTER_WORD_MARGIN, optionsText = '') {
   const target = batch.map(c => `- id "${c.id}", num "${c.num}", title HU "${c.title.hu}" / EN "${c.title.en}"${c.focus ? `, focus: ${c.focus}` : ''}\n  new terms: ${(c.newTerms || []).map(t => `${t.id} (${t.term.en})`).join(', ') || '(none)'}`).join('\n');
   const outlineText = outline.sections.map(s =>
     `${s.num}. ${s.title.hu} / ${s.title.en}\n` + s.chapters.map(c => `   ${c.num} ${c.id} — ${c.title.hu} / ${c.title.en}`).join('\n')
@@ -786,7 +787,7 @@ function chapterPrompt(req, skill, outline, section, batch, registry, source, is
   const budget = chapterWordBudget(termCount);
   const minWords = Math.ceil(budget * wordMargin);
   const maxWords = Math.round(budget * 1.5);
-  return `SKILL (structure and style):\n${skill.slice(0, LIMITS.model.promptSkillChars)}\n\n${DEPTH_RULES}\n\nREQUEST:\n${requestText(req)}\n\nRELEVANT SOURCE EXCERPTS (selected for these chapters; the rest of the source is covered by other chapters):\n${source.text}\n\nBOOK OUTLINE (do not change its scope):\n${outlineText}\n\nTERMS ALREADY DEFINED (link to them, do not redefine):\n${definedText}\n\nTERMS YOU MUST DEFINE IN THIS PASS (exact ids):\n${newTermText}\n\nTERMS DEFINED LATER (do not use these names in this pass, not even as examples):\n${laterText}\n\nWRITE EXACTLY THESE CHAPTERS (section ${section.num}, ${section.title.hu} / ${section.title.en}):\n${target}\n${issueText}
+  return `SKILL (structure and style):\n${skill.slice(0, LIMITS.model.promptSkillChars)}\n\n${DEPTH_RULES}\n\n${optionsText}\n\nREQUEST:\n${requestText(req)}\n\nRELEVANT SOURCE EXCERPTS (selected for these chapters; the rest of the source is covered by other chapters):\n${source.text}\n\nBOOK OUTLINE (do not change its scope):\n${outlineText}\n\nTERMS ALREADY DEFINED (link to them, do not redefine):\n${definedText}\n\nTERMS YOU MUST DEFINE IN THIS PASS (exact ids):\n${newTermText}\n\nTERMS DEFINED LATER (do not use these names in this pass, not even as examples):\n${laterText}\n\nWRITE EXACTLY THESE CHAPTERS (section ${section.num}, ${section.title.hu} / ${section.title.en}):\n${target}\n${issueText}
 Return ONE JSON object: {"chapters":[ ... ]} with exactly ${batch.length} chapter(s), in the same order and with the exact ids above.
 Chapter shape:
 {"id":"...","num":"...","title":{"hu":"...","en":"..."},"lead":{"hu":"...","en":"..."},"why":{"hu":["..."],"en":["..."]},"when":{"hu":"...","en":"..."},"minutes":40,
@@ -812,13 +813,13 @@ HARD RULES:
 - Complete valid JSON. Return only this pass's chapters.`;
 }
 
-async function generateOutline(cfg, req, skill, call, maxChapters, onProgress) {
+async function generateOutline(cfg, req, skill, call, maxChapters, onProgress, optionsText = '') {
   const topics = countTopics([req.topic, req.description, req.long_text].join('\n'));
   const minChapters = Math.min(maxChapters, Math.max(LIMITS.chapters.floor, topics || 6));
   const digest = sourceDigest(req.long_text || '');
   const messages = [
     { role: 'system', content: 'You design the outline and term registry of a bilingual learning book. Return only valid JSON.' },
-    { role: 'user', content: `${DEPTH_RULES}\n\nSKILL (condensed scope rules):\n${skill.slice(0, LIMITS.model.promptSkillChars)}\n\nREQUEST:\n${requestText(req)}\n\nSOURCE HEADINGS / SCOPE:\n${digest}\n\nDesign the COMPLETE outline and the term registry first; chapters are written separately. Every chapter needs its own new terms so definitions are not duplicated.\nReturn ONE JSON object:\n{"title":{"hu":"...","en":"..."},"subtitle":{"hu":"...","en":"..."},"summary":{"hu":"...","en":"..."},"sections":[{"id":"slug","num":"01","title":{"hu":"...","en":"..."},"subtitle":{"hu":"...","en":"..."},"intro":{"hu":"...","en":"..."},"conceptMap":{"hu":["..."],"en":["..."]},"summary":{"hu":"...","en":"..."},"chapters":[{"id":"slug","num":"1.1","title":{"hu":"...","en":"..."},"focus":"one sentence","newTerms":[{"id":"term-slug","term":{"hu":"...","en":"..."},"requires":["earlier-term-id"]}]}]}]}\nRules:\n- 8-${maxChapters} chapters total (topic count suggests ${targetChapterCount({ ...req, sourceText: req.long_text }, maxChapters)}). Split a chapter instead of thinning it.\n- Cover EVERY topic in the source. Never silently drop a listed topic.\n- 1-6 sections; unique lowercase ASCII slugs; sequential nums.\n- At most 3 new terms per chapter block later; list 2-5 newTerms per chapter here.\n- Term ids unique across the book; prerequisites point only to earlier terms.\n- Complete valid JSON; shorten the focus text rather than truncating the object.` }
+    { role: 'user', content: `${DEPTH_RULES}\n\nSKILL (condensed scope rules):\n${skill.slice(0, LIMITS.model.promptSkillChars)}\n\n${optionsText}\n\nREQUEST:\n${requestText(req)}\n\nSOURCE HEADINGS / SCOPE:\n${digest}\n\nDesign the COMPLETE outline and the term registry first; chapters are written separately. Every chapter needs its own new terms so definitions are not duplicated.\nReturn ONE JSON object:\n{"title":{"hu":"...","en":"..."},"subtitle":{"hu":"...","en":"..."},"summary":{"hu":"...","en":"..."},"sections":[{"id":"slug","num":"01","title":{"hu":"...","en":"..."},"subtitle":{"hu":"...","en":"..."},"intro":{"hu":"...","en":"..."},"conceptMap":{"hu":["..."],"en":["..."]},"summary":{"hu":"...","en":"..."},"chapters":[{"id":"slug","num":"1.1","title":{"hu":"...","en":"..."},"focus":"one sentence","newTerms":[{"id":"term-slug","term":{"hu":"...","en":"..."},"requires":["earlier-term-id"]}]}]}]}\nRules:\n- 8-${maxChapters} chapters total (topic count suggests ${targetChapterCount({ ...req, sourceText: req.long_text }, maxChapters)}). Split a chapter instead of thinning it.\n- Cover EVERY topic in the source. Never silently drop a listed topic.\n- 1-6 sections; unique lowercase ASCII slugs; sequential nums.\n- At most 3 new terms per chapter block later; list 2-5 newTerms per chapter here.\n- Term ids unique across the book; prerequisites point only to earlier terms.\n- Complete valid JSON; shorten the focus text rather than truncating the object.` }
   ];
   let lastError = 'No outline.';
   for (let attempt = 0; attempt < LIMITS.model.outlineAttempts; attempt++) {
@@ -866,10 +867,10 @@ async function poolMap(items, limit, fn) {
   if (failure) throw failure;
 }
 
-async function writeChapterBatch(cfg, req, skill, outline, section, batch, call, limits, registry, source, issues) {
+async function writeChapterBatch(cfg, req, skill, outline, section, batch, call, limits, registry, source, issues, optionsText = '') {
   const messages = [
     { role: 'system', content: 'You write chapters for a bilingual learning book. Return only valid JSON.' },
-    { role: 'user', content: chapterPrompt(req, skill, outline, section, batch, registry, source, issues, limits.wordMargin) }
+    { role: 'user', content: chapterPrompt(req, skill, outline, section, batch, registry, source, issues, limits.wordMargin, optionsText) }
   ];
   let lastError = 'No output.';
   /** A cut-off reply usually means the output budget, not the prompt, was short. */
@@ -999,12 +1000,13 @@ function issuesForChapter(result, chapter) {
 export async function buildBook({
   cfg, req, skill = skillText(), call = callLLM, onProgress = () => {},
   maxChapters, batchSize, maxTokens, draft = null, saveDraft = null, onActivity = null,
-  source = req.long_text || ''
+  source = req.long_text || '', options = null, regenerateChapter = null
 } = {}) {
   const settings = getSettings();
   maxChapters = maxChapters ?? settings.maxBookChapters;
   batchSize = batchSize ?? settings.chapterBatchSize;
   maxTokens = maxTokens ?? settings.llmMaxTokens;
+  const optionsText = optionsPrompt(options);
   const concurrency = Math.max(1, Math.min(8, Number(settings.chapterConcurrency) || CHAPTER_CONCURRENCY));
   const depthOptions = { budgetTolerance: settings.budgetTolerance, huBudgetRatio: settings.huBudgetRatio };
   const checkDepth = book => validateDepth(book, depthOptions);
@@ -1022,7 +1024,7 @@ export async function buildBook({
   let state = draft || { phase: 'outline', outline: null, chapters: {} };
 
   if (!outline) {
-    outline = await generateOutline(cfg, req, skill, callModel, maxChapters, onProgress);
+    outline = await generateOutline(cfg, req, skill, callModel, maxChapters, onProgress, optionsText);
     state = { phase: 'chapters', outline, chapters: written };
     persist(state);
   } else if (draft?.phase === 'outline') {
@@ -1030,11 +1032,26 @@ export async function buildBook({
     persist(state);
   }
 
+  // Targeted rewrite: drop just this chapter, keep every other written chapter.
+  const targetChapter = regenerateChapter ? String(regenerateChapter) : '';
+  if (targetChapter) {
+    const exists = outline.sections.some(s => s.chapters.some(c => c.id === targetChapter));
+    if (!exists) throw new Error(`Chapter "${targetChapter}" is not in this book.`);
+    delete written[targetChapter];
+    state = { phase: 'chapters', outline, chapters: written };
+    persist(state);
+  }
+
   const registry = buildTermRegistry(outline);
   const flat = outline.sections.flatMap(s => s.chapters.map(c => ({ s, c })));
   const total = flat.length;
   let done = Object.keys(written).length;
-  onProgress({ phase: 'chapters', done, total, message: `Resuming: ${done}/${total} chapters already written.` });
+  onProgress({
+    phase: 'chapters', done, total,
+    message: targetChapter
+      ? `Regenerating chapter ${targetChapter}…`
+      : `Resuming: ${done}/${total} chapters already written.`
+  });
 
   /** Absolute deadline from the observed rate. Null until one unit finished. */
   const etaAtAfter = (start, finished, remaining) => {
@@ -1071,14 +1088,14 @@ export async function buildBook({
     });
     let produced;
     try {
-      produced = await writeChapterBatch(cfg, req, skill, outline, s, batch, callModel, limits, registry, selected, []);
+      produced = await writeChapterBatch(cfg, req, skill, outline, s, batch, callModel, limits, registry, selected, [], optionsText);
     } catch (e) {
       if (batch.length === 1) throw new Error(`Chapter ${batch[0].num} (${batch[0].id}) failed: ${e.message}`);
       // A batch that still truncates is retried one chapter at a time.
       produced = [];
       for (const one of batch) {
         produced.push(...await writeChapterBatch(cfg, req, skill, outline, s, [one], callModel, limits, registry,
-          selectSourceChunks(source, one, outline), []));
+          selectSourceChunks(source, one, outline), [], optionsText));
       }
     }
     for (const chapter of produced) {
@@ -1091,7 +1108,7 @@ export async function buildBook({
       if (issues.length) {
         onProgress({ phase: 'validate', done, total, chapter: chapter.id, message: `Re-generating ${chapter.num}: ${issues.length} depth issue(s).` });
         const retry = await writeChapterBatch(cfg, req, skill, outline, s, [outlineChapter], callModel, limits, registry,
-          selectSourceChunks(source, outlineChapter, outline), issues.slice(0, 8));
+          selectSourceChunks(source, outlineChapter, outline), issues.slice(0, 8), optionsText);
         written[chapter.id] = retry[0];
         const after = issuesForChapter(checkDepth(draftBook(outline, written)), retry[0]);
         if (after.length) throw new Error(`Chapter ${chapter.num} (${chapter.id}) still fails the depth contract: ${after.slice(0, 4).join(' | ')}`);
@@ -1135,7 +1152,7 @@ export async function buildBook({
         if (!entry) return;
         onProgress({ phase: 'validate', done, total, chapter: cid, etaAt: repairEtaAt, message: `Validation round ${round + 1}: re-generating ${entry.c.num}.` });
         const sourceSel = selectSourceChunks(source, entry.c, outline);
-        const got = await writeChapterBatch(cfg, req, skill, outline, entry.s, [entry.c], callModel, limits, registry, sourceSel, issues.slice(0, 8));
+        const got = await writeChapterBatch(cfg, req, skill, outline, entry.s, [entry.c], callModel, limits, registry, sourceSel, issues.slice(0, 8), optionsText);
         written[cid] = got[0];
         state = { phase: 'validate', outline, chapters: written };
         persist(state);
@@ -1291,6 +1308,35 @@ function drain() {
     });
   }
 }
+/** Reconstruct a resumable draft from a published site.json (chapter rewrites). */
+function draftFromBook(book) {
+  const chapters = {};
+  const sections = (book.sections || []).map((s, si) => ({
+    id: s.id || `section-${si + 1}`,
+    num: s.num || String(si + 1).padStart(2, '0'),
+    title: biv(s.title),
+    subtitle: biv(s.subtitle || s.title),
+    intro: biv(s.intro || s.subtitle || s.title),
+    conceptMap: bivArr(s.conceptMap || []),
+    summary: biv(s.summary || ''),
+    chapters: (s.chapters || []).map(c => {
+      chapters[c.id] = c;
+      return {
+        id: c.id,
+        num: c.num,
+        title: biv(c.title),
+        focus: String(c.focus || ''),
+        newTerms: (c.terms || []).map(t => ({ id: t.id, term: biv(t.term), requires: t.requires || [] })),
+      };
+    }),
+  }));
+  return {
+    phase: 'done',
+    outline: { title: biv(book.title), subtitle: biv(book.subtitle), summary: biv(book.summary), sections, total: Object.keys(chapters).length },
+    chapters,
+  };
+}
+
 async function runJob(job) {
   const site = siteRow(job.site_id);
   if (!site || site.archived || site.status === 'ready') {
@@ -1307,7 +1353,15 @@ async function runJob(job) {
     const cfg = llmConfig(effectiveProfile(profile));
     if (!useMock() && !cfg.key) throw new Error('No API key. Add one in Settings.');
     const req = { title: site.title, description: site.description, topic: site.topic, audience: site.audience, language: site.language, long_text: site.source_text };
-    const draft = loadDraft(site.id);
+    let draft = loadDraft(site.id);
+    if (!draft && job.chapter_id) {
+      try {
+        draft = draftFromBook(JSON.parse(fs.readFileSync(siteJsonPath(site.slug), 'utf8')));
+      } catch {
+        throw new Error('This site has no generated content to rewrite.');
+      }
+    }
+    const options = parseSiteOptions(site.options);
     // Live status, not just chapter boundaries: the builder shows the phase,
     // the current chapter and streamed characters while a call is in flight.
     let live = { phase: 'outline', done: 0, total: 0, chapter: '', activity: null, etaAt: null };
@@ -1323,6 +1377,8 @@ async function runJob(job) {
       cfg, req,
       maxChapters: site.max_chapters || undefined,
       draft,
+      options,
+      regenerateChapter: job.chapter_id || null,
       saveDraft: state => saveDraft(site.id, state),
       source: site.source_text || '',
       onProgress: p => {
@@ -1363,14 +1419,18 @@ async function runJob(job) {
     const attempt = job.attempts || 1;
     const message = String(e.message || e).slice(0, 2000);
     const friendly = friendlyGenerationError(message);
+    // A failed chapter rewrite must not take down an already published book.
+    const keepsPublished = job.kind === 'chapter' && fs.existsSync(siteJsonPath(site.slug));
     if (attempt < MAX_JOB_ATTEMPTS) {
       const delay = Math.min(60000, 5000 * Math.pow(2, attempt - 1));
       const next = new Date(Date.now() + delay).toISOString();
       // The draft stays: the retry resumes instead of restarting the book.
       sqlite.prepare("UPDATE jobs SET status='queued',locked_at=NULL,next_attempt_at=?,last_error=?,log=?,updated_at=? WHERE id=?").run(next, message, 'Retrying: ' + friendly, now(), job.id);
-      sqlite.prepare("UPDATE sites SET status='queued',error=?,updated_at=? WHERE id=?").run(message, now(), site.id);
+      sqlite.prepare("UPDATE sites SET status=?,error=?,updated_at=? WHERE id=?")
+        .run(keepsPublished ? 'ready' : 'queued', keepsPublished ? '' : message, now(), site.id);
     } else {
-      sqlite.prepare("UPDATE sites SET status='failed',error=?,updated_at=? WHERE id=?").run(message, now(), site.id);
+      sqlite.prepare("UPDATE sites SET status=?,error=?,updated_at=? WHERE id=?")
+        .run(keepsPublished ? 'ready' : 'failed', keepsPublished ? '' : message, now(), site.id);
       // The stack stays in last_error; the log is what the owner sees.
       sqlite.prepare("UPDATE jobs SET status='failed',locked_at=NULL,last_error=?,log=?,updated_at=? WHERE id=?").run(message, friendly, now(), job.id);
     }

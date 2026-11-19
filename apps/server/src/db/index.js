@@ -3,6 +3,7 @@ import path from 'node:path';
 import Database from 'better-sqlite3';
 import { DATA_DIR, DB_PATH, SITES_DIR, UPLOADS_DIR, DEFAULT_DAILY_LIMIT, MAX_BOOK_CHAPTERS, CHAPTER_BATCH_SIZE, CHAPTER_CONCURRENCY, CHAPTER_WORD_MARGIN, BUDGET_TOLERANCE, HU_BUDGET_RATIO, LLM_MAX_TOKENS } from '../config.js';
 import { friendlyGenerationError, generationErrorCode } from '../services/generation-errors.js';
+import { parseSiteOptions } from '../site-options.js';
 
 for (const dir of [DATA_DIR, SITES_DIR, UPLOADS_DIR]) fs.mkdirSync(dir, { recursive: true });
 
@@ -84,6 +85,8 @@ function addColumn(table, column, definition) {
 addColumn('sites', 'archived', 'INTEGER NOT NULL DEFAULT 0');
 // Per-book chapter target chosen at creation (null = use the admin setting).
 addColumn('sites', 'max_chapters', 'INTEGER');
+/** Generation options chosen at creation; JSON, defaults applied when absent. */
+addColumn('sites', 'options', "TEXT NOT NULL DEFAULT '{}'");
 // Bilingual metadata for listings: the book title/summary in both languages.
 addColumn('sites', 'title_hu', 'TEXT');
 addColumn('sites', 'title_en', 'TEXT');
@@ -96,6 +99,10 @@ addColumn('jobs', 'last_error', 'TEXT');
 addColumn('jobs', 'cancel_requested', 'INTEGER NOT NULL DEFAULT 0');
 // Structured progress for the builder: {"phase":"chapters","done":7,"total":42,"chapter":"3.2"}
 addColumn('jobs', 'progress', 'TEXT');
+/** 'generate' counts against the daily quota; 'chapter' is a targeted rewrite. */
+addColumn('jobs', 'kind', "TEXT NOT NULL DEFAULT 'generate'");
+/** Only for kind='chapter': the chapter id to regenerate. */
+addColumn('jobs', 'chapter_id', 'TEXT');
 
 // Legacy installs created sites.owner_id with a FK to users(id), but the auth
 // table is user(id). SQLite cannot alter a constraint, so rebuild once.
@@ -258,7 +265,7 @@ export function quotaUsed(userId, date = new Date()) {
   return sqlite.prepare(
     `SELECT COUNT(*) AS n FROM jobs j
      JOIN sites s ON s.id = j.site_id
-     WHERE s.owner_id=? AND j.created_at>=? AND j.created_at<? AND s.example=0`
+     WHERE s.owner_id=? AND j.created_at>=? AND j.created_at<? AND s.example=0 AND j.kind='generate'`
   ).get(userId, start, end).n;
 }
 
@@ -328,6 +335,7 @@ export function publicSite(s) {
     topic: s.topic,
     audience: s.audience,
     language: s.language,
+    options: parseSiteOptions(s.options),
     status: s.status,
     published: !!s.published,
     example: !!s.example,
