@@ -151,3 +151,42 @@ export function limitsSummary(maxChapters = LIMITS.chapters.defaultMax) {
     quotaUnit: LIMITS.quota.unit
   };
 }
+
+/**
+ * Time estimate for a whole book run. Covers the outline, every chapter, and
+ * one expected validation/repair pass — not just chapter writing.
+ *
+ * `perChapterWallMs` is an optional calibration from completed jobs in this
+ * deployment; when present it already includes checks and concurrency.
+ */
+export function estimateGeneration({ chapters, concurrency = 1, options = {}, perChapterWallMs = null } = {}) {
+  const factor = optionTimeFactor(options);
+  const workers = Math.max(1, Number(concurrency) || 1);
+  // Chapter estimate is generation time for one pass; write + one repair pass
+  // is what a book normally costs, split across concurrent workers.
+  const theoretical = (LIMITS.model.chapterEstimateMs * 1.5) / workers;
+  const perChapter = Math.max(20_000, Math.min(15 * 60_000, perChapterWallMs || theoretical)) * factor;
+  const outlineMs = 120_000;
+  const assemblyMs = 15_000;
+  const totalMs = outlineMs + Math.max(1, chapters) * perChapter + assemblyMs;
+  return {
+    totalMs,
+    minMs: Math.round(totalMs * 0.75),
+    maxMs: Math.round(totalMs * 1.35),
+    perChapterMs: Math.round(perChapter),
+    calibrated: !!perChapterWallMs,
+    includesChecks: true,
+  };
+}
+
+/** Relative output volume per option choice; 1 = the current skill. */
+function optionTimeFactor(options = {}) {
+  const f = {
+    purpose: { exam: 1, course: 1, practice: 1.08, reference: 0.97 },
+    level: { undergrad: 1, beginner: 1.06, graduate: 0.96, professional: 0.93 },
+    assessment: { mixed: 1, mcq: 0.96, written: 1.06, none: 0.95 },
+    balance: { balanced: 1, theory: 1.05, practice: 1.1 },
+    examples: { one: 1, two: 1.18, three: 1.35 },
+  };
+  return Object.entries(f).reduce((acc, [key, table]) => acc * (table[options[key]] || 1), 1);
+}
