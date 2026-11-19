@@ -63,20 +63,21 @@ function UserRow({ user, onChanged }: { user: AdminUser; onChanged: () => Promis
         </div>
       </div>
 
-      <div className="flex flex-wrap items-end gap-3">
+      <div className="flex flex-wrap items-end gap-x-2 gap-y-3">
         <div>
           <div className="mb-1 text-xs text-muted-foreground">{t('Sites per day')}</div>
           <div className="flex items-center gap-2">
-            <Input
-              type="number"
-              min={0}
-              max={1000}
-              value={limit}
-              onChange={event => setLimit(event.target.value)}
-              className="w-20"
-              aria-label={t('Sites per day')}
-            />
-            <Button variant="outline" loading={busy === 'limit'} onClick={() => void patch({ dailyLimit: Number(limit) }, 'limit')}>
+            <div className="w-20">
+              <Input
+                type="number"
+                min={0}
+                max={1000}
+                value={limit}
+                onChange={event => setLimit(event.target.value)}
+                aria-label={t('Sites per day')}
+              />
+            </div>
+            <Button compact variant="outline" loading={busy === 'limit'} onClick={() => void patch({ dailyLimit: Number(limit) }, 'limit')}>
               {t('Save')}
             </Button>
           </div>
@@ -84,16 +85,18 @@ function UserRow({ user, onChanged }: { user: AdminUser; onChanged: () => Promis
         <div>
           <div className="mb-1 text-xs text-muted-foreground">{t('New password (10+)')}</div>
           <div className="flex items-center gap-2">
-            <Input
-              type="password"
-              minLength={10}
-              value={password}
-              onChange={event => setPassword(event.target.value)}
-              placeholder={t('New password (10+)')}
-              className="w-40"
-              autoComplete="new-password"
-            />
+            <div className="w-36">
+              <Input
+                type="password"
+                minLength={10}
+                value={password}
+                onChange={event => setPassword(event.target.value)}
+                placeholder={t('Password')}
+                autoComplete="new-password"
+              />
+            </div>
             <Button
+              compact
               variant="outline"
               disabled={password.length < 10}
               loading={busy === 'password'}
@@ -104,11 +107,12 @@ function UserRow({ user, onChanged }: { user: AdminUser; onChanged: () => Promis
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="secondary" loading={busy === 'link'} onClick={() => void loginLink()}>
+          <Button compact variant="secondary" loading={busy === 'link'} onClick={() => void loginLink()}>
             {t('Copy login link')}
           </Button>
           {user.role !== 'admin' ? (
             <Button
+              compact
               variant={user.disabled ? 'secondary' : 'danger'}
               loading={busy === 'toggle'}
               onClick={() => void patch({ disabled: !user.disabled }, 'toggle')}

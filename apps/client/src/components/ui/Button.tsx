@@ -15,9 +15,10 @@ const variants: Record<Variant, string> = {
 };
 
 /** One control height everywhere: every button matches Input and Select. */
-export function buttonStyles(variant: Variant = 'primary', className?: string): string {
+export function buttonStyles(variant: Variant = 'primary', className?: string, padding = 'px-4'): string {
   return cn(
-    'inline-flex h-10 select-none items-center justify-center gap-2 rounded-md px-4 text-sm font-medium transition-colors',
+    'inline-flex h-10 select-none items-center justify-center gap-2 rounded-md text-sm font-medium transition-colors',
+    padding,
     'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background',
     'disabled:cursor-not-allowed disabled:opacity-50',
     variants[variant],
@@ -27,12 +28,14 @@ export function buttonStyles(variant: Variant = 'primary', className?: string): 
 
 export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: Variant;
+  /** Tighter horizontal padding for dense rows; the height stays the same. */
+  compact?: boolean;
   loading?: boolean;
   icon?: ReactNode;
 }
 
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button(
-  { variant = 'primary', loading = false, icon, className, children, disabled, type = 'button', ...props },
+  { variant = 'primary', compact = false, loading = false, icon, className, children, disabled, type = 'button', ...props },
   ref
 ) {
   return (
@@ -40,7 +43,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
       ref={ref}
       type={type}
       disabled={disabled || loading}
-      className={buttonStyles(variant, className)}
+      className={buttonStyles(variant, className, compact ? 'px-3' : 'px-4')}
       {...props}
     >
       {loading ? <Spinner className="h-4 w-4" /> : icon}
