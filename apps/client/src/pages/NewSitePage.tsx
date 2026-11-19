@@ -39,6 +39,7 @@ interface LimitInfo {
   sourceChars: number;
   overCap: boolean;
   quotaUnit: string;
+  estimate: { minutes: [number, number]; calibrated: boolean; includesChecks: boolean };
 }
 
 const emptyForm: FormState = {
@@ -120,11 +121,18 @@ export function NewSitePage() {
     } catch { /* sessionStorage can be unavailable */ }
   }, [form, options, files, me?.user.id]);
 
+  const optionsKey = JSON.stringify(options);
+
   useEffect(() => {
     let alive = true;
     const timer = window.setTimeout(async () => {
       try {
-        const params = new URLSearchParams({ source: form.longText, topic: form.topic, maxChapters: form.maxChapters });
+        const params = new URLSearchParams({
+          source: form.longText,
+          topic: form.topic,
+          maxChapters: form.maxChapters,
+          options: optionsKey,
+        });
         const data = await api.get<LimitInfo>(`/api/limits?${params}`);
         if (alive) setLimits(data);
       } catch {
@@ -132,7 +140,7 @@ export function NewSitePage() {
       }
     }, 400);
     return () => { alive = false; window.clearTimeout(timer); };
-  }, [form.longText, form.topic, form.maxChapters]);
+  }, [form.longText, form.topic, form.maxChapters, optionsKey]);
   const needsKey = !!me && !me.profile.canGenerate;
 
   function set<K extends keyof FormState>(key: K, value: FormState[K]) {
@@ -456,10 +464,18 @@ export function NewSitePage() {
                   <dt className="text-muted-foreground">{t('Chapter target')}</dt>
                   <dd className="text-right font-mono text-foreground">{limits.target}</dd>
                   <dt className="text-muted-foreground">{t('Estimated time')}</dt>
-                  <dd className="text-right font-mono text-foreground">~{Math.max(2, Math.ceil(limits.target * 1.1))} min</dd>
+                  <dd className="text-right font-mono text-foreground">
+                    ~{limits.estimate.minutes[0] === limits.estimate.minutes[1]
+                      ? limits.estimate.minutes[0]
+                      : `${limits.estimate.minutes[0]}–${limits.estimate.minutes[1]}`} min
+                  </dd>
                   <dt className="text-muted-foreground">{t('Daily quota:')}</dt>
                   <dd className="text-right font-mono text-foreground">{remaining}</dd>
                 </dl>
+                <p className="text-xs text-muted-foreground">
+                  {t('Covers the outline, every chapter and one repair pass. Provider speed still changes it.')}
+                  {limits.estimate.calibrated ? ` ${t('Calibrated from earlier books on this server.')}` : ''}
+                </p>
                 <details className="rounded-md border border-border px-3 py-2">
                   <summary className="cursor-pointer text-xs font-medium text-foreground">{t('Token and source limits')}</summary>
                   <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-xs">

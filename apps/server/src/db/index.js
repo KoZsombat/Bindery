@@ -87,6 +87,8 @@ addColumn('sites', 'archived', 'INTEGER NOT NULL DEFAULT 0');
 addColumn('sites', 'max_chapters', 'INTEGER');
 /** Generation options chosen at creation; JSON, defaults applied when absent. */
 addColumn('sites', 'options', "TEXT NOT NULL DEFAULT '{}'");
+/** Chapters in the published book; used to calibrate time estimates. */
+addColumn('sites', 'chapter_count', 'INTEGER');
 // Bilingual metadata for listings: the book title/summary in both languages.
 addColumn('sites', 'title_hu', 'TEXT');
 addColumn('sites', 'title_en', 'TEXT');

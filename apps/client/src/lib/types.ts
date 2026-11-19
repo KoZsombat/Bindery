@@ -76,6 +76,7 @@ export interface Job {
   status: string;
   kind?: 'generate' | 'chapter';
   chapterId?: string | null;
+  createdAt?: string;
   log: string;
   attempts: number;
   lastError: string;

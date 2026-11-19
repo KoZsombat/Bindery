@@ -353,6 +353,11 @@ const HU: Dict = {
   '25 minutes': '25 perc',
   '60 minutes': '60 perc',
   'Custom instructions (optional)': 'Egyéni utasítások (opcionális)',
+  'Covers the outline, every chapter and one repair pass. Provider speed still changes it.':
+    'Lefedi a vázlatot, az összes fejezetet és egy javítási kört. A szolgáltató sebessége továbbra is számít.',
+  'Calibrated from earlier books on this server.': 'A szerver korábbi könyvei alapján kalibrálva.',
+  'Running for': 'Futásidő:',
+  'worker heartbeat': 'munkafolyamat-jelzés',
   'These override the skill where they can; the schema, depth checks and bilingual rule still apply.':
     'Ahol lehet, felülírják a készséget; a séma, a mélységi ellenőrzések és a kétnyelvűség továbbra is kötelező.',
   'e.g. Follow my professor’s notation; focus on the 2025 exam; no proofs, method plus one example per topic.':

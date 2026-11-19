@@ -1053,15 +1053,23 @@ export async function buildBook({
       : `Resuming: ${done}/${total} chapters already written.`
   });
 
-  /** Absolute deadline from the observed rate. Null until one unit finished. */
-  const etaAtAfter = (start, finished, remaining) => {
-    if (remaining <= 0) return new Date().toISOString();
-    if (finished <= 0) return null;
-    const seconds = (Date.now() - start) / 1000 * remaining / finished;
-    return new Date(Date.now() + seconds * 1000).toISOString();
+  /** Recent per-chapter wall time, including any depth repair in that pass. */
+  const observedChapterMs = [];
+  const perChapterEstimate = () => {
+    const recent = observedChapterMs.slice(-8).sort((a, b) => a - b);
+    if (!recent.length) return LIMITS.model.chapterEstimateMs;
+    return recent[Math.min(recent.length - 1, Math.floor(recent.length * 0.75))];
   };
-  const chapterStart = Date.now();
-  const chapterBase = done;
+  /**
+   * Chapters run in waves of `concurrency`; one remaining chapter still takes
+   * one full call. Returns null when nothing is left so the UI hides the ETA
+   * instead of claiming "~0s".
+   */
+  const etaFor = remaining => {
+    if (remaining <= 0) return null;
+    const waves = Math.ceil(remaining / concurrency);
+    return new Date(Date.now() + waves * perChapterEstimate()).toISOString();
+  };
   let chapterEtaAt = null;
 
   const units = [];
@@ -1072,10 +1080,11 @@ export async function buildBook({
     }
   }
   if (units.length) {
-    chapterEtaAt = new Date(Date.now() + (units.length * LIMITS.model.chapterEstimateMs) / concurrency).toISOString();
+    chapterEtaAt = etaFor(total - done);
     onProgress({ phase: 'chapters', done, total, etaAt: chapterEtaAt, message: `Writing ${total - done} chapters in ${units.length} pass(es)…` });
   }
   const writeUnit = async ({ section: s, batch }) => {
+    const unitStart = Date.now();
     const selected = selectSourceChunks(source, {
       ...batch[0],
       newTerms: batch.flatMap(c => c.newTerms || [])
@@ -1116,9 +1125,12 @@ export async function buildBook({
       done++;
       state = { phase: 'chapters', outline, chapters: written };
       persist(state);
-      chapterEtaAt = etaAtAfter(chapterStart, done - chapterBase, total - done);
+      chapterEtaAt = etaFor(total - done);
       onProgress({ phase: 'chapters', done, total, chapter: chapter.id, etaAt: chapterEtaAt, message: `Wrote ${done}/${total} chapters · ${chapter.num} ${chapter.title?.en || ''}.` });
     }
+    // Measure the whole pass (including depth repairs) per produced chapter.
+    const perChapter = (Date.now() - unitStart) / Math.max(1, produced.length);
+    for (let i = 0; i < Math.max(1, produced.length); i++) observedChapterMs.push(perChapter);
   };
 
   // Chapter passes are independent once the outline and term registry exist, so
@@ -1141,12 +1153,9 @@ export async function buildBook({
       byChapter.get(issue.cid).push(`${issue.code}: ${issue.message}`);
     }
     for (let round = 0; round < LIMITS.model.validationRetries; round++) {
-      const repairStart = Date.now();
       const repairTotal = byChapter.size;
       let repairDone = 0;
-      let repairEtaAt = repairTotal
-        ? new Date(Date.now() + (repairTotal * LIMITS.model.chapterEstimateMs) / concurrency).toISOString()
-        : null;
+      let repairEtaAt = etaFor(repairTotal);
       await poolMap([...byChapter], concurrency, async ([cid, issues]) => {
         const entry = flat.find(x => x.c.id === cid);
         if (!entry) return;
@@ -1157,7 +1166,7 @@ export async function buildBook({
         state = { phase: 'validate', outline, chapters: written };
         persist(state);
         repairDone++;
-        repairEtaAt = etaAtAfter(repairStart, repairDone, repairTotal - repairDone);
+        repairEtaAt = etaFor(repairTotal - repairDone);
         onProgress({ phase: 'validate', done, total, chapter: cid, etaAt: repairEtaAt, message: `Repaired ${repairDone}/${repairTotal} chapter(s)…` });
       });
       const next = draftBook(outline, written);
@@ -1408,8 +1417,9 @@ async function runJob(job) {
     await fsp.mkdir(dir, { recursive: true });
     await fsp.writeFile(siteJsonPath(site.slug), json);
     clearDraft(site.id);
-    sqlite.prepare(`UPDATE sites SET status='ready',error='',title_hu=?,title_en=?,summary_hu=?,summary_en=?,updated_at=? WHERE id=?`)
-      .run(parsed.title?.hu || site.title, parsed.title?.en || site.title, parsed.summary?.hu || '', parsed.summary?.en || '', now(), site.id);
+    const chapterCount = (parsed.sections || []).reduce((n, s) => n + (s.chapters || []).length, 0);
+    sqlite.prepare(`UPDATE sites SET status='ready',error='',title_hu=?,title_en=?,summary_hu=?,summary_en=?,chapter_count=?,updated_at=? WHERE id=?`)
+      .run(parsed.title?.hu || site.title, parsed.title?.en || site.title, parsed.summary?.hu || '', parsed.summary?.en || '', chapterCount, now(), site.id);
     sqlite.prepare("UPDATE jobs SET status='done',log=?,last_error='',locked_at=NULL,next_attempt_at=NULL,progress=NULL,updated_at=? WHERE id=?").run('Generated and routed at ' + siteUrl(site.slug), now(), job.id);
   } catch (e) {
     if (stopping) {

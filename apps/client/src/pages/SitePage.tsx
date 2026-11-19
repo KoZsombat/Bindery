@@ -127,6 +127,8 @@ export function SitePage() {
     : progress?.phase === 'done' ? t('Finishing')
     : t('Writing chapters');
   const etaSeconds = progress?.etaAt ? Math.max(0, (new Date(progress.etaAt).getTime() - now) / 1000) : null;
+  const startedAt = job?.createdAt ? new Date(job.createdAt).getTime() : null;
+  const elapsedSeconds = polling && startedAt ? Math.max(0, (now - startedAt) / 1000) : null;
   const etaLabel = etaSeconds != null
     ? `${t('Estimated time remaining:')} ~${formatDuration(etaSeconds)}`
     : t('Estimating time…');
@@ -177,9 +179,11 @@ export function SitePage() {
                 {activity
                   ? `${Number(activity.chars).toLocaleString()} ${t('characters received')} · ${Math.round(activity.elapsedMs / 1000)}s`
                   : t('Waiting for the first streamed tokens…')}
-                {signalAge != null ? ` · ${t('last signal')} ${signalAge}s ${t('ago')}` : ''}
+                {signalAge != null ? ` · ${t('worker heartbeat')} ${signalAge}s ${t('ago')}` : ''}
               </p>
-              {etaLabel ? <p className="text-xs font-medium text-foreground">{etaLabel}</p> : null}
+              {etaLabel ? <p className="text-xs font-medium text-foreground">
+                {etaLabel}{elapsedSeconds != null ? ` · ${t('Running for')} ${formatDuration(elapsedSeconds)}` : ''}
+              </p> : null}
               <p className="text-xs text-muted-foreground">{t('A resumed job keeps its finished chapters.')}</p>
             </div>
           ) : null}

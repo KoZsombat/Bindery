@@ -11,7 +11,7 @@ import {
   MAX_SOURCE, MAX_LONG_TEXT, MAX_UPLOAD, MAX_FILES, MAX_CONCURRENT_UPLOADS,
   UPLOADS_DIR, DEFAULT_DAILY_LIMIT, LLM_MOCK,
 } from '../config.js';
-import { LIMITS, limitsSummary, targetChapterCount } from '../limits.js';
+import { LIMITS, limitsSummary, targetChapterCount, estimateGeneration } from '../limits.js';
 import {
   sqlite, quotaUsed, uniqueSlug, siteRow, siteJsonPath, publicSite, now, slugify, ensureProfile,
   getSettings, updateSettings, settingsMeta, loadDraft,
@@ -172,12 +172,38 @@ router.get('/limits', requireAuthApi, (req, res) => {
     sourceText: source,
     requested
   }, settings.maxBookChapters);
+  let options = {};
+  try { options = JSON.parse(String(req.query.options || '{}')); } catch { options = {}; }
+  // Calibrate from this deployment's finished books (median per-chapter wall time).
+  const samples = sqlite.prepare(`
+    SELECT j.created_at, j.updated_at, s.chapter_count
+    FROM jobs j JOIN sites s ON s.id = j.site_id
+    WHERE j.status = 'done' AND j.kind = 'generate' AND s.chapter_count > 0
+    ORDER BY j.id DESC LIMIT 15
+  `).all();
+  const perChapter = samples
+    .map(row => (Date.parse(row.updated_at) - Date.parse(row.created_at)) / row.chapter_count)
+    .filter(ms => ms > 20_000 && ms < 15 * 60_000)
+    .sort((a, b) => a - b);
+  const calibratedMs = perChapter.length >= 2 ? perChapter[Math.floor(perChapter.length / 2)] : null;
+  const estimate = estimateGeneration({
+    chapters: target,
+    concurrency: Number(settings.chapterConcurrency) || 1,
+    options,
+    perChapterWallMs: calibratedMs,
+  });
+  const minutes = [Math.max(2, Math.round(estimate.minMs / 60000)), Math.max(2, Math.round(estimate.maxMs / 60000))];
   res.json({
     limits: limitsSummary(settings.maxBookChapters),
     target,
     sourceChars: source.length,
     overCap: target >= settings.maxBookChapters || source.length > LIMITS.source.totalChars * 0.6,
-    quotaUnit: LIMITS.quota.unit
+    quotaUnit: LIMITS.quota.unit,
+    estimate: {
+      minutes,
+      calibrated: estimate.calibrated,
+      includesChecks: true,
+    },
   });
 });
 
@@ -318,6 +344,7 @@ router.get('/sites/:id', requireAuthApi, (req, res) => {
       status: job.status,
       kind: job.kind || 'generate',
       chapterId: job.chapter_id || null,
+      createdAt: job.created_at,
       // Owners see progress text; on failure they see the friendly sentence, not the stack.
       log: job.status === 'failed' ? friendlyGenerationError(job.last_error || 'generation failed') : job.log,
       attempts: job.attempts || 0,
