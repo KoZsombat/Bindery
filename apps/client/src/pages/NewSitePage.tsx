@@ -52,6 +52,36 @@ const emptyForm: FormState = {
   parts: 1,
 };
 
+/** Per-user so a shared browser tab never restores someone else's draft. */
+const DRAFT_PREFIX = 'bindery.new-site-draft';
+
+interface StoredDraft {
+  form: FormState;
+  files: PickedFile[];
+}
+
+function readDraft(key: string): StoredDraft | null {
+  try {
+    const raw = sessionStorage.getItem(key);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Partial<StoredDraft> | null;
+    if (!parsed || typeof parsed !== 'object' || !parsed.form) return null;
+    const files = Array.isArray(parsed.files)
+      ? parsed.files.filter(file => file && typeof file.key === 'string' && typeof file.name === 'string' && typeof file.id === 'number')
+      : [];
+    return {
+      form: { ...emptyForm, ...parsed.form },
+      files: files.map(file => ({ key: file.key, name: file.name, id: file.id, chars: file.chars, uploading: false })),
+    };
+  } catch {
+    return null;
+  }
+}
+
+function clearDraft(key: string) {
+  try { sessionStorage.removeItem(key); } catch { /* ignore */ }
+}
+
 function fileKey(file: File): string {
   return `${file.name}:${file.size}:${file.lastModified}:${Math.random().toString(36).slice(2)}`;
 }
@@ -62,8 +92,9 @@ export function NewSitePage() {
   const { push } = useToast();
   const navigate = useNavigate();
 
-  const [form, setForm] = useState<FormState>(emptyForm);
-  const [files, setFiles] = useState<PickedFile[]>([]);
+  const [restored] = useState(() => readDraft(`${DRAFT_PREFIX}:${me?.user.id ?? 'anonymous'}`));
+  const [form, setForm] = useState<FormState>(restored?.form ?? emptyForm);
+  const [files, setFiles] = useState<PickedFile[]>(restored?.files ?? []);
   const [uploading, setUploading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [suggestions, setSuggestions] = useState<Site[]>([]);
@@ -72,6 +103,17 @@ export function NewSitePage() {
   const [limits, setLimits] = useState<LimitInfo | null>(null);
 
   const remaining = me ? Math.max(0, me.profile.dailyLimit - me.profile.usedToday) : 0;
+
+  useEffect(() => {
+    try {
+      sessionStorage.setItem(`${DRAFT_PREFIX}:${me?.user.id ?? 'anonymous'}`, JSON.stringify({
+        form,
+        files: files
+          .filter(file => file.id && !file.uploading)
+          .map(({ key, name, id, chars }) => ({ key, name, id, chars })),
+      }));
+    } catch { /* sessionStorage can be unavailable */ }
+  }, [form, files, me?.user.id]);
 
   useEffect(() => {
     let alive = true;
@@ -153,6 +195,11 @@ export function NewSitePage() {
   }
 
   async function submit(force = false) {
+    if (needsKey) {
+      setError(t('Set your API key in Settings before generating.'));
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      return;
+    }
     if (uploading) {
       push('error', t('Uploading…'));
       return;
@@ -168,6 +215,7 @@ export function NewSitePage() {
         force,
       });
       if (data.site) {
+        clearDraft(`${DRAFT_PREFIX}:${me?.user.id ?? 'anonymous'}`);
         push('success', t('Site queued.'));
         await refresh();
         navigate(`/site/${data.site.id}`);
@@ -337,7 +385,7 @@ export function NewSitePage() {
                 ))}
               </Select>
             </Field>
-            <Button type="submit" form="new-site-form" className="w-full" loading={submitting} disabled={uploading || needsKey} icon={<SparkIcon className="h-4 w-4" />}>
+            <Button type="submit" form="new-site-form" className="w-full" loading={submitting} disabled={uploading} icon={<SparkIcon className="h-4 w-4" />}>
               {t('Generate site')}
             </Button>
             {suggestions.length ? (
@@ -345,7 +393,7 @@ export function NewSitePage() {
                 type="button"
                 variant="outline"
                 className="w-full"
-                disabled={submitting || uploading || needsKey}
+                disabled={submitting || uploading}
                 onClick={() => void submit(true)}
               >
                 {t('Generate a new one anyway')}
